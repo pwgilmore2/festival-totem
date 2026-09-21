@@ -35,6 +35,11 @@ def _start_text_transition(entering):
     return duration
 
 
+def _finish_text_transition(sides=None):
+    for side in sides or _target_sides():
+        _text_transitions[side] = None
+
+
 def _side_from_seed(seed):
     return "back" if int(seed or 0) >= 1000 else "front"
 
@@ -72,8 +77,7 @@ def _render(self, display, settings, t, signals=None, seed=0, clear_background=T
         return
     p = (time.monotonic() - tr["start"]) / max(.01, tr["duration"])
     if p >= 1.0:
-        if tr["entering"]:
-            _text_transitions[side] = None
+        _text_transitions[side] = None
         return
     p = max(0.0, min(1.0, p))
     amount = p if tr["entering"] else 1.0 - p
@@ -211,10 +215,14 @@ class PhoneControlServer(ui_cleanup_server.PhoneControlServer):
         global _target, _audio, _chaos_mode, _chaos_started
         commands = list(super().get_commands())
         now = time.monotonic()
+
+        # Delayed commands carry an internal completion marker so they pass through
+        # exactly once instead of re-scheduling the same text exit forever.
         ready = [item for item in _delayed_commands if item[0] <= now]
         if ready:
             commands.extend(item[1] for item in ready)
             _delayed_commands[:] = [item for item in _delayed_commands if item[0] > now]
+
         out = []
         for data in commands:
             if not isinstance(data, dict):
@@ -230,9 +238,15 @@ class PhoneControlServer(ui_cleanup_server.PhoneControlServer):
             elif c == "text_show":
                 _start_text_transition(True)
             elif c == "text_hide":
-                duration = _start_text_transition(False)
-                _delayed_commands.append((now + duration, data))
-                continue
+                if data.get("_text_transition_complete"):
+                    _finish_text_transition()
+                    data = {k: val for k, val in data.items() if k != "_text_transition_complete"}
+                else:
+                    duration = _start_text_transition(False)
+                    delayed = dict(data)
+                    delayed["_text_transition_complete"] = True
+                    _delayed_commands.append((now + duration, delayed))
+                    continue
             elif c == "guest_action" and isinstance(v, dict):
                 kind = str(v.get("kind", "")).lower()
                 if kind in ("pixelmelt", "jumble", "bassjostle", "trance", "liquid", "tunnel"):
