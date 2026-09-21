@@ -1,10 +1,10 @@
 import io, random, time, pygame
 from PIL import Image
-from display import VirtualDisplay
 from effects import EFFECTS
 from controller import TotemController
 from particles import ParticleSystem
 from image_assets import ImageLibrary
+from runtime_io import SignalStore, VirtualDisplayBackend
 from secure_phone_server import PhoneControlServer
 from visual_engine import TransitionManager, VisualLayerEngine, TRANSITIONS, LAYER_KEYS
 from text_engine import TextRenderer, TEXT_FONTS, TEXT_MOTIONS, TEXT_COLORS, TEXT_EFFECTS, TEXT_BACKGROUNDS
@@ -16,7 +16,11 @@ screen=pygame.display.set_mode((PW*2+GAP,PH+UI))
 pygame.display.set_caption("Festival Totem Simulator")
 clock=pygame.time.Clock();font=pygame.font.SysFont(None,22)
 library=ImageLibrary("assets/images",W,H)
-displays={s:VirtualDisplay(W,H) for s in ("front","back")}
+display_backend=VirtualDisplayBackend(W,H)
+displays=display_backend.displays
+signal_store=SignalStore()
+audio=signal_store.audio
+motion=signal_store.motion
 particles={s:ParticleSystem(W,H,count=60) for s in ("front","back")}
 transitions={s:TransitionManager(W,H) for s in ("front","back")}
 layer_engine=VisualLayerEngine(W,H)
@@ -31,8 +35,6 @@ SCENES={
 }
 active_target="both"
 current_scene="Custom"
-audio={"volume":0.0,"bass":0.0,"mids":0.0,"highs":0.0,"beat":False,"last_update":0.0}
-motion={"tilt_x":0.0,"tilt_y":0.0,"shake":0.0,"tap":False}
 guest={"kind":None,"strength":0.0,"until":0.0,"locked":False,"x":.5,"y":.5,"velocity":0.0}
 
 def slideshow_state():
@@ -56,11 +58,8 @@ def save_asset(a):
     a.settings.clamp();a.clear_cache();library.save_asset(a)
 
 def clamp01(v): return max(0.0,min(1.0,float(v)))
-def audio_fresh(): return time.monotonic()-audio["last_update"]<1.0
-def signals():
-    out={"volume":0.0,"bass":0.0,"mids":0.0,"highs":0.0,"beat":False,**motion}
-    if audio_fresh():out.update({k:audio[k] for k in ("volume","bass","mids","highs","beat")})
-    return out
+def audio_fresh(): return signal_store.audio_fresh()
+def signals(): return signal_store.snapshot()
 
 def party_fx(side,display,t): EFFECTS["Plasma"](display,t);particles[side].draw(display)
 def image_fx(side,display,t):
@@ -185,23 +184,8 @@ def reload_library():
             for i,a in enumerate(library.assets):
                 if a.path.name==old[s]:panels[s]["image_index"]=i;break
 
-def update_audio(value):
-    if not isinstance(value,dict):return
-    for k in ("volume","bass","mids","highs"):
-        if k in value:
-            try:audio[k]=clamp01(value[k])
-            except Exception:pass
-    audio["beat"]=bool(value.get("beat",False));audio["last_update"]=time.monotonic()
-def update_motion(value):
-    if not isinstance(value,dict):return
-    for k in ("tilt_x","tilt_y"):
-        if k in value:
-            try:motion[k]=max(-1.0,min(1.0,float(value[k])))
-            except Exception:pass
-    if "shake" in value:
-        try:motion["shake"]=clamp01(value["shake"])
-        except Exception:pass
-    motion["tap"]=bool(value.get("tap",False))
+def update_audio(value): signal_store.update_audio(value)
+def update_motion(value): signal_store.update_motion(value)
 def set_reactive_enabled(value):
     for s in target_sides():panels[s]["reactive"]["enabled"]=bool(value)
 def set_reactive_strength(value):
@@ -441,6 +425,6 @@ while running:
             text_engine.prepare_background(displays[s],st)
             text_engine.render(displays[s],st,controllers[s].time,sig,1000 if s=="back" else 0,clear_background=False)
         apply_guest_effect(displays[s],frame_number+(1000 if s=="back" else 0))
-    motion["tap"]=False;motion["shake"]*=.90
+    signal_store.end_frame()
     screen.fill((15,15,18));draw_panel("front",0);draw_panel("back",PW+GAP);draw_ui();update_phone();pygame.display.flip()
 server.stop();pygame.quit()
