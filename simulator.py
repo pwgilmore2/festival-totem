@@ -10,7 +10,7 @@ from controller import TotemController
 from text import draw_scrolling_text
 from particles import ParticleSystem
 from image_assets import ImageLibrary
-from phone_server import PhoneControlServer
+from audio_phone_server import PhoneControlServer
 W, H, S, GAP, UI = (64, 32, 8, 24, 175)
 PW, PH = (W * S, H * S)
 pygame.init()
