@@ -27,9 +27,12 @@ audio={"volume":0.0,"bass":0.0,"mids":0.0,"highs":0.0,"beat":False,"last_update"
 motion={"tilt_x":0.0,"tilt_y":0.0,"shake":0.0,"tap":False}
 guest={"kind":None,"strength":0.0,"until":0.0,"locked":False}
 
-def slideshow_state(): return {"active":False,"indices":[],"position":0,"duration":5.0,"elapsed":0.0,"shuffle":False,"label":"All"}
+def slideshow_state():
+    ids=list(range(len(library)))
+    random.shuffle(ids)
+    return {"active":bool(ids),"indices":ids,"position":0,"duration":5.0,"elapsed":0.0,"shuffle":True,"label":"All"}
 def reactive_state(): return {"enabled":False,"strength":0.65,"preset":"Pulse","layers":layer_engine.preset("Pulse")}
-def transition_state(): return {"kind":"Fade","duration":0.8,"random":False}
+def transition_state(): return {"kind":"Fade","duration":0.8,"random":True}
 panels={s:{"image_index":0,"slideshow":slideshow_state(),"reactive":reactive_state(),"transition":transition_state()} for s in ("front","back")}
 
 def metadata(a): return library.metadata_entry(a.path.name) if a else {"tags":[],"favorite":False}
@@ -50,6 +53,11 @@ def image_fx(side,display,t):
 def make_effects(side):
     return {**EFFECTS,"Text":text_fx,"Party":lambda d,t,s=side:party_fx(s,d,t),"Image":lambda d,t,s=side:image_fx(s,d,t)}
 controllers={s:TotemController(make_effects(s)) for s in ("front","back")}
+for s in ("front","back"):
+    sh=panels[s]["slideshow"]
+    if sh["indices"]:
+        panels[s]["image_index"]=sh["indices"][0]
+    controllers[s].set_effect("Image")
 
 def clamp01(v): return max(0.0,min(1.0,float(v)))
 def audio_fresh(): return time.monotonic()-audio["last_update"]<1.0
