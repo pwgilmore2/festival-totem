@@ -1,8 +1,12 @@
 from pathlib import Path
 import ssl
+import sys
 
 import phone_server
 import ui_cleanup_server
+
+if Path(sys.argv[0]).name == "simulator.py":
+    import simulator_display_patch  # noqa: F401
 
 CERT_DIR = Path("certs")
 CERT_FILE = CERT_DIR / "totem-cert.pem"
