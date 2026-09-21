@@ -40,7 +40,8 @@ def slideshow_state():
     return {"active":bool(ids),"indices":ids,"position":0,"duration":5.0,"elapsed":0.0,"shuffle":True,"label":"All","beat_sync":True}
 def reactive_state(): return {"enabled":False,"strength":0.65,"preset":"Pulse","layers":layer_engine.preset("Pulse")}
 def transition_state(): return {"kind":"Fade","duration":0.8,"random":True}
-def text_state(): return text_engine.defaults()
+def text_state():
+    st=text_engine.defaults();st["background_slideshow"]=True;return st
 panels={s:{"image_index":0,"slideshow":slideshow_state(),"reactive":reactive_state(),"transition":transition_state(),"text":text_state()} for s in ("front","back")}
 
 def metadata(a): return library.metadata_entry(a.path.name) if a else {"tags":[],"favorite":False}
@@ -137,11 +138,19 @@ def start_show(value):
         select_for_side(side,order[0],stop=False)
     current_scene="Custom"
 
+def text_slideshow_active(side):
+    st=panels[side]["text"]
+    return controllers[side].effect_name=="Text" and st.get("background","Black")!="Black" and st.get("background_slideshow",True)
+
 def advance_show(side):
     sh=panels[side]["slideshow"]
     sh["elapsed"]=0.0;sh["position"]=(sh["position"]+1)%len(sh["indices"])
     if sh["shuffle"] and sh["position"]==0 and len(sh["indices"])>1:random.shuffle(sh["indices"])
-    select_for_side(side,sh["indices"][sh["position"]],stop=False)
+    next_index=sh["indices"][sh["position"]]
+    if text_slideshow_active(side):
+        begin_transition(side);panels[side]["image_index"]=next_index
+    else:
+        select_for_side(side,next_index,stop=False)
 
 def update_shows(dt):
     for side in ("front","back"):
@@ -270,21 +279,38 @@ def set_text_settings(value):
         if "background_brightness" in value:
             try:st["background_brightness"]=max(.05,min(.55,float(value["background_brightness"])))
             except (TypeError,ValueError):pass
+        if "background_slideshow" in value:st["background_slideshow"]=bool(value["background_slideshow"])
         for k in ("glow","wave","glitch","beat_pulse","backplate"):
             if k in value:st[k]=bool(value[k])
 def show_text(value=None):
     if isinstance(value,dict):set_text_settings(value)
     for s in target_sides():
-        begin_transition(s);stop_show(s);controllers[s].set_effect("Text")
+        st=panels[s]["text"];begin_transition(s)
+        if st.get("background","Black")!="Black" and st.get("background_slideshow",True):
+            sh=panels[s]["slideshow"]
+            if not sh["indices"]:sh["indices"]=list(range(len(library)));random.shuffle(sh["indices"])
+            sh["active"]=bool(sh["indices"])
+        else:stop_show(s)
+        controllers[s].set_effect("Text")
     mark_custom()
 
 def trigger_guest(value):
     global guest
     if guest["locked"] or not isinstance(value,dict):return
     kind=str(value.get("kind","")).lower();strength=clamp01(value.get("strength",1.0))
-    if kind=="next":step_filtered({"indices":list(range(len(library))),"delta":1});return
+    sides=["front","back"]
+    if kind=="next":
+        ids=list(range(len(library)))
+        for side in sides:
+            if not ids:continue
+            cur=panels[side]["image_index"]
+            try:p=ids.index(cur)
+            except ValueError:p=-1
+            select_for_side(side,ids[(p+1)%len(ids)])
+        return
     if kind=="random":
-        if len(library):select_image(random.randrange(len(library)))
+        for side in sides:
+            if len(library):select_for_side(side,random.randrange(len(library)))
         return
     guest={"kind":kind,"strength":strength,"until":time.monotonic()+float(value.get("duration",.7)),"locked":False}
 def stop_guest():guest.update(kind=None,strength=0.0,until=0.0)
