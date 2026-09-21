@@ -33,7 +33,7 @@ active_target="both"
 current_scene="Custom"
 audio={"volume":0.0,"bass":0.0,"mids":0.0,"highs":0.0,"beat":False,"last_update":0.0}
 motion={"tilt_x":0.0,"tilt_y":0.0,"shake":0.0,"tap":False}
-guest={"kind":None,"strength":0.0,"until":0.0,"locked":False}
+guest={"kind":None,"strength":0.0,"until":0.0,"locked":False,"x":.5,"y":.5,"velocity":0.0}
 
 def slideshow_state():
     ids=list(range(len(library)));random.shuffle(ids)
@@ -41,7 +41,9 @@ def slideshow_state():
 def reactive_state(): return {"enabled":False,"strength":0.65,"preset":"Pulse","layers":layer_engine.preset("Pulse")}
 def transition_state(): return {"kind":"Fade","duration":0.8,"random":True}
 def text_state():
-    st=text_engine.defaults();st["background_slideshow"]=True;return st
+    st=text_engine.defaults()
+    st.update(enabled=False,background="Dimmed GIF",background_brightness=.30,backplate=True,speed=12.0)
+    return st
 panels={s:{"image_index":0,"slideshow":slideshow_state(),"reactive":reactive_state(),"transition":transition_state(),"text":text_state()} for s in ("front","back")}
 
 def metadata(a): return library.metadata_entry(a.path.name) if a else {"tags":[],"favorite":False}
@@ -66,13 +68,7 @@ def image_fx(side,display,t):
     if a:a.render(display,t,a.settings)
     else:display.clear()
 def text_fx(side,display,t):
-    st=panels[side]["text"]
-    if st.get("background","Black")!="Black" and asset(side):
-        image_fx(side,display,t)
-        text_engine.prepare_background(display,st)
-        text_engine.render(display,st,t,signals(),1000 if side=="back" else 0,clear_background=False)
-    else:
-        text_engine.render(display,st,t,signals(),1000 if side=="back" else 0)
+    display.clear();text_engine.render(display,panels[side]["text"],t,signals(),1000 if side=="back" else 0)
 def make_effects(side): return {**EFFECTS,"Text":lambda d,t,s=side:text_fx(s,d,t),"Party":lambda d,t,s=side:party_fx(s,d,t),"Image":lambda d,t,s=side:image_fx(s,d,t)}
 controllers={s:TotemController(make_effects(s)) for s in ("front","back")}
 for s in ("front","back"):
@@ -138,19 +134,11 @@ def start_show(value):
         select_for_side(side,order[0],stop=False)
     current_scene="Custom"
 
-def text_slideshow_active(side):
-    st=panels[side]["text"]
-    return controllers[side].effect_name=="Text" and st.get("background","Black")!="Black" and st.get("background_slideshow",True)
-
 def advance_show(side):
     sh=panels[side]["slideshow"]
     sh["elapsed"]=0.0;sh["position"]=(sh["position"]+1)%len(sh["indices"])
     if sh["shuffle"] and sh["position"]==0 and len(sh["indices"])>1:random.shuffle(sh["indices"])
-    next_index=sh["indices"][sh["position"]]
-    if text_slideshow_active(side):
-        begin_transition(side);panels[side]["image_index"]=next_index
-    else:
-        select_for_side(side,next_index,stop=False)
+    select_for_side(side,sh["indices"][sh["position"]],stop=False)
 
 def update_shows(dt):
     for side in ("front","back"):
@@ -268,7 +256,6 @@ def set_text_settings(value):
         if value.get("font") in TEXT_FONTS:st["font"]=value["font"]
         if value.get("motion") in TEXT_MOTIONS:st["motion"]=value["motion"]
         if value.get("color_mode") in TEXT_COLORS:st["color_mode"]=value["color_mode"]
-        if value.get("background") in TEXT_BACKGROUNDS:st["background"]=value["background"]
         if "color" in value:st["color"]=str(value["color"])[:16]
         if "scale" in value:
             try:st["scale"]=max(1,min(3,int(value["scale"])))
@@ -276,44 +263,64 @@ def set_text_settings(value):
         if "speed" in value:
             try:st["speed"]=max(1.0,min(40.0,float(value["speed"])))
             except (TypeError,ValueError):pass
-        if "background_brightness" in value:
-            try:st["background_brightness"]=max(.05,min(.55,float(value["background_brightness"])))
-            except (TypeError,ValueError):pass
-        if "background_slideshow" in value:st["background_slideshow"]=bool(value["background_slideshow"])
-        for k in ("glow","wave","glitch","beat_pulse","backplate"):
+        for k in ("glow","wave","glitch","beat_pulse"):
             if k in value:st[k]=bool(value[k])
+        st["background"]="Dimmed GIF";st["background_brightness"]=.30;st["backplate"]=True
+
 def show_text(value=None):
     if isinstance(value,dict):set_text_settings(value)
-    for s in target_sides():
-        st=panels[s]["text"];begin_transition(s)
-        if st.get("background","Black")!="Black" and st.get("background_slideshow",True):
-            sh=panels[s]["slideshow"]
-            if not sh["indices"]:sh["indices"]=list(range(len(library)));random.shuffle(sh["indices"])
-            sh["active"]=bool(sh["indices"])
-        else:stop_show(s)
-        controllers[s].set_effect("Text")
-    mark_custom()
+    for s in target_sides():panels[s]["text"]["enabled"]=True
+
+def hide_text():
+    for s in target_sides():panels[s]["text"]["enabled"]=False
+
+def refresh_text(value=None):
+    if isinstance(value,dict):set_text_settings(value)
 
 def trigger_guest(value):
     global guest
     if guest["locked"] or not isinstance(value,dict):return
     kind=str(value.get("kind","")).lower();strength=clamp01(value.get("strength",1.0))
-    sides=["front","back"]
-    if kind=="next":
-        ids=list(range(len(library)))
-        for side in sides:
-            if not ids:continue
-            cur=panels[side]["image_index"]
-            try:p=ids.index(cur)
-            except ValueError:p=-1
-            select_for_side(side,ids[(p+1)%len(ids)])
+    guest={"kind":kind,"strength":strength,"until":time.monotonic()+float(value.get("duration",30)),"locked":False,"x":.5,"y":.5,"velocity":0.0}
+
+def update_guest_xy(value):
+    global guest
+    if guest["locked"] or not isinstance(value,dict):return
+    try:x=clamp01(value.get("x",.5));y=clamp01(value.get("y",.5));velocity=clamp01(value.get("velocity",0));strength=clamp01(value.get("strength",1))
+    except Exception:return
+    guest={"kind":"xy","strength":strength,"until":time.monotonic()+.30,"locked":False,"x":x,"y":y,"velocity":velocity}
+
+def stop_guest():
+    guest.update(kind=None,strength=0.0,until=0.0,velocity=0.0)
+
+def apply_guest_effect(display,frame_number):
+    kind=guest.get("kind");amount=clamp01(guest.get("strength",1.0))
+    if not kind or guest.get("locked"):return
+    if kind in ("glitch","rainbow","chaos"):
+        layer_engine.guest_burst(display,kind,amount,frame_number);return
+    if kind=="warp":
+        layer_engine._zoom(display,.10+amount*.32)
+        layer_engine._shift(display,int(random.choice((-1,1))*amount*2),int(random.choice((-1,1))*amount))
+        layer_engine._hue(display,(frame_number*5)%360)
         return
-    if kind=="random":
-        for side in sides:
-            if len(library):select_for_side(side,random.randrange(len(library)))
+    if kind=="prism":
+        layer_engine._rgb_split(display,.28+amount*.70)
+        layer_engine._hue(display,(frame_number*8)%360)
+        layer_engine._sparkles(display,amount*.35,frame_number*23)
         return
-    guest={"kind":kind,"strength":strength,"until":time.monotonic()+float(value.get("duration",.7)),"locked":False}
-def stop_guest():guest.update(kind=None,strength=0.0,until=0.0)
+    if kind=="meltdown":
+        layer_engine._zoom(display,amount*.16)
+        layer_engine._shift(display,int(__import__('math').sin(frame_number*.45)*amount*5),int(__import__('math').cos(frame_number*.31)*amount*4))
+        layer_engine._hue(display,(frame_number*3)%240)
+        return
+    if kind=="xy":
+        x=clamp01(guest.get("x",.5));y=clamp01(guest.get("y",.5));v=clamp01(guest.get("velocity",0))
+        layer_engine._hue(display,(x-.5)*300*amount)
+        layer_engine._rgb_split(display,abs(x-.5)*1.55*amount)
+        layer_engine._zoom(display,y*.34*amount)
+        if v>.03:
+            layer_engine._shift(display,int(__import__('math').sin(frame_number*1.8)*v*amount*7),int(__import__('math').cos(frame_number*1.4)*v*amount*4))
+            layer_engine._sparkles(display,v*amount,frame_number*37)
 
 def command(data):
     c,v=data.get("command"),data.get("value")
@@ -329,6 +336,8 @@ def command(data):
     if c=="performance_scene":apply_scene(v);return
     if c=="text_settings":set_text_settings(v);return
     if c=="text_show":show_text(v);return
+    if c=="text_hide":hide_text();return
+    if c=="text_refresh":refresh_text(v);return
     if c=="brightness":master("brightness",v,.1,1);return
     if c=="speed":master("speed",v,.1,5);return
     if c=="toggle_pause":toggle_pause();return
@@ -341,6 +350,7 @@ def command(data):
     if c=="reactive_layer":set_layer(v);return
     if c=="transition_settings":set_transition(v);return
     if c=="guest_action":trigger_guest(v);return
+    if c=="guest_xy":update_guest_xy(v);return
     if c=="guest_stop":stop_guest();return
     if c=="guest_lock":guest["locked"]=bool(v);return
     if c in ("mode_prev","mode_next"):
@@ -422,10 +432,15 @@ while running:
     if guest["kind"] and time.monotonic()>guest["until"]:stop_guest()
     sig=signals()
     for s in ("front","back"):
-        controllers[s].effect(displays[s],controllers[s].time);transitions[s].apply(displays[s])
+        controllers[s].effect(displays[s],controllers[s].time)
+        transitions[s].apply(displays[s])
         r=panels[s]["reactive"]
         if r["enabled"]:layer_engine.apply(displays[s],sig,r["layers"],r["strength"],frame_number,1000 if s=="back" else 0)
-        if guest["kind"] and not guest["locked"]:layer_engine.guest_burst(displays[s],guest["kind"],guest["strength"],frame_number)
+        st=panels[s]["text"]
+        if st.get("enabled",False):
+            text_engine.prepare_background(displays[s],st)
+            text_engine.render(displays[s],st,controllers[s].time,sig,1000 if s=="back" else 0,clear_background=False)
+        apply_guest_effect(displays[s],frame_number+(1000 if s=="back" else 0))
     motion["tap"]=False;motion["shake"]*=.90
     screen.fill((15,15,18));draw_panel("front",0);draw_panel("back",PW+GAP);draw_ui();update_phone();pygame.display.flip()
 server.stop();pygame.quit()
