@@ -1,0 +1,141 @@
+{
+  "assets": {
+    "cucuso.gif": {
+      "favorite": true,
+      "settings": {
+        "contrast": 1.25,
+        "crop_x": 0.69,
+        "crop_y": 0.5,
+        "dither": false,
+        "gamma": 1.0,
+        "mode": "optimize",
+        "saturation": 1.35,
+        "sharpen": true,
+        "zoom": 1.0
+      },
+      "tags": []
+    },
+    "hank.gif": {
+      "favorite": true,
+      "settings": {
+        "contrast": 1.25,
+        "crop_x": 0.5,
+        "crop_y": 0.5,
+        "dither": false,
+        "gamma": 1.0,
+        "mode": "optimize",
+        "saturation": 1.35,
+        "sharpen": true,
+        "zoom": 1.0
+      },
+      "tags": []
+    },
+    "lost-gnome.gif": {
+      "favorite": false,
+      "settings": {
+        "contrast": 1.4000000000000001,
+        "crop_x": 0.5,
+        "crop_y": 0.5,
+        "dither": false,
+        "gamma": 1.0,
+        "mode": "optimize",
+        "saturation": 1.35,
+        "sharpen": true,
+        "zoom": 1.0
+      },
+      "tags": []
+    },
+    "pndf.gif": {
+      "favorite": false,
+      "settings": {
+        "contrast": 1.35,
+        "crop_x": 0.52,
+        "crop_y": 0.5,
+        "dither": false,
+        "gamma": 1.05,
+        "mode": "optimize",
+        "saturation": 0.95,
+        "sharpen": true,
+        "zoom": 1.0
+      },
+      "tags": []
+    },
+    "rsgnome-static.png": {
+      "favorite": false,
+      "settings": {
+        "contrast": 1.25,
+        "crop_x": 0.5,
+        "crop_y": 0.5,
+        "dither": false,
+        "gamma": 1.0,
+        "mode": "optimize",
+        "saturation": 1.35,
+        "sharpen": true,
+        "zoom": 1.0
+      },
+      "tags": []
+    },
+    "trippy-eyes.gif": {
+      "favorite": false,
+      "settings": {
+        "contrast": 1.25,
+        "crop_x": 0.5,
+        "crop_y": 0.5,
+        "dither": false,
+        "gamma": 1.0,
+        "mode": "optimize",
+        "saturation": 1.35,
+        "sharpen": true,
+        "zoom": 1.0
+      },
+      "tags": []
+    },
+    "trippy-face.gif": {
+      "favorite": false,
+      "settings": {
+        "contrast": 1.25,
+        "crop_x": 0.5,
+        "crop_y": 0.5,
+        "dither": false,
+        "gamma": 1.0,
+        "mode": "dither",
+        "saturation": 1.35,
+        "sharpen": true,
+        "zoom": 1.0
+      },
+      "tags": []
+    },
+    "unzip-girl.gif": {
+      "favorite": false,
+      "settings": {
+        "contrast": 1.4,
+        "crop_x": 0.6,
+        "crop_y": 0.5,
+        "dither": false,
+        "gamma": 1.25,
+        "mode": "optimize",
+        "saturation": 1.45,
+        "sharpen": true,
+        "zoom": 1.0
+      },
+      "tags": []
+    },
+    "wk-spin.gif": {
+      "favorite": false,
+      "settings": {
+        "contrast": 0.7,
+        "crop_x": 0.51,
+        "crop_y": 0.32,
+        "dither": false,
+        "gamma": 1.9,
+        "mode": "optimize",
+        "saturation": 1.55,
+        "sharpen": true,
+        "zoom": 1.5
+      },
+      "tags": []
+    }
+  },
+  "playlists": {},
+  "version": 1
+}

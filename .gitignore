@@ -1,0 +1,10 @@
+ls
+cat > .gitignore <<'EOF'
+.venv/
+venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+assets/images/*
+!assets/images/.gitkeep
