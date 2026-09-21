@@ -48,7 +48,7 @@ AUDIO_SECTION = r"""
 <div class="slider"><div class="sh"><span>Beat threshold</span><span id="beatThresholdValue">1.55x</span></div><input id="beatThreshold" type="range" min="1.15" max="2.5" step=".05" value="1.55" oninput="num('beatThresholdValue',this.value,'x')"></div>
 <div class="slider"><div class="sh"><span>Smoothing</span><span id="smoothingValue">70%</span></div><input id="smoothing" type="range" min="0" max=".95" step=".05" value=".70" oninput="pct('smoothingValue',this.value);if(analyser)analyser.smoothingTimeConstant=parseFloat(this.value)"></div>
 </div>
-<div class="audioNotice">Bass now uses a tighter sub/bass blend and adaptive normalization, so sustained EDM low-end should stop pinning the meter at 100%.</div>
+<div class="audioNotice">Bass uses a tighter sub/bass blend and adaptive normalization, so sustained EDM low-end should move dynamically instead of pinning at 100%.</div>
 </div>
 <div class="card">
 <div class="row"><h2>Reactive Layer</h2><button id="reactiveButton" onclick="toggleReactive()">Off</button></div>
@@ -64,7 +64,12 @@ AUDIO_SECTION = r"""
 
 AUDIO_JS = r"""
 let audioContext=null,analyser=null,micStream=null,audioAnimation=null,lastAudioSend=0,lastBeatTime=0,demoTimer=null,demoPhase=0;
-let bassFloor=.02,bassCeiling=.28,midFloor=.02,midCeiling=.24,highFloor=.01,highCeiling=.18,bassAverage=.12;
+let bandState={
+ bass:{floor:.02,ceiling:.28},
+ mids:{floor:.02,ceiling:.24},
+ highs:{floor:.01,ceiling:.18}
+};
+let bassAverage=.12;
 
 function micSupported(){return !!(window.isSecureContext&&navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)}
 function updateMicNotice(){
@@ -77,11 +82,16 @@ function averageBand(data,sampleRate,fftSize,lo,hi){
  const hz=sampleRate/fftSize,first=Math.max(0,Math.floor(lo/hz)),last=Math.min(data.length-1,Math.ceil(hi/hz));let sum=0,count=0;
  for(let i=first;i<=last;i++){sum+=data[i];count++}return count?sum/count/255:0
 }
-function normBand(v,floorName,ceilingName){
- let floor=window[floorName],ceiling=window[ceilingName];
- floor=Math.min(floor*.995+v*.005,v);ceiling=Math.max(ceiling*.992+v*.008,v);
- if(ceiling-floor<.06)ceiling=floor+.06;window[floorName]=floor;window[ceilingName]=ceiling;
- return Math.max(0,Math.min(1,(v-floor)/(ceiling-floor)))
+function normBand(v,name){
+ const s=bandState[name];
+ s.floor=Math.min(s.floor*.995+v*.005,v);
+ s.ceiling=Math.max(s.ceiling*.992+v*.008,v);
+ if(s.ceiling-s.floor<.06)s.ceiling=s.floor+.06;
+ return Math.max(0,Math.min(1,(v-s.floor)/(s.ceiling-s.floor)))
+}
+function resetBandState(){
+ bandState={bass:{floor:.02,ceiling:.28},mids:{floor:.02,ceiling:.24},highs:{floor:.01,ceiling:.18}};
+ bassAverage=.12
 }
 function setMeters(v,b,m,h,beat){
  volumeBar.style.height=(v*100)+"%";bassBar.style.height=(b*100)+"%";midsBar.style.height=(m*100)+"%";highsBar.style.height=(h*100)+"%";beatLamp.classList.toggle("on",beat)
@@ -96,7 +106,7 @@ function audioLoop(ts){
  const sub=averageBand(freq,sr,fft,35,90),low=averageBand(freq,sr,fft,90,180),rawBass=(sub*.62+low*.38)*bg*sens;
  const rawMids=averageBand(freq,sr,fft,180,2200)*mg*sens;
  const rawHighs=averageBand(freq,sr,fft,2200,9000)*hg*sens;
- const bass=normBand(rawBass,"bassFloor","bassCeiling"),mids=normBand(rawMids,"midFloor","midCeiling"),highs=normBand(rawHighs,"highFloor","highCeiling");
+ const bass=normBand(rawBass,"bass"),mids=normBand(rawMids,"mids"),highs=normBand(rawHighs,"highs");
  bassAverage=bassAverage*.92+bass*.08;const now=performance.now(),threshold=parseFloat(beatThreshold.value);
  const beat=bass>Math.max(.24,bassAverage*threshold)&&now-lastBeatTime>190;if(beat)lastBeatTime=now;
  setMeters(volume,bass,mids,highs,beat);
@@ -110,7 +120,7 @@ async function startMic(){
   audioContext=new(window.AudioContext||window.webkitAudioContext)();await audioContext.resume();
   analyser=audioContext.createAnalyser();analyser.fftSize=1024;analyser.smoothingTimeConstant=parseFloat(smoothing.value);
   audioContext.createMediaStreamSource(micStream).connect(analyser);
-  bassFloor=.02;bassCeiling=.28;midFloor=.02;midCeiling=.24;highFloor=.01;highCeiling=.18;bassAverage=.12;
+  resetBandState();
   micButton.textContent="Stop Phone Mic";micButton.classList.add("active");updateMicNotice();audioAnimation=requestAnimationFrame(audioLoop)
  }catch(e){micNotice.textContent="Microphone could not start: "+e.message;micStream=null}
 }
