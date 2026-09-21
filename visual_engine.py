@@ -2,7 +2,7 @@ import math
 import random
 
 
-TRANSITIONS = ["Fade", "Melt", "Dissolve", "Glitch", "None"]
+TRANSITIONS = ["Fade", "Melt", "Dissolve", "Glitch", "Ripple", "Zoom", "Wipe", "None"]
 LAYER_KEYS = [
     "bass_zoom",
     "beat_flash",
@@ -82,6 +82,12 @@ class TransitionManager:
             self._dissolve(display, target, p)
         elif self.kind == "Glitch":
             self._glitch(display, target, p)
+        elif self.kind == "Ripple":
+            self._ripple(display, target, p)
+        elif self.kind == "Zoom":
+            self._zoom_transition(display, target, p)
+        elif self.kind == "Wipe":
+            self._wipe(display, target, p)
 
     def _fade(self, display, target, p):
         for y in range(self.height):
@@ -123,6 +129,53 @@ class TransitionManager:
                     sx = max(0, min(self.width - 1, x + shift))
                     c = self.source[y][sx]
                 display.set_pixel(x, y, c)
+
+    def _ripple(self, display, target, p):
+        cx = (self.width - 1) / 2.0
+        cy = (self.height - 1) / 2.0
+        max_r = math.hypot(cx, cy)
+        radius = p * (max_r + 8)
+        for y in range(self.height):
+            for x in range(self.width):
+                d = math.hypot(x - cx, y - cy)
+                wave = 2.2 * math.sin((d - radius) * 1.25) * (1.0 - p)
+                if d <= radius:
+                    sx = int(round(cx + (x - cx) * (1.0 - wave * 0.018)))
+                    sy = int(round(cy + (y - cy) * (1.0 - wave * 0.018)))
+                    sx = max(0, min(self.width - 1, sx))
+                    sy = max(0, min(self.height - 1, sy))
+                    edge = clamp01((radius - d + 3) / 6.0)
+                    display.set_pixel(x, y, blend_color(self.source[y][x], target[sy][sx], edge))
+                else:
+                    display.set_pixel(x, y, self.source[y][x])
+
+    def _zoom_transition(self, display, target, p):
+        cx = (self.width - 1) / 2.0
+        cy = (self.height - 1) / 2.0
+        old_zoom = 1.0 + p * 1.5
+        new_zoom = 1.85 - p * 0.85
+        for y in range(self.height):
+            for x in range(self.width):
+                osx = int(round(cx + (x - cx) / old_zoom))
+                osy = int(round(cy + (y - cy) / old_zoom))
+                nsx = int(round(cx + (x - cx) / new_zoom))
+                nsy = int(round(cy + (y - cy) / new_zoom))
+                osx = max(0, min(self.width - 1, osx)); osy = max(0, min(self.height - 1, osy))
+                nsx = max(0, min(self.width - 1, nsx)); nsy = max(0, min(self.height - 1, nsy))
+                display.set_pixel(x, y, blend_color(self.source[osy][osx], target[nsy][nsx], p))
+
+    def _wipe(self, display, target, p):
+        edge = int(p * (self.width + 12)) - 6
+        for y in range(self.height):
+            wobble = int(math.sin(y * 0.55 + self.seed) * 3)
+            for x in range(self.width):
+                local = x - (edge + wobble)
+                if local < -2:
+                    display.set_pixel(x, y, target[y][x])
+                elif local > 2:
+                    display.set_pixel(x, y, self.source[y][x])
+                else:
+                    display.set_pixel(x, y, blend_color(target[y][x], self.source[y][x], clamp01((local + 2) / 4.0)))
 
 
 class VisualLayerEngine:
@@ -220,7 +273,6 @@ class VisualLayerEngine:
     def _hue(self, display, degrees):
         if abs(degrees) < .5:
             return
-        # Fast channel rotation approximation for the simulator; avoids per-pixel HSV objects.
         phase = (degrees % 360) / 120.0
         src = copy_pixels(display)
         for y in range(self.height):
