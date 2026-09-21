@@ -1,13 +1,13 @@
 import io, random, time, pygame
 from PIL import Image
 from display import VirtualDisplay
-from effects import EFFECTS, hsv_to_rgb
+from effects import EFFECTS
 from controller import TotemController
-from text import draw_scrolling_text
 from particles import ParticleSystem
 from image_assets import ImageLibrary
 from secure_phone_server import PhoneControlServer
 from visual_engine import TransitionManager, VisualLayerEngine, TRANSITIONS, LAYER_KEYS
+from text_engine import TextRenderer, TEXT_FONTS, TEXT_MOTIONS, TEXT_COLORS, TEXT_EFFECTS
 
 W,H,S,GAP,UI = 64,32,8,24,185
 PW,PH = W*S,H*S
@@ -20,6 +20,7 @@ displays={s:VirtualDisplay(W,H) for s in ("front","back")}
 particles={s:ParticleSystem(W,H,count=60) for s in ("front","back")}
 transitions={s:TransitionManager(W,H) for s in ("front","back")}
 layer_engine=VisualLayerEngine(W,H)
+text_engine=TextRenderer(W,H)
 MODES=["crop","pixel","optimize","dither"]
 REACTIVE_PRESETS=["Pulse","Neon","Spark","Chaos"]
 SCENES={
@@ -39,7 +40,8 @@ def slideshow_state():
     return {"active":bool(ids),"indices":ids,"position":0,"duration":5.0,"elapsed":0.0,"shuffle":True,"label":"All","beat_sync":True}
 def reactive_state(): return {"enabled":False,"strength":0.65,"preset":"Pulse","layers":layer_engine.preset("Pulse")}
 def transition_state(): return {"kind":"Fade","duration":0.8,"random":True}
-panels={s:{"image_index":0,"slideshow":slideshow_state(),"reactive":reactive_state(),"transition":transition_state()} for s in ("front","back")}
+def text_state(): return text_engine.defaults()
+panels={s:{"image_index":0,"slideshow":slideshow_state(),"reactive":reactive_state(),"transition":transition_state(),"text":text_state()} for s in ("front","back")}
 
 def metadata(a): return library.metadata_entry(a.path.name) if a else {"tags":[],"favorite":False}
 def asset(side): return library.get(panels[side]["image_index"]) if len(library) else None
@@ -50,25 +52,25 @@ def save_asset(a):
     if not a:return
     a.settings.clamp();a.clear_cache();library.save_asset(a)
 
-def text_fx(display,t): draw_scrolling_text(display,"FESTIVAL MODE",t,color=hsv_to_rgb((t*80)%360),scale=1,speed=12)
-def party_fx(side,display,t): EFFECTS["Plasma"](display,t);particles[side].draw(display)
-def image_fx(side,display,t):
-    a=asset(side)
-    if a:a.render(display,t,a.settings)
-    else:display.clear()
-def make_effects(side): return {**EFFECTS,"Text":text_fx,"Party":lambda d,t,s=side:party_fx(s,d,t),"Image":lambda d,t,s=side:image_fx(s,d,t)}
-controllers={s:TotemController(make_effects(s)) for s in ("front","back")}
-for s in ("front","back"):
-    sh=panels[s]["slideshow"]
-    if sh["indices"]:panels[s]["image_index"]=sh["indices"][0]
-    controllers[s].set_effect("Image")
-
 def clamp01(v): return max(0.0,min(1.0,float(v)))
 def audio_fresh(): return time.monotonic()-audio["last_update"]<1.0
 def signals():
     out={"volume":0.0,"bass":0.0,"mids":0.0,"highs":0.0,"beat":False,**motion}
     if audio_fresh():out.update({k:audio[k] for k in ("volume","bass","mids","highs","beat")})
     return out
+
+def text_fx(side,display,t): text_engine.render(display,panels[side]["text"],t,signals(),1000 if side=="back" else 0)
+def party_fx(side,display,t): EFFECTS["Plasma"](display,t);particles[side].draw(display)
+def image_fx(side,display,t):
+    a=asset(side)
+    if a:a.render(display,t,a.settings)
+    else:display.clear()
+def make_effects(side): return {**EFFECTS,"Text":lambda d,t,s=side:text_fx(s,d,t),"Party":lambda d,t,s=side:party_fx(s,d,t),"Image":lambda d,t,s=side:image_fx(s,d,t)}
+controllers={s:TotemController(make_effects(s)) for s in ("front","back")}
+for s in ("front","back"):
+    sh=panels[s]["slideshow"]
+    if sh["indices"]:panels[s]["image_index"]=sh["indices"][0]
+    controllers[s].set_effect("Image")
 
 def choose_transition(side):
     ts=panels[side]["transition"]
@@ -242,6 +244,29 @@ def apply_scene(name):
         controllers[s].set_effect("Image")
     current_scene=name
 
+def set_text_settings(value):
+    if not isinstance(value,dict):return
+    for s in target_sides():
+        st=panels[s]["text"]
+        if "message" in value:st["message"]=str(value["message"])[:120]
+        if value.get("font") in TEXT_FONTS:st["font"]=value["font"]
+        if value.get("motion") in TEXT_MOTIONS:st["motion"]=value["motion"]
+        if value.get("color_mode") in TEXT_COLORS:st["color_mode"]=value["color_mode"]
+        if "color" in value:st["color"]=str(value["color"])[:16]
+        if "scale" in value:
+            try:st["scale"]=max(1,min(3,int(value["scale"])))
+            except (TypeError,ValueError):pass
+        if "speed" in value:
+            try:st["speed"]=max(1.0,min(40.0,float(value["speed"])))
+            except (TypeError,ValueError):pass
+        for k in ("glow","wave","glitch","beat_pulse"):
+            if k in value:st[k]=bool(value[k])
+def show_text(value=None):
+    if isinstance(value,dict):set_text_settings(value)
+    for s in target_sides():
+        begin_transition(s);stop_show(s);controllers[s].set_effect("Text")
+    mark_custom()
+
 def trigger_guest(value):
     global guest
     if guest["locked"] or not isinstance(value,dict):return
@@ -265,6 +290,8 @@ def command(data):
         mark_custom();return
     if c=="slideshow_beat_sync":set_beat_sync(v);return
     if c=="performance_scene":apply_scene(v);return
+    if c=="text_settings":set_text_settings(v);return
+    if c=="text_show":show_text(v);return
     if c=="brightness":master("brightness",v,.1,1);return
     if c=="speed":master("speed",v,.1,5);return
     if c=="toggle_pause":toggle_pause();return
@@ -310,7 +337,7 @@ def command(data):
 
 def phone_panel(side):
     ctl=controllers[side];a=asset(side);sh=panels[side]["slideshow"];r=panels[side]["reactive"];tr=panels[side]["transition"]
-    out={"effect":ctl.effect_name,"speed":ctl.speed,"brightness":ctl.brightness,"paused":ctl.paused,"image_index_zero":panels[side]["image_index"],"image_index":0,"image_name":None,"image_mode":None,"image_settings":None,"image_tags":[],"image_favorite":False,"slideshow":{"active":sh["active"],"duration":sh["duration"],"shuffle":sh["shuffle"],"label":sh["label"],"count":len(sh["indices"]),"beat_sync":sh.get("beat_sync",False)},"reactive":{"enabled":r["enabled"],"strength":r["strength"],"preset":r["preset"],"layers":dict(r["layers"])},"transition":dict(tr)}
+    out={"effect":ctl.effect_name,"speed":ctl.speed,"brightness":ctl.brightness,"paused":ctl.paused,"image_index_zero":panels[side]["image_index"],"image_index":0,"image_name":None,"image_mode":None,"image_settings":None,"image_tags":[],"image_favorite":False,"slideshow":{"active":sh["active"],"duration":sh["duration"],"shuffle":sh["shuffle"],"label":sh["label"],"count":len(sh["indices"]),"beat_sync":sh.get("beat_sync",False)},"reactive":{"enabled":r["enabled"],"strength":r["strength"],"preset":r["preset"],"layers":dict(r["layers"])},"transition":dict(tr),"text":dict(panels[side]["text"])}
     if a:
         m=metadata(a);out.update(image_index=panels[side]["image_index"]+1,image_name=a.path.name,image_mode=a.settings.mode,image_settings=a.settings.to_dict(),image_tags=m.get("tags",[]),image_favorite=bool(m.get("favorite",False)))
     return out
@@ -320,7 +347,7 @@ def update_phone():
     for i,a in enumerate(library.assets):
         m=metadata(a);lib.append({"index":i,"name":a.path.name,"tags":m.get("tags",[]),"favorite":bool(m.get("favorite",False))})
     ref=phone_panel(reference_side())
-    server.update_state({"target":active_target,"reference_side":reference_side(),"image_count":len(library),"library":lib,"effects":list(controllers["front"].effects),"panels":{"front":phone_panel("front"),"back":phone_panel("back")},"audio":{"volume":audio["volume"],"bass":audio["bass"],"mids":audio["mids"],"highs":audio["highs"],"beat":audio["beat"],"fresh":audio_fresh()},"motion":dict(motion),"reactive_presets":REACTIVE_PRESETS,"layer_keys":LAYER_KEYS,"transitions":TRANSITIONS,"performance_scenes":list(SCENES),"current_scene":current_scene,"guest":{"locked":guest["locked"]},**ref})
+    server.update_state({"target":active_target,"reference_side":reference_side(),"image_count":len(library),"library":lib,"effects":list(controllers["front"].effects),"panels":{"front":phone_panel("front"),"back":phone_panel("back")},"audio":{"volume":audio["volume"],"bass":audio["bass"],"mids":audio["mids"],"highs":audio["highs"],"beat":audio["beat"],"fresh":audio_fresh()},"motion":dict(motion),"reactive_presets":REACTIVE_PRESETS,"layer_keys":LAYER_KEYS,"transitions":TRANSITIONS,"performance_scenes":list(SCENES),"current_scene":current_scene,"text_fonts":TEXT_FONTS,"text_motions":TEXT_MOTIONS,"text_color_modes":TEXT_COLORS,"text_effects":TEXT_EFFECTS,"guest":{"locked":guest["locked"]},**ref})
 
 def draw_panel(side,x):
     d,ctl=displays[side],controllers[side]
