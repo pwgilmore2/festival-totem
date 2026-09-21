@@ -16,7 +16,7 @@ _STATUS_CSS = r'''
 phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('</head>', _STATUS_CSS + '</head>', 1)
 
 _STATUS_HTML = r'''<div id="globalStatus" class="globalStatus"><div id="statusAudio" class="statusPill"><span class="statusDot"></span>Audio</div><div id="statusText" class="statusPill"><span class="statusDot"></span><span id="statusTextLabel">Text</span></div><div id="statusChaos" class="statusPill"><span class="statusDot"></span><span id="statusChaosLabel">Chaos</span></div><div id="statusBeat" class="statusPill beatPulse"><span class="statusDot"></span>Beat</div></div>'''
-_target_card = '<div class="card"><h2>Target</h2>'
+_target_card = '<div id="targetCard" class="card"><h2>Target</h2>'
 if _target_card in phone_server.PHONE_HTML:
     phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace(_target_card, _STATUS_HTML + _target_card, 1)
 
@@ -68,7 +68,6 @@ function toggleCustomText(){
   if(t.enabled&&!isPreset&&normalizedMessage(t.message)===msg){cmd('text_hide');return}
   cmd('text_show',textPayload())
 }
-// Preserve old callers, but make them state-driven too.
 function quickText(message){toggleQuickText(message)}
 function toggleTextMaster(){if(runtimeTextEnabled())cmd('text_hide');else if(normalizedMessage(textMessage.value))cmd('text_show',textPayload())}
 function refreshText(){if(runtimeTextEnabled())cmd('text_settings',textPayload())}
