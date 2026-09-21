@@ -144,6 +144,12 @@ def enhanced_html(source):
         '["live","library","audio","edit"]',
     )
     html = html.replace(
+        '<input id="zoom" type="range" min="1" max="5" step=".05"',
+        '<input id="zoom" type="range" min=".55" max="5" step=".05"',
+    )
+    html = html.replace('<span>Crop X</span>', '<span>Position X</span>')
+    html = html.replace('<span>Crop Y</span>', '<span>Position Y</span>')
+    html = html.replace(
         "async function update(){",
         AUDIO_JS + "\nasync function update(){",
         1,
@@ -151,8 +157,5 @@ def enhanced_html(source):
     return html
 
 
-phone_server.PHONE_HTML = enhanced_html(
-    phone_server.PHONE_HTML
-)
-
+phone_server.PHONE_HTML = enhanced_html(phone_server.PHONE_HTML)
 PhoneControlServer = phone_server.PhoneControlServer
