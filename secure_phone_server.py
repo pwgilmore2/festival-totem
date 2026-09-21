@@ -17,6 +17,17 @@ _BASE_HTTP_SERVER = phone_server.ThreadingHTTPServer
 # cheaper and prevents TLS handshakes from piling up.
 phone_server.BaseHTTPRequestHandler.protocol_version = "HTTP/1.1"
 
+# Keep browser-side analysis smooth, but reduce network traffic to ~9 updates/s.
+# This still feels immediate on a 64x32 display while avoiding request buildup.
+phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace(
+    'if(ts-lastAudioSend>65){lastAudioSend=ts;cmd("audio_frame",{volume,bass,mids,highs,beat})}',
+    'if(ts-lastAudioSend>110){lastAudioSend=ts;cmd("audio_frame",{volume,bass,mids,highs,beat})}',
+)
+phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace(
+    'demoTimer=setInterval(demoTick,70)',
+    'demoTimer=setInterval(demoTick,110)',
+)
+
 
 class SecureThreadingHTTPServer(_BASE_HTTP_SERVER):
     """Threading HTTP server that enables TLS when local cert files exist."""
@@ -50,7 +61,7 @@ class PhoneControlServer(audio_phone_server.PhoneControlServer):
 
         if CERT_FILE.exists() and KEY_FILE.exists():
             secure_url = url.replace("http://", "https://", 1)
-            print("HTTPS enabled (HTTP/1.1 keep-alive)")
+            print("HTTPS enabled (HTTP/1.1 keep-alive, audio throttled)")
             print(f"Secure phone URL: {secure_url}")
             return secure_url
 
