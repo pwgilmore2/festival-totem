@@ -8,6 +8,7 @@ TEXT_FONTS = ["Pixel", "Block", "Thin", "Arcade"]
 TEXT_MOTIONS = ["Scroll Left", "Scroll Right", "Static", "Bounce"]
 TEXT_COLORS = ["Solid", "Rainbow", "Audio"]
 TEXT_EFFECTS = ["Glow", "Wave", "Glitch", "Beat Pulse"]
+TEXT_BACKGROUNDS = ["Black", "Dimmed GIF", "Tinted GIF"]
 
 
 def clamp01(value):
@@ -51,6 +52,9 @@ class TextRenderer:
             "wave": False,
             "glitch": False,
             "beat_pulse": True,
+            "background": "Black",
+            "background_brightness": 0.28,
+            "backplate": True,
         }
 
     def text_width(self, text, scale=1, font="Pixel"):
@@ -58,7 +62,27 @@ class TextRenderer:
         spacing = self._spacing(scale, font)
         return max(0, len(text) * (glyph_w + spacing) - spacing)
 
-    def render(self, display, settings, t, signals=None, seed=0):
+    def prepare_background(self, display, settings):
+        mode = settings.get("background", "Black")
+        if mode == "Black":
+            display.clear()
+            return
+        brightness = max(0.05, min(0.55, float(settings.get("background_brightness", 0.28))))
+        tint = parse_color(settings.get("color", "#ffffff"))
+        for y in range(display.height):
+            for x in range(display.width):
+                r, g, b = display.get_pixel(x, y)
+                if mode == "Tinted GIF":
+                    lum = (r + g + b) / (255.0 * 3.0)
+                    display.set_pixel(x, y, (
+                        int(tint[0] * lum * brightness),
+                        int(tint[1] * lum * brightness),
+                        int(tint[2] * lum * brightness),
+                    ))
+                else:
+                    display.set_pixel(x, y, (int(r * brightness), int(g * brightness), int(b * brightness)))
+
+    def render(self, display, settings, t, signals=None, seed=0, clear_background=True):
         signals = signals or {}
         text = str(settings.get("message", "") or " ").upper()[:120]
         font = settings.get("font", "Pixel")
@@ -71,7 +95,8 @@ class TextRenderer:
         mids = clamp01(signals.get("mids", 0.0))
         highs = clamp01(signals.get("highs", 0.0))
 
-        display.clear()
+        if clear_background:
+            display.clear()
         width = self.text_width(text, scale, font)
         text_h = 7 * scale
         x, y = self._position(motion, width, text_h, t, speed)
@@ -90,6 +115,9 @@ class TextRenderer:
         if color_mode == "Audio":
             base = hsv_color(210 + mids * 130 + bass * 30, .85, .65 + .35 * max(bass, mids, highs))
 
+        if settings.get("backplate"):
+            self._backplate(display, x, y, width, text_h)
+
         if settings.get("glow"):
             glow = tuple(int(c * .22) for c in base)
             for ox, oy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
@@ -99,6 +127,16 @@ class TextRenderer:
 
         if settings.get("beat_pulse") and beat:
             self._beat_flash(display, .10 + bass * .18)
+
+    def _backplate(self, display, x, y, width, text_h):
+        left = max(0, x - 2)
+        right = min(display.width, x + width + 2)
+        top = max(0, y - 2)
+        bottom = min(display.height, y + text_h + 2)
+        for py in range(top, bottom):
+            for px in range(left, right):
+                r, g, b = display.get_pixel(px, py)
+                display.set_pixel(px, py, (int(r * .28), int(g * .28), int(b * .28)))
 
     def _position(self, motion, width, text_h, t, speed):
         y = (self.height - text_h) // 2
