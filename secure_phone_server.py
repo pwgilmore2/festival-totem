@@ -2,7 +2,7 @@ from pathlib import Path
 import ssl
 
 import phone_server
-import performance_phone_server
+import ui_cleanup_server
 
 CERT_DIR = Path("certs")
 CERT_FILE = CERT_DIR / "totem-cert.pem"
@@ -24,7 +24,7 @@ class SecureThreadingHTTPServer(_BASE_HTTP_SERVER):
 
 phone_server.ThreadingHTTPServer=SecureThreadingHTTPServer
 
-class PhoneControlServer(performance_phone_server.PhoneControlServer):
+class PhoneControlServer(ui_cleanup_server.PhoneControlServer):
     def start(self):
         url=super().start()
         if CERT_FILE.exists() and KEY_FILE.exists():
