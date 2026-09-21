@@ -3,7 +3,7 @@ import random
 import time
 
 import ui_cleanup_server
-from text_engine import TextRenderer
+from text_engine import TextRenderer, parse_color, hsv_color, clamp01
 from visual_engine import VisualLayerEngine, TransitionManager, copy_pixels
 
 _target = "both"
@@ -15,10 +15,20 @@ _text_transitions = {
     "front": None,
     "back": None,
 }
+_text_started = {
+    "front": time.monotonic(),
+    "back": time.monotonic(),
+}
 
 
 def _target_sides():
     return ("front", "back") if _target == "both" else (_target,)
+
+
+def _reset_text_clock(sides=None):
+    now = time.monotonic()
+    for side in sides or _target_sides():
+        _text_started[side] = now
 
 
 def _start_text_transition(entering):
@@ -49,6 +59,85 @@ def _blend(a, b, amount):
     return tuple(int(a[i] + (b[i] - a[i]) * amount) for i in range(3))
 
 
+def _split_two_lines(renderer, text, font):
+    words = text.split()
+    if len(words) < 2:
+        return None
+    best = None
+    for i in range(1, len(words)):
+        a = " ".join(words[:i])
+        b = " ".join(words[i:])
+        wa = renderer.text_width(a, 1, font)
+        wb = renderer.text_width(b, 1, font)
+        if wa <= renderer.width - 4 and wb <= renderer.width - 4:
+            score = abs(wa - wb)
+            if best is None or score < best[0]:
+                best = (score, a, b)
+    return None if best is None else (best[1], best[2])
+
+
+def _draw_static_auto(renderer, display, settings, t, signals, seed, clear_background):
+    signals = signals or {}
+    text = str(settings.get("message", "") or " ").upper()[:120]
+    font = settings.get("font", "Pixel")
+    color_mode = settings.get("color_mode", "Rainbow")
+    requested_scale = max(1, min(3, int(settings.get("scale", 1))))
+    beat = bool(signals.get("beat", False))
+    bass = clamp01(signals.get("bass", 0.0))
+    mids = clamp01(signals.get("mids", 0.0))
+    highs = clamp01(signals.get("highs", 0.0))
+
+    if clear_background:
+        display.clear()
+
+    scale = requested_scale
+    while scale > 1 and renderer.text_width(text, scale, font) > renderer.width - 4:
+        scale -= 1
+
+    pulse = 1.35 if settings.get("beat_pulse") and beat else 1.0
+    base = parse_color(settings.get("color", "#ffffff"))
+    if color_mode == "Audio":
+        base = hsv_color(210 + mids * 130 + bass * 30, .85, .65 + .35 * max(bass, mids, highs))
+
+    def draw_line(line, x, y, line_scale):
+        width = renderer.text_width(line, line_scale, font)
+        if settings.get("backplate"):
+            renderer._backplate(display, x, y, width, 7 * line_scale)
+        if settings.get("glow"):
+            glow = tuple(int(c * .22) for c in base)
+            for ox, oy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                renderer._draw_text(display, line, x + ox, y + oy, glow, line_scale, font, color_mode, t, pulse)
+        renderer._draw_text(display, line, x, y, base, line_scale, font, color_mode, t, pulse)
+
+    width = renderer.text_width(text, scale, font)
+    if width <= renderer.width - 4:
+        x = (renderer.width - width) // 2
+        y = (renderer.height - 7 * scale) // 2
+        if settings.get("wave"):
+            y += int(round(math.sin(t * 4.0) * 2))
+        draw_line(text, x, y, scale)
+    else:
+        lines = _split_two_lines(renderer, text, font)
+        if lines:
+            a, b = lines
+            gap = 3
+            total_h = 7 + gap + 7
+            y1 = (renderer.height - total_h) // 2
+            y2 = y1 + 7 + gap
+            draw_line(a, (renderer.width - renderer.text_width(a, 1, font)) // 2, y1, 1)
+            draw_line(b, (renderer.width - renderer.text_width(b, 1, font)) // 2, y2, 1)
+        else:
+            fallback = dict(settings)
+            fallback["motion"] = "Scroll Left"
+            fallback["scale"] = 1
+            fallback["speed"] = min(8.0, float(settings.get("speed", 8.0)))
+            _original_render(renderer, display, fallback, t, signals, seed, clear_background=False)
+            return
+
+    if settings.get("beat_pulse") and beat:
+        renderer._beat_flash(display, .10 + bass * .18)
+
+
 # Text defaults: 2x and the new Medium speed.
 _original_defaults = TextRenderer.defaults
 
@@ -69,9 +158,15 @@ _original_render = TextRenderer.render
 
 
 def _render(self, display, settings, t, signals=None, seed=0, clear_background=True):
-    base = copy_pixels(display)
-    _original_render(self, display, settings, t, signals, seed, clear_background)
     side = _side_from_seed(seed)
+    text_t = max(0.0, time.monotonic() - _text_started[side])
+    base_pixels = copy_pixels(display)
+
+    if settings.get("motion") == "Static":
+        _draw_static_auto(self, display, settings, text_t, signals, seed, clear_background)
+    else:
+        _original_render(self, display, settings, text_t, signals, seed, clear_background)
+
     tr = _text_transitions.get(side)
     if not tr:
         return
@@ -93,7 +188,7 @@ def _render(self, display, settings, t, signals=None, seed=0, clear_background=T
             elif style == "scatter":
                 threshold = rng.random() * .72
                 local = max(0.0, min(1.0, (amount - threshold) / .28))
-            display.set_pixel(x, y, _blend(base[y][x], final[y][x], local))
+            display.set_pixel(x, y, _blend(base_pixels[y][x], final[y][x], local))
 
 
 TextRenderer.render = _render
@@ -236,6 +331,7 @@ class PhoneControlServer(ui_cleanup_server.PhoneControlServer):
                     except Exception: pass
                 _audio["beat"] = bool(v.get("beat", False))
             elif c == "text_show":
+                _reset_text_clock()
                 _start_text_transition(True)
             elif c == "text_hide":
                 if data.get("_text_transition_complete"):
