@@ -7,7 +7,7 @@ from particles import ParticleSystem
 from image_assets import ImageLibrary
 from secure_phone_server import PhoneControlServer
 from visual_engine import TransitionManager, VisualLayerEngine, TRANSITIONS, LAYER_KEYS
-from text_engine import TextRenderer, TEXT_FONTS, TEXT_MOTIONS, TEXT_COLORS, TEXT_EFFECTS
+from text_engine import TextRenderer, TEXT_FONTS, TEXT_MOTIONS, TEXT_COLORS, TEXT_EFFECTS, TEXT_BACKGROUNDS
 
 W,H,S,GAP,UI = 64,32,8,24,185
 PW,PH = W*S,H*S
@@ -59,12 +59,19 @@ def signals():
     if audio_fresh():out.update({k:audio[k] for k in ("volume","bass","mids","highs","beat")})
     return out
 
-def text_fx(side,display,t): text_engine.render(display,panels[side]["text"],t,signals(),1000 if side=="back" else 0)
 def party_fx(side,display,t): EFFECTS["Plasma"](display,t);particles[side].draw(display)
 def image_fx(side,display,t):
     a=asset(side)
     if a:a.render(display,t,a.settings)
     else:display.clear()
+def text_fx(side,display,t):
+    st=panels[side]["text"]
+    if st.get("background","Black")!="Black" and asset(side):
+        image_fx(side,display,t)
+        text_engine.prepare_background(display,st)
+        text_engine.render(display,st,t,signals(),1000 if side=="back" else 0,clear_background=False)
+    else:
+        text_engine.render(display,st,t,signals(),1000 if side=="back" else 0)
 def make_effects(side): return {**EFFECTS,"Text":lambda d,t,s=side:text_fx(s,d,t),"Party":lambda d,t,s=side:party_fx(s,d,t),"Image":lambda d,t,s=side:image_fx(s,d,t)}
 controllers={s:TotemController(make_effects(s)) for s in ("front","back")}
 for s in ("front","back"):
@@ -252,6 +259,7 @@ def set_text_settings(value):
         if value.get("font") in TEXT_FONTS:st["font"]=value["font"]
         if value.get("motion") in TEXT_MOTIONS:st["motion"]=value["motion"]
         if value.get("color_mode") in TEXT_COLORS:st["color_mode"]=value["color_mode"]
+        if value.get("background") in TEXT_BACKGROUNDS:st["background"]=value["background"]
         if "color" in value:st["color"]=str(value["color"])[:16]
         if "scale" in value:
             try:st["scale"]=max(1,min(3,int(value["scale"])))
@@ -259,7 +267,10 @@ def set_text_settings(value):
         if "speed" in value:
             try:st["speed"]=max(1.0,min(40.0,float(value["speed"])))
             except (TypeError,ValueError):pass
-        for k in ("glow","wave","glitch","beat_pulse"):
+        if "background_brightness" in value:
+            try:st["background_brightness"]=max(.05,min(.55,float(value["background_brightness"])))
+            except (TypeError,ValueError):pass
+        for k in ("glow","wave","glitch","beat_pulse","backplate"):
             if k in value:st[k]=bool(value[k])
 def show_text(value=None):
     if isinstance(value,dict):set_text_settings(value)
@@ -347,7 +358,7 @@ def update_phone():
     for i,a in enumerate(library.assets):
         m=metadata(a);lib.append({"index":i,"name":a.path.name,"tags":m.get("tags",[]),"favorite":bool(m.get("favorite",False))})
     ref=phone_panel(reference_side())
-    server.update_state({"target":active_target,"reference_side":reference_side(),"image_count":len(library),"library":lib,"effects":list(controllers["front"].effects),"panels":{"front":phone_panel("front"),"back":phone_panel("back")},"audio":{"volume":audio["volume"],"bass":audio["bass"],"mids":audio["mids"],"highs":audio["highs"],"beat":audio["beat"],"fresh":audio_fresh()},"motion":dict(motion),"reactive_presets":REACTIVE_PRESETS,"layer_keys":LAYER_KEYS,"transitions":TRANSITIONS,"performance_scenes":list(SCENES),"current_scene":current_scene,"text_fonts":TEXT_FONTS,"text_motions":TEXT_MOTIONS,"text_color_modes":TEXT_COLORS,"text_effects":TEXT_EFFECTS,"guest":{"locked":guest["locked"]},**ref})
+    server.update_state({"target":active_target,"reference_side":reference_side(),"image_count":len(library),"library":lib,"effects":list(controllers["front"].effects),"panels":{"front":phone_panel("front"),"back":phone_panel("back")},"audio":{"volume":audio["volume"],"bass":audio["bass"],"mids":audio["mids"],"highs":audio["highs"],"beat":audio["beat"],"fresh":audio_fresh()},"motion":dict(motion),"reactive_presets":REACTIVE_PRESETS,"layer_keys":LAYER_KEYS,"transitions":TRANSITIONS,"performance_scenes":list(SCENES),"current_scene":current_scene,"text_fonts":TEXT_FONTS,"text_motions":TEXT_MOTIONS,"text_color_modes":TEXT_COLORS,"text_effects":TEXT_EFFECTS,"text_backgrounds":TEXT_BACKGROUNDS,"guest":{"locked":guest["locked"]},**ref})
 
 def draw_panel(side,x):
     d,ctl=displays[side],controllers[side]
