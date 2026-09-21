@@ -10,7 +10,7 @@ from controller import TotemController
 from text import draw_scrolling_text
 from particles import ParticleSystem
 from image_assets import ImageLibrary
-from audio_phone_server import PhoneControlServer
+from secure_phone_server import PhoneControlServer
 W, H, S, GAP, UI = (64, 32, 8, 24, 175)
 PW, PH = (W * S, H * S)
 pygame.init()
@@ -21,7 +21,7 @@ font = pygame.font.SysFont(None, 22)
 library = ImageLibrary('assets/images', W, H)
 displays = {'front': VirtualDisplay(W, H), 'back': VirtualDisplay(W, H)}
 particles = {side: ParticleSystem(W, H, count=60) for side in ('front', 'back')}
-MODES = ['crop', 'fit', 'pixel', 'optimize', 'dither']
+MODES = ['crop', 'pixel', 'optimize', 'dither']
 REACTIVE_PRESETS = ['Pulse', 'Neon', 'Spark', 'Chaos']
 active_target = 'both'
 audio = {'volume': 0.0, 'bass': 0.0, 'mids': 0.0, 'highs': 0.0, 'beat': False, 'last_update': 0.0}
@@ -423,10 +423,9 @@ def command(data):
         return
     if command_name == 'set_tags':
         if current_asset and isinstance(value, list):
-            cleaned = list(dict.fromkeys((str(item).strip() for item in value if str(item).strip())))
-            library.set_tags(current_asset, cleaned)
+            library.set_tags(current_asset, list(dict.fromkeys(str(item).strip() for item in value if str(item).strip())))
         return
-    if current_asset is None:
+    if not current_asset:
         return
     settings = current_asset.settings
     changed = False
@@ -453,41 +452,39 @@ def phone_panel(side):
     current_asset = asset(side)
     show = panels[side]['slideshow']
     reactive = panels[side]['reactive']
-    result = {'effect': controller.effect_name, 'speed': controller.speed, 'brightness': controller.brightness, 'paused': controller.paused, 'image_index_zero': panels[side]['image_index'], 'image_index': 0, 'image_name': None, 'image_mode': None, 'image_settings': None, 'image_tags': [], 'image_favorite': False, 'slideshow': {'active': show['active'], 'duration': show['duration'], 'shuffle': show['shuffle'], 'label': show['label'], 'count': len(show['indices'])}, 'reactive': {'enabled': reactive['enabled'], 'strength': reactive['strength'], 'preset': reactive['preset']}}
+    result = {'effect': controller.effect_name, 'speed': controller.speed, 'brightness': controller.brightness, 'paused': controller.paused, 'image_index_zero': panels[side]['image_index'], 'image_index': 0, 'image_name': None, 'image_mode': None, 'image_settings': None, 'image_tags': [], 'image_favorite': False, 'slideshow': {'active': show['active'], 'duration': show['duration'], 'shuffle': show['shuffle'], 'label': show['label'], 'count': len(show['indices'])}, 'reactive': dict(reactive)}
     if current_asset:
-        item_metadata = metadata(current_asset)
-        result.update(image_index=panels[side]['image_index'] + 1, image_name=current_asset.path.name, image_mode=current_asset.settings.mode, image_settings=current_asset.settings.to_dict(), image_tags=item_metadata.get('tags', []), image_favorite=bool(item_metadata.get('favorite', False)))
+        info = metadata(current_asset)
+        result.update(image_index=panels[side]['image_index'] + 1, image_name=current_asset.path.name, image_mode=current_asset.settings.mode, image_settings=current_asset.settings.to_dict(), image_tags=info.get('tags', []), image_favorite=bool(info.get('favorite', False)))
     return result
 
 def update_phone():
     items = []
     for index, item in enumerate(library.assets):
-        item_metadata = metadata(item)
-        items.append({'index': index, 'name': item.path.name, 'tags': item_metadata.get('tags', []), 'favorite': bool(item_metadata.get('favorite', False))})
+        info = metadata(item)
+        items.append({'index': index, 'name': item.path.name, 'tags': info.get('tags', []), 'favorite': bool(info.get('favorite', False))})
     reference = phone_panel(reference_side())
-    server.update_state({'target': active_target, 'reference_side': reference_side(), 'image_count': len(library), 'library': items, 'effects': list(controllers['front'].effects), 'reactive_presets': REACTIVE_PRESETS, 'audio': {'volume': audio['volume'], 'bass': audio['bass'], 'mids': audio['mids'], 'highs': audio['highs'], 'beat': audio['beat'], 'fresh': audio_fresh()}, 'panels': {'front': phone_panel('front'), 'back': phone_panel('back')}, **reference})
+    server.update_state({'target': active_target, 'reference_side': reference_side(), 'image_count': len(library), 'library': items, 'effects': list(controllers['front'].effects), 'panels': {'front': phone_panel('front'), 'back': phone_panel('back')}, 'audio': {'volume': audio['volume'], 'bass': audio['bass'], 'mids': audio['mids'], 'highs': audio['highs'], 'beat': audio['beat'], 'fresh': audio_fresh()}, 'reactive_presets': REACTIVE_PRESETS, **reference})
 
-def draw_panel(side, offset_x):
+def draw_panel(side, x):
     display = displays[side]
     controller = controllers[side]
     for y in range(H):
-        for x in range(W):
-            color = display.get_pixel(x, y)
+        for pixel_x in range(W):
+            color = display.get_pixel(pixel_x, y)
             brightness = controller.brightness
-            pygame.draw.rect(screen, (int(color[0] * brightness), int(color[1] * brightness), int(color[2] * brightness)), (offset_x + x * S, y * S, S - 1, S - 1))
+            pygame.draw.rect(screen, (int(color[0] * brightness), int(color[1] * brightness), int(color[2] * brightness)), (x + pixel_x * S, y * S, S - 1, S - 1))
 
 def draw_ui():
     front = phone_panel('front')
     back = phone_panel('back')
-    audio_text = f"AUDIO B:{audio['bass']:.2f} M:{audio['mids']:.2f} H:{audio['highs']:.2f} V:{audio['volume']:.2f}"
-    if not audio_fresh():
-        audio_text += '  (idle)'
-    screen.blit(font.render(f"FRONT: {front['effect']} | {front['image_name'] or '-'} | {front['reactive']['preset']}{(' ON' if front['reactive']['enabled'] else ' OFF')}", True, (220, 220, 220)), (10, PH + 10))
-    screen.blit(font.render(f"BACK: {back['effect']} | {back['image_name'] or '-'} | {back['reactive']['preset']}{(' ON' if back['reactive']['enabled'] else ' OFF')}", True, (220, 220, 220)), (10, PH + 36))
-    screen.blit(font.render(f'Target: {active_target.upper()}   {audio_text}', True, (190, 190, 190)), (10, PH + 62))
-    screen.blit(font.render(phone_url, True, (170, 170, 170)), (10, PH + 88))
+    screen.blit(font.render(f"FRONT: {front['effect']} | {front['image_name'] or '-'}", True, (220, 220, 220)), (10, PH + 10))
+    screen.blit(font.render(f"BACK: {back['effect']} | {back['image_name'] or '-'}", True, (220, 220, 220)), (10, PH + 36))
+    screen.blit(font.render(f"Target: {active_target.upper()}   {phone_url}", True, (190, 190, 190)), (10, PH + 62))
+    reactive_text = f"Audio V:{audio['volume']:.2f} B:{audio['bass']:.2f} M:{audio['mids']:.2f} H:{audio['highs']:.2f} Beat:{'YES' if audio['beat'] else '-'}"
+    screen.blit(font.render(reactive_text, True, (170, 205, 255)), (10, PH + 88))
 
-def handle_key(key):
+def keys(key):
     if key == pygame.K_ESCAPE:
         return False
     mapping = {pygame.K_1: 'Rainbow', pygame.K_2: 'Waves', pygame.K_3: 'Plasma', pygame.K_4: 'Stars', pygame.K_5: 'Text', pygame.K_6: 'Party', pygame.K_7: 'Image'}
@@ -506,13 +503,13 @@ update_phone()
 running = True
 frame_number = 0
 while running:
-    dt = clock.tick(60) / 1000.0
+    dt = clock.tick(60) / 1000
     frame_number += 1
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
         elif event.type == pygame.KEYDOWN:
-            running = handle_key(event.key)
+            running = keys(event.key)
     for data in server.get_commands():
         command(data)
     for side in ('front', 'back'):
@@ -523,7 +520,6 @@ while running:
     for side in ('front', 'back'):
         controllers[side].effect(displays[side], controllers[side].time)
         apply_reactive(side, displays[side], frame_number)
-    audio['beat'] = False
     screen.fill((15, 15, 18))
     draw_panel('front', 0)
     draw_panel('back', PW + GAP)
