@@ -11,6 +11,9 @@ AUDIO_CSS = r"""
 .beatLamp.on{background:#fff;box-shadow:0 0 16px #fff}
 .audioNotice{margin-top:10px;padding:10px;border-radius:11px;background:#ffffff0c;font-size:12px;line-height:1.35}
 .presetGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px}
+.tuningGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px}
+.tuningGrid .slider{margin:4px 0}
+@media(max-width:520px){.tuningGrid{grid-template-columns:1fr}}
 </style>
 """
 
@@ -27,10 +30,6 @@ AUDIO_SECTION = r"""
 <button id="demoButton" onclick="toggleDemo()">Start Demo Beat</button>
 </div>
 <div id="micNotice" class="audioNotice">Checking microphone support...</div>
-<div class="slider">
-<div class="sh"><span>Mic sensitivity</span><span id="sensitivityValue">1.00x</span></div>
-<input id="sensitivity" type="range" min=".25" max="3" step=".05" value="1" oninput="num('sensitivityValue',this.value,'x')">
-</div>
 <div class="audioMeters">
 <div class="audioMeter"><div class="audioBar"><div id="volumeBar" class="audioFill"></div></div><div class="audioLabel">Volume</div></div>
 <div class="audioMeter"><div class="audioBar"><div id="bassBar" class="audioFill"></div></div><div class="audioLabel">Bass</div></div>
@@ -38,6 +37,18 @@ AUDIO_SECTION = r"""
 <div class="audioMeter"><div class="audioBar"><div id="highsBar" class="audioFill"></div></div><div class="audioLabel">Highs</div></div>
 </div>
 <div id="beatLamp" class="beatLamp"></div>
+</div>
+<div class="card">
+<h2>Audio Tuning</h2>
+<div class="tuningGrid">
+<div class="slider"><div class="sh"><span>Overall</span><span id="sensitivityValue">1.00x</span></div><input id="sensitivity" type="range" min=".25" max="2" step=".05" value="1" oninput="num('sensitivityValue',this.value,'x')"></div>
+<div class="slider"><div class="sh"><span>Bass</span><span id="bassGainValue">0.70x</span></div><input id="bassGain" type="range" min=".2" max="1.5" step=".05" value=".70" oninput="num('bassGainValue',this.value,'x')"></div>
+<div class="slider"><div class="sh"><span>Mids</span><span id="midGainValue">1.00x</span></div><input id="midGain" type="range" min=".2" max="2" step=".05" value="1" oninput="num('midGainValue',this.value,'x')"></div>
+<div class="slider"><div class="sh"><span>Highs</span><span id="highGainValue">1.00x</span></div><input id="highGain" type="range" min=".2" max="2" step=".05" value="1" oninput="num('highGainValue',this.value,'x')"></div>
+<div class="slider"><div class="sh"><span>Beat threshold</span><span id="beatThresholdValue">1.55x</span></div><input id="beatThreshold" type="range" min="1.15" max="2.5" step=".05" value="1.55" oninput="num('beatThresholdValue',this.value,'x')"></div>
+<div class="slider"><div class="sh"><span>Smoothing</span><span id="smoothingValue">70%</span></div><input id="smoothing" type="range" min="0" max=".95" step=".05" value=".70" oninput="pct('smoothingValue',this.value);if(analyser)analyser.smoothingTimeConstant=parseFloat(this.value)"></div>
+</div>
+<div class="audioNotice">Bass now uses a tighter sub/bass blend and adaptive normalization, so sustained EDM low-end should stop pinning the meter at 100%.</div>
 </div>
 <div class="card">
 <div class="row"><h2>Reactive Layer</h2><button id="reactiveButton" onclick="toggleReactive()">Off</button></div>
@@ -52,7 +63,8 @@ AUDIO_SECTION = r"""
 """
 
 AUDIO_JS = r"""
-let audioContext=null,analyser=null,micStream=null,audioAnimation=null,lastAudioSend=0,bassAverage=.08,lastBeatTime=0,demoTimer=null,demoPhase=0;
+let audioContext=null,analyser=null,micStream=null,audioAnimation=null,lastAudioSend=0,lastBeatTime=0,demoTimer=null,demoPhase=0;
+let bassFloor=.02,bassCeiling=.28,midFloor=.02,midCeiling=.24,highFloor=.01,highCeiling=.18,bassAverage=.12;
 
 function micSupported(){return !!(window.isSecureContext&&navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)}
 function updateMicNotice(){
@@ -65,6 +77,12 @@ function averageBand(data,sampleRate,fftSize,lo,hi){
  const hz=sampleRate/fftSize,first=Math.max(0,Math.floor(lo/hz)),last=Math.min(data.length-1,Math.ceil(hi/hz));let sum=0,count=0;
  for(let i=first;i<=last;i++){sum+=data[i];count++}return count?sum/count/255:0
 }
+function normBand(v,floorName,ceilingName){
+ let floor=window[floorName],ceiling=window[ceilingName];
+ floor=Math.min(floor*.995+v*.005,v);ceiling=Math.max(ceiling*.992+v*.008,v);
+ if(ceiling-floor<.06)ceiling=floor+.06;window[floorName]=floor;window[ceilingName]=ceiling;
+ return Math.max(0,Math.min(1,(v-floor)/(ceiling-floor)))
+}
 function setMeters(v,b,m,h,beat){
  volumeBar.style.height=(v*100)+"%";bassBar.style.height=(b*100)+"%";midsBar.style.height=(m*100)+"%";highsBar.style.height=(h*100)+"%";beatLamp.classList.toggle("on",beat)
 }
@@ -73,15 +91,16 @@ function audioLoop(ts){
  const freq=new Uint8Array(analyser.frequencyBinCount),td=new Uint8Array(analyser.fftSize);
  analyser.getByteFrequencyData(freq);analyser.getByteTimeDomainData(td);
  let sq=0;for(let i=0;i<td.length;i++){let s=(td[i]-128)/128;sq+=s*s}
- const sens=parseFloat(sensitivity.value),sr=audioContext.sampleRate,fft=analyser.fftSize;
- const volume=Math.min(1,Math.sqrt(sq/td.length)*3.5*sens);
- const bass=Math.min(1,averageBand(freq,sr,fft,35,180)*1.6*sens);
- const mids=Math.min(1,averageBand(freq,sr,fft,180,2000)*1.5*sens);
- const highs=Math.min(1,averageBand(freq,sr,fft,2000,9000)*1.8*sens);
- bassAverage=bassAverage*.94+bass*.06;const now=performance.now();
- const beat=bass>Math.max(.16,bassAverage*1.45)&&now-lastBeatTime>180;if(beat)lastBeatTime=now;
+ const sens=parseFloat(sensitivity.value),bg=parseFloat(bassGain.value),mg=parseFloat(midGain.value),hg=parseFloat(highGain.value),sr=audioContext.sampleRate,fft=analyser.fftSize;
+ const volume=Math.min(1,Math.sqrt(sq/td.length)*2.8*sens);
+ const sub=averageBand(freq,sr,fft,35,90),low=averageBand(freq,sr,fft,90,180),rawBass=(sub*.62+low*.38)*bg*sens;
+ const rawMids=averageBand(freq,sr,fft,180,2200)*mg*sens;
+ const rawHighs=averageBand(freq,sr,fft,2200,9000)*hg*sens;
+ const bass=normBand(rawBass,"bassFloor","bassCeiling"),mids=normBand(rawMids,"midFloor","midCeiling"),highs=normBand(rawHighs,"highFloor","highCeiling");
+ bassAverage=bassAverage*.92+bass*.08;const now=performance.now(),threshold=parseFloat(beatThreshold.value);
+ const beat=bass>Math.max(.24,bassAverage*threshold)&&now-lastBeatTime>190;if(beat)lastBeatTime=now;
  setMeters(volume,bass,mids,highs,beat);
- if(ts-lastAudioSend>65){lastAudioSend=ts;cmd("audio_frame",{volume,bass,mids,highs,beat})}
+ if(ts-lastAudioSend>110){lastAudioSend=ts;cmd("audio_frame",{volume,bass,mids,highs,beat})}
  audioAnimation=requestAnimationFrame(audioLoop)
 }
 async function startMic(){
@@ -89,8 +108,9 @@ async function startMic(){
  try{
   micStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false},video:false});
   audioContext=new(window.AudioContext||window.webkitAudioContext)();await audioContext.resume();
-  analyser=audioContext.createAnalyser();analyser.fftSize=1024;analyser.smoothingTimeConstant=.70;
+  analyser=audioContext.createAnalyser();analyser.fftSize=1024;analyser.smoothingTimeConstant=parseFloat(smoothing.value);
   audioContext.createMediaStreamSource(micStream).connect(analyser);
+  bassFloor=.02;bassCeiling=.28;midFloor=.02;midCeiling=.24;highFloor=.01;highCeiling=.18;bassAverage=.12;
   micButton.textContent="Stop Phone Mic";micButton.classList.add("active");updateMicNotice();audioAnimation=requestAnimationFrame(audioLoop)
  }catch(e){micNotice.textContent="Microphone could not start: "+e.message;micStream=null}
 }
@@ -102,11 +122,11 @@ function stopMic(){
 }
 function toggleMic(){if(micStream)stopMic();else{stopDemo();startMic()}}
 function demoTick(){
- demoPhase+=.14;const p=(Math.sin(demoPhase)+1)/2,beat=p>.96,bass=.15+p*.8;
- const mids=.25+(Math.sin(demoPhase*.63+1)+1)*.22,highs=.15+(Math.sin(demoPhase*1.7+2)+1)*.28,volume=Math.min(1,.3+bass*.5);
+ demoPhase+=.14;const p=(Math.sin(demoPhase)+1)/2,beat=p>.96,bass=.10+p*.72;
+ const mids=.18+(Math.sin(demoPhase*.63+1)+1)*.20,highs=.12+(Math.sin(demoPhase*1.7+2)+1)*.24,volume=Math.min(1,.25+bass*.45);
  setMeters(volume,bass,mids,highs,beat);cmd("audio_frame",{volume,bass,mids,highs,beat})
 }
-function startDemo(){stopMic();if(demoTimer)return;demoButton.textContent="Stop Demo Beat";demoButton.classList.add("active");demoTimer=setInterval(demoTick,70)}
+function startDemo(){stopMic();if(demoTimer)return;demoButton.textContent="Stop Demo Beat";demoButton.classList.add("active");demoTimer=setInterval(demoTick,110)}
 function stopDemo(){if(demoTimer)clearInterval(demoTimer);demoTimer=null;demoButton.textContent="Start Demo Beat";demoButton.classList.remove("active")}
 function toggleDemo(){demoTimer?stopDemo():startDemo()}
 function toggleReactive(){const r=state.reactive||{};cmd("reactive_enabled",!r.enabled)}
