@@ -42,13 +42,13 @@ AUDIO_SECTION = r"""
 <h2>Audio Tuning</h2>
 <div class="tuningGrid">
 <div class="slider"><div class="sh"><span>Overall</span><span id="sensitivityValue">1.00x</span></div><input id="sensitivity" type="range" min=".25" max="2" step=".05" value="1" oninput="num('sensitivityValue',this.value,'x')"></div>
-<div class="slider"><div class="sh"><span>Bass</span><span id="bassGainValue">0.70x</span></div><input id="bassGain" type="range" min=".2" max="1.5" step=".05" value=".70" oninput="num('bassGainValue',this.value,'x')"></div>
+<div class="slider"><div class="sh"><span>Bass</span><span id="bassGainValue">0.75x</span></div><input id="bassGain" type="range" min=".2" max="1.5" step=".05" value=".75" oninput="num('bassGainValue',this.value,'x')"></div>
 <div class="slider"><div class="sh"><span>Mids</span><span id="midGainValue">1.00x</span></div><input id="midGain" type="range" min=".2" max="2" step=".05" value="1" oninput="num('midGainValue',this.value,'x')"></div>
 <div class="slider"><div class="sh"><span>Highs</span><span id="highGainValue">1.00x</span></div><input id="highGain" type="range" min=".2" max="2" step=".05" value="1" oninput="num('highGainValue',this.value,'x')"></div>
-<div class="slider"><div class="sh"><span>Beat threshold</span><span id="beatThresholdValue">1.55x</span></div><input id="beatThreshold" type="range" min="1.15" max="2.5" step=".05" value="1.55" oninput="num('beatThresholdValue',this.value,'x')"></div>
-<div class="slider"><div class="sh"><span>Smoothing</span><span id="smoothingValue">70%</span></div><input id="smoothing" type="range" min="0" max=".95" step=".05" value=".70" oninput="pct('smoothingValue',this.value);if(analyser)analyser.smoothingTimeConstant=parseFloat(this.value)"></div>
+<div class="slider"><div class="sh"><span>Beat trigger</span><span id="beatThresholdValue">1.30x</span></div><input id="beatThreshold" type="range" min="1.05" max="2.2" step=".05" value="1.30" oninput="num('beatThresholdValue',this.value,'x')"></div>
+<div class="slider"><div class="sh"><span>Smoothing</span><span id="smoothingValue">50%</span></div><input id="smoothing" type="range" min="0" max=".95" step=".05" value=".50" oninput="pct('smoothingValue',this.value);if(analyser)analyser.smoothingTimeConstant=parseFloat(this.value)"></div>
 </div>
-<div class="audioNotice">Bass uses a tighter sub/bass blend and adaptive normalization, so sustained EDM low-end should move dynamically instead of pinning at 100%.</div>
+<div class="audioNotice"><b>Beat tuning:</b> lower Beat trigger = easier/more frequent hits. Lower Smoothing = faster/snappier response. Start around <b>1.25–1.35×</b> and <b>45–55%</b> smoothing for EDM, then tune Bass so kick peaks are strong without living at the top.</div>
 </div>
 <div class="card">
 <div class="row"><h2>Reactive Layer</h2><button id="reactiveButton" onclick="toggleReactive()">Off</button></div>
@@ -69,7 +69,7 @@ let bandState={
  mids:{floor:.02,ceiling:.24},
  highs:{floor:.01,ceiling:.18}
 };
-let bassAverage=.12;
+let bassFast=.10,bassSlow=.10;
 
 function micSupported(){return !!(window.isSecureContext&&navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)}
 function updateMicNotice(){
@@ -91,7 +91,7 @@ function normBand(v,name){
 }
 function resetBandState(){
  bandState={bass:{floor:.02,ceiling:.28},mids:{floor:.02,ceiling:.24},highs:{floor:.01,ceiling:.18}};
- bassAverage=.12
+ bassFast=.10;bassSlow=.10
 }
 function setMeters(v,b,m,h,beat){
  volumeBar.style.height=(v*100)+"%";bassBar.style.height=(b*100)+"%";midsBar.style.height=(m*100)+"%";highsBar.style.height=(h*100)+"%";beatLamp.classList.toggle("on",beat)
@@ -107,8 +107,10 @@ function audioLoop(ts){
  const rawMids=averageBand(freq,sr,fft,180,2200)*mg*sens;
  const rawHighs=averageBand(freq,sr,fft,2200,9000)*hg*sens;
  const bass=normBand(rawBass,"bass"),mids=normBand(rawMids,"mids"),highs=normBand(rawHighs,"highs");
- bassAverage=bassAverage*.92+bass*.08;const now=performance.now(),threshold=parseFloat(beatThreshold.value);
- const beat=bass>Math.max(.24,bassAverage*threshold)&&now-lastBeatTime>190;if(beat)lastBeatTime=now;
+ bassFast=bassFast*.55+bass*.45;bassSlow=bassSlow*.97+bass*.03;
+ const now=performance.now(),threshold=parseFloat(beatThreshold.value);
+ const onset=bassFast>Math.max(.18,bassSlow*threshold)&&(bassFast-bassSlow)>.035;
+ const beat=onset&&now-lastBeatTime>180;if(beat)lastBeatTime=now;
  setMeters(volume,bass,mids,highs,beat);
  if(ts-lastAudioSend>110){lastAudioSend=ts;cmd("audio_frame",{volume,bass,mids,highs,beat})}
  audioAnimation=requestAnimationFrame(audioLoop)
