@@ -1,8 +1,4 @@
-import io
-import math
-import random
-import time
-import pygame
+import io, random, time, pygame
 from PIL import Image
 from display import VirtualDisplay
 from effects import EFFECTS, hsv_to_rgb
@@ -11,520 +7,323 @@ from text import draw_scrolling_text
 from particles import ParticleSystem
 from image_assets import ImageLibrary
 from secure_phone_server import PhoneControlServer
-W, H, S, GAP, UI = (64, 32, 8, 24, 175)
-PW, PH = (W * S, H * S)
+from visual_engine import TransitionManager, VisualLayerEngine, TRANSITIONS, LAYER_KEYS
+
+W,H,S,GAP,UI = 64,32,8,24,185
+PW,PH = W*S,H*S
 pygame.init()
-screen = pygame.display.set_mode((PW * 2 + GAP, PH + UI))
-pygame.display.set_caption('Festival Totem Simulator')
-clock = pygame.time.Clock()
-font = pygame.font.SysFont(None, 22)
-library = ImageLibrary('assets/images', W, H)
-displays = {'front': VirtualDisplay(W, H), 'back': VirtualDisplay(W, H)}
-particles = {side: ParticleSystem(W, H, count=60) for side in ('front', 'back')}
-MODES = ['crop', 'pixel', 'optimize', 'dither']
-REACTIVE_PRESETS = ['Pulse', 'Neon', 'Spark', 'Chaos']
-active_target = 'both'
-audio = {'volume': 0.0, 'bass': 0.0, 'mids': 0.0, 'highs': 0.0, 'beat': False, 'last_update': 0.0}
+screen=pygame.display.set_mode((PW*2+GAP,PH+UI))
+pygame.display.set_caption("Festival Totem Simulator")
+clock=pygame.time.Clock();font=pygame.font.SysFont(None,22)
+library=ImageLibrary("assets/images",W,H)
+displays={s:VirtualDisplay(W,H) for s in ("front","back")}
+particles={s:ParticleSystem(W,H,count=60) for s in ("front","back")}
+transitions={s:TransitionManager(W,H) for s in ("front","back")}
+layer_engine=VisualLayerEngine(W,H)
+MODES=["crop","pixel","optimize","dither"]
+REACTIVE_PRESETS=["Pulse","Neon","Spark","Chaos"]
+active_target="both"
+audio={"volume":0.0,"bass":0.0,"mids":0.0,"highs":0.0,"beat":False,"last_update":0.0}
+motion={"tilt_x":0.0,"tilt_y":0.0,"shake":0.0,"tap":False}
+guest={"kind":None,"strength":0.0,"until":0.0,"locked":False}
 
-def slideshow_state():
-    return {'active': False, 'indices': [], 'position': 0, 'duration': 5.0, 'elapsed': 0.0, 'shuffle': False, 'label': 'All'}
+def slideshow_state(): return {"active":False,"indices":[],"position":0,"duration":5.0,"elapsed":0.0,"shuffle":False,"label":"All"}
+def reactive_state(): return {"enabled":False,"strength":0.65,"preset":"Pulse","layers":layer_engine.preset("Pulse")}
+def transition_state(): return {"kind":"Fade","duration":0.8,"random":False}
+panels={s:{"image_index":0,"slideshow":slideshow_state(),"reactive":reactive_state(),"transition":transition_state()} for s in ("front","back")}
 
-def reactive_state():
-    return {'enabled': False, 'strength': 0.65, 'preset': 'Pulse'}
-panels = {side: {'image_index': 0, 'slideshow': slideshow_state(), 'reactive': reactive_state()} for side in ('front', 'back')}
+def metadata(a): return library.metadata_entry(a.path.name) if a else {"tags":[],"favorite":False}
+def asset(side): return library.get(panels[side]["image_index"]) if len(library) else None
+def target_sides(): return ["front","back"] if active_target=="both" else [active_target]
+def reference_side(): return "back" if active_target=="back" else "front"
+def reference_asset(): return asset(reference_side())
+def save_asset(a):
+    if not a:return
+    a.settings.clamp();a.clear_cache();library.save_asset(a)
 
-def metadata(asset):
-    if asset is None:
-        return {'tags': [], 'favorite': False}
-    return library.metadata_entry(asset.path.name)
-
-def asset(side):
-    if not len(library):
-        return None
-    return library.get(panels[side]['image_index'])
-
-def target_sides():
-    if active_target == 'both':
-        return ['front', 'back']
-    return [active_target]
-
-def reference_side():
-    if active_target == 'back':
-        return 'back'
-    return 'front'
-
-def reference_asset():
-    return asset(reference_side())
-
-def save_asset(current_asset):
-    if current_asset is None:
-        return
-    current_asset.settings.clamp()
-    current_asset.clear_cache()
-    library.save_asset(current_asset)
-
-def text_fx(display, t):
-    draw_scrolling_text(display, 'FESTIVAL MODE', t, color=hsv_to_rgb(t * 80 % 360), scale=1, speed=12)
-
-def party_fx(side, display, t):
-    EFFECTS['Plasma'](display, t)
-    particles[side].draw(display)
-
-def image_fx(side, display, t):
-    current_asset = asset(side)
-    if current_asset:
-        current_asset.render(display, t, current_asset.settings)
-    else:
-        display.clear()
-
+def text_fx(display,t): draw_scrolling_text(display,"FESTIVAL MODE",t,color=hsv_to_rgb((t*80)%360),scale=1,speed=12)
+def party_fx(side,display,t): EFFECTS["Plasma"](display,t);particles[side].draw(display)
+def image_fx(side,display,t):
+    a=asset(side)
+    if a:a.render(display,t,a.settings)
+    else:display.clear()
 def make_effects(side):
-    return {**EFFECTS, 'Text': text_fx, 'Party': lambda display, t, s=side: party_fx(s, display, t), 'Image': lambda display, t, s=side: image_fx(s, display, t)}
-controllers = {side: TotemController(make_effects(side)) for side in ('front', 'back')}
+    return {**EFFECTS,"Text":text_fx,"Party":lambda d,t,s=side:party_fx(s,d,t),"Image":lambda d,t,s=side:image_fx(s,d,t)}
+controllers={s:TotemController(make_effects(s)) for s in ("front","back")}
 
-def clamp01(value):
-    return max(0.0, min(1.0, float(value)))
+def clamp01(v): return max(0.0,min(1.0,float(v)))
+def audio_fresh(): return time.monotonic()-audio["last_update"]<1.0
+def signals():
+    out={"volume":0.0,"bass":0.0,"mids":0.0,"highs":0.0,"beat":False,**motion}
+    if audio_fresh(): out.update({k:audio[k] for k in ("volume","bass","mids","highs","beat")})
+    return out
 
-def audio_fresh():
-    return time.monotonic() - audio['last_update'] < 1.0
-
-def zoom_pixels(display, amount):
-    if amount <= 0.001:
-        return
-    source = [row[:] for row in display.pixels]
-    zoom = 1.0 + amount
-    center_x = (display.width - 1) / 2.0
-    center_y = (display.height - 1) / 2.0
-    for y in range(display.height):
-        for x in range(display.width):
-            source_x = int(round(center_x + (x - center_x) / zoom))
-            source_y = int(round(center_y + (y - center_y) / zoom))
-            source_x = max(0, min(display.width - 1, source_x))
-            source_y = max(0, min(display.height - 1, source_y))
-            display.set_pixel(x, y, source[source_y][source_x])
-
-def hue_shift(display, degrees):
-    if abs(degrees) < 0.5:
-        return
-    for y in range(display.height):
-        for x in range(display.width):
-            r, g, b = display.get_pixel(x, y)
-            color = pygame.Color(r, g, b)
-            h, s, v, a = color.hsva
-            color.hsva = ((h + degrees) % 360, s, v, a)
-            display.set_pixel(x, y, (color.r, color.g, color.b))
-
-def brighten(display, amount):
-    if amount <= 0.001:
-        return
-    multiplier = 1.0 + amount
-    for y in range(display.height):
-        for x in range(display.width):
-            r, g, b = display.get_pixel(x, y)
-            display.set_pixel(x, y, (min(255, int(r * multiplier)), min(255, int(g * multiplier)), min(255, int(b * multiplier))))
-
-def beat_flash(display, amount):
-    if amount <= 0.001:
-        return
-    amount = clamp01(amount)
-    for y in range(display.height):
-        for x in range(display.width):
-            r, g, b = display.get_pixel(x, y)
-            display.set_pixel(x, y, (int(r + (255 - r) * amount), int(g + (255 - g) * amount), int(b + (255 - b) * amount)))
-
-def sparkle_layer(display, amount, seed):
-    if amount <= 0.02:
-        return
-    rng = random.Random(seed)
-    count = int(2 + amount * 50)
-    for _ in range(count):
-        x = rng.randrange(display.width)
-        y = rng.randrange(display.height)
-        intensity = int(120 + 135 * rng.random())
-        display.set_pixel(x, y, (intensity, intensity, intensity))
-
-def apply_reactive(side, display, frame_number):
-    reactive = panels[side]['reactive']
-    if not reactive['enabled']:
-        return
-    if not audio_fresh():
-        return
-    strength = reactive['strength']
-    bass = audio['bass'] * strength
-    mids = audio['mids'] * strength
-    highs = audio['highs'] * strength
-    volume = audio['volume'] * strength
-    preset = reactive['preset']
-    if preset == 'Pulse':
-        zoom_pixels(display, bass * 0.22)
-        brighten(display, volume * 0.25)
-        if audio['beat']:
-            beat_flash(display, 0.22 + strength * 0.18)
-    elif preset == 'Neon':
-        hue_shift(display, mids * 85 + highs * 45)
-        brighten(display, bass * 0.3)
-        if audio['beat']:
-            beat_flash(display, 0.16)
-    elif preset == 'Spark':
-        brighten(display, bass * 0.18)
-        sparkle_layer(display, highs, frame_number + (1000 if side == 'back' else 0))
-        if audio['beat']:
-            sparkle_layer(display, min(1.0, 0.5 + strength), frame_number * 17)
-    elif preset == 'Chaos':
-        zoom_pixels(display, bass * 0.28)
-        hue_shift(display, mids * 120 + highs * 90)
-        brighten(display, volume * 0.32)
-        sparkle_layer(display, highs * 0.9, frame_number * 7 + (500 if side == 'back' else 0))
-        if audio['beat']:
-            beat_flash(display, 0.35)
-
+def choose_transition(side):
+    ts=panels[side]["transition"]
+    if ts["random"]: return random.choice([x for x in TRANSITIONS if x!="None"])
+    return ts["kind"]
+def begin_transition(side):
+    ts=panels[side]["transition"];transitions[side].begin(displays[side],choose_transition(side),ts["duration"])
 def stop_show(side):
-    show = panels[side]['slideshow']
-    show['active'] = False
-    show['elapsed'] = 0.0
+    sh=panels[side]["slideshow"];sh["active"]=False;sh["elapsed"]=0.0
 
-def select_for_side(side, index, stop=True):
-    if not len(library):
-        return
-    try:
-        index = int(index)
-    except (TypeError, ValueError):
-        return
-    panels[side]['image_index'] = max(0, min(len(library) - 1, index))
-    if stop:
-        stop_show(side)
-    controllers[side].set_effect('Image')
-
+def select_for_side(side,index,stop=True,transition=True):
+    if not len(library):return
+    try:index=int(index)
+    except (TypeError,ValueError):return
+    index=max(0,min(len(library)-1,index))
+    if index==panels[side]["image_index"] and controllers[side].effect_name=="Image":return
+    if transition:begin_transition(side)
+    panels[side]["image_index"]=index
+    if stop:stop_show(side)
+    controllers[side].set_effect("Image")
 def select_image(index):
-    for side in target_sides():
-        select_for_side(side, index)
+    for side in target_sides():select_for_side(side,index)
 
 def clean_indices(values):
-    result = []
-    if not isinstance(values, list):
-        return result
-    for value in values:
-        try:
-            index = int(value)
-        except (TypeError, ValueError):
-            continue
-        if 0 <= index < len(library) and index not in result:
-            result.append(index)
-    return result
+    out=[]
+    if not isinstance(values,list):return out
+    for v in values:
+        try:i=int(v)
+        except (TypeError,ValueError):continue
+        if 0<=i<len(library) and i not in out:out.append(i)
+    return out
 
 def step_filtered(value):
-    if not isinstance(value, dict):
-        return
-    indices = clean_indices(value.get('indices', []))
-    if not indices:
-        return
-    try:
-        delta = int(value.get('delta', 1))
-    except (TypeError, ValueError):
-        delta = 1
+    if not isinstance(value,dict):return
+    ids=clean_indices(value.get("indices",[]))
+    if not ids:return
+    try:delta=int(value.get("delta",1))
+    except (TypeError,ValueError):delta=1
     for side in target_sides():
-        current = panels[side]['image_index']
-        try:
-            position = indices.index(current)
-        except ValueError:
-            position = -1 if delta > 0 else 0
-        select_for_side(side, indices[(position + delta) % len(indices)])
+        cur=panels[side]["image_index"]
+        try:p=ids.index(cur)
+        except ValueError:p=-1 if delta>0 else 0
+        select_for_side(side,ids[(p+delta)%len(ids)])
 
 def start_show(value):
-    if not isinstance(value, dict):
-        return
-    indices = clean_indices(value.get('indices', []))
-    if not indices:
-        return
-    try:
-        duration = max(1.0, min(120.0, float(value.get('duration', 5))))
-    except (TypeError, ValueError):
-        duration = 5.0
-    shuffle = bool(value.get('shuffle', False))
-    label = str(value.get('label', 'Selection'))[:80]
-    order = list(indices)
-    if shuffle:
-        random.shuffle(order)
+    if not isinstance(value,dict):return
+    ids=clean_indices(value.get("indices",[]))
+    if not ids:return
+    try:duration=max(1.0,min(120.0,float(value.get("duration",5))))
+    except (TypeError,ValueError):duration=5.0
+    shuffle=bool(value.get("shuffle",False));label=str(value.get("label","Selection"))[:80]
+    order=list(ids)
+    if shuffle:random.shuffle(order)
     for side in target_sides():
-        panels[side]['slideshow'].update(active=True, indices=list(order), position=0, duration=duration, elapsed=0.0, shuffle=shuffle, label=label)
-        select_for_side(side, order[0], stop=False)
+        panels[side]["slideshow"].update(active=True,indices=list(order),position=0,duration=duration,elapsed=0.0,shuffle=shuffle,label=label)
+        select_for_side(side,order[0],stop=False)
 
 def update_shows(dt):
-    for side in ('front', 'back'):
-        show = panels[side]['slideshow']
-        if not show['active'] or not show['indices']:
-            continue
-        show['elapsed'] += dt
-        if show['elapsed'] < show['duration']:
-            continue
-        show['elapsed'] %= show['duration']
-        show['position'] = (show['position'] + 1) % len(show['indices'])
-        if show['shuffle'] and show['position'] == 0 and (len(show['indices']) > 1):
-            random.shuffle(show['indices'])
-        select_for_side(side, show['indices'][show['position']], stop=False)
+    for side in ("front","back"):
+        sh=panels[side]["slideshow"]
+        if controllers[side].paused or not sh["active"] or not sh["indices"]:continue
+        sh["elapsed"]+=dt
+        if sh["elapsed"]<sh["duration"]:continue
+        sh["elapsed"]%=sh["duration"];sh["position"]=(sh["position"]+1)%len(sh["indices"])
+        if sh["shuffle"] and sh["position"]==0 and len(sh["indices"])>1:random.shuffle(sh["indices"])
+        select_for_side(side,sh["indices"][sh["position"]],stop=False)
 
 def thumbnail(index):
+    try:i=int(index);a=library.get(i)
+    except Exception:return None
+    if not a or not a.frames:return None
     try:
-        index = int(index)
-        current_asset = library.get(index)
-    except Exception:
-        return None
-    if not current_asset or not current_asset.frames:
-        return None
-    try:
-        preview = current_asset.prepare_frame(current_asset.frames[0], current_asset.settings).resize((256, 128), Image.Resampling.NEAREST)
-        output = io.BytesIO()
-        preview.save(output, format='JPEG', quality=82, optimize=True)
-        return output.getvalue()
-    except Exception as error:
-        print('Thumbnail error:', error)
-        return None
-server = PhoneControlServer(8765)
-server.set_thumbnail_provider(thumbnail)
-phone_url = server.start()
+        preview=a.prepare_frame(a.frames[0],a.settings).resize((256,128),Image.Resampling.NEAREST)
+        out=io.BytesIO();preview.save(out,format="JPEG",quality=82,optimize=True);return out.getvalue()
+    except Exception as e: print("Thumbnail error:",e);return None
 
-def set_target(value):
+server=PhoneControlServer(8765);server.set_thumbnail_provider(thumbnail);phone_url=server.start()
+
+def set_target(v):
     global active_target
-    if value in ('front', 'back', 'both'):
-        active_target = value
-
-def set_effect(value):
+    if v in ("front","back","both"):active_target=v
+def set_effect(v):
     for side in target_sides():
-        if value in controllers[side].effects:
-            controllers[side].set_effect(value)
-
-def master(attribute, value, minimum, maximum):
-    try:
-        value = max(minimum, min(maximum, float(value)))
-    except (TypeError, ValueError):
-        return
-    for side in target_sides():
-        setattr(controllers[side], attribute, value)
-
+        if v in controllers[side].effects:begin_transition(side);controllers[side].set_effect(v)
+def master(attr,value,lo,hi):
+    try:v=max(lo,min(hi,float(value)))
+    except (TypeError,ValueError):return
+    for side in target_sides():setattr(controllers[side],attr,v)
 def toggle_pause():
-    pause = not all((controllers[side].paused for side in target_sides()))
-    for side in target_sides():
-        controllers[side].paused = pause
+    pause=not all(controllers[s].paused for s in target_sides())
+    for s in target_sides():controllers[s].paused=pause
 
 def reload_library():
-    old_names = {side: asset(side).path.name if asset(side) else None for side in ('front', 'back')}
-    library.load()
-    for side in ('front', 'back'):
-        panels[side]['image_index'] = 0
-        stop_show(side)
-        if old_names[side]:
-            for index, item in enumerate(library.assets):
-                if item.path.name == old_names[side]:
-                    panels[side]['image_index'] = index
-                    break
+    old={s:(asset(s).path.name if asset(s) else None) for s in ("front","back")};library.load()
+    for s in ("front","back"):
+        panels[s]["image_index"]=0;stop_show(s)
+        if old[s]:
+            for i,a in enumerate(library.assets):
+                if a.path.name==old[s]:panels[s]["image_index"]=i;break
 
 def update_audio(value):
-    if not isinstance(value, dict):
-        return
-    for key in ('volume', 'bass', 'mids', 'highs'):
-        if key in value:
-            try:
-                audio[key] = clamp01(value[key])
-            except Exception:
-                pass
-    audio['beat'] = bool(value.get('beat', False))
-    audio['last_update'] = time.monotonic()
-
+    if not isinstance(value,dict):return
+    for k in ("volume","bass","mids","highs"):
+        if k in value:
+            try:audio[k]=clamp01(value[k])
+            except Exception:pass
+    audio["beat"]=bool(value.get("beat",False));audio["last_update"]=time.monotonic()
+def update_motion(value):
+    if not isinstance(value,dict):return
+    for k in ("tilt_x","tilt_y"):
+        if k in value:
+            try:motion[k]=max(-1.0,min(1.0,float(value[k])))
+            except Exception:pass
+    if "shake" in value:
+        try:motion["shake"]=clamp01(value["shake"])
+        except Exception:pass
+    motion["tap"]=bool(value.get("tap",False))
 def set_reactive_enabled(value):
-    enabled = bool(value)
-    for side in target_sides():
-        panels[side]['reactive']['enabled'] = enabled
-
+    for s in target_sides():panels[s]["reactive"]["enabled"]=bool(value)
 def set_reactive_strength(value):
-    try:
-        value = max(0.0, min(1.5, float(value)))
-    except (TypeError, ValueError):
-        return
-    for side in target_sides():
-        panels[side]['reactive']['strength'] = value
-
+    try:v=max(0.0,min(1.5,float(value)))
+    except (TypeError,ValueError):return
+    for s in target_sides():panels[s]["reactive"]["strength"]=v
 def set_reactive_preset(value):
-    if value not in REACTIVE_PRESETS:
+    if value not in REACTIVE_PRESETS:return
+    for s in target_sides():
+        r=panels[s]["reactive"];r["preset"]=value;r["layers"]=layer_engine.preset(value)
+def set_layer(value):
+    if not isinstance(value,dict):return
+    name=value.get("name")
+    if name not in LAYER_KEYS:return
+    try:amount=max(0.0,min(1.5,float(value.get("value",0))))
+    except (TypeError,ValueError):return
+    for s in target_sides():panels[s]["reactive"]["layers"][name]=amount;panels[s]["reactive"]["preset"]="Custom"
+def set_transition(value):
+    if not isinstance(value,dict):return
+    for s in target_sides():
+        t=panels[s]["transition"]
+        if value.get("kind") in TRANSITIONS:t["kind"]=value["kind"]
+        if "duration" in value:
+            try:t["duration"]=max(.08,min(5.0,float(value["duration"])))
+            except (TypeError,ValueError):pass
+        if "random" in value:t["random"]=bool(value["random"])
+
+def trigger_guest(value):
+    global guest
+    if guest["locked"] or not isinstance(value,dict):return
+    kind=str(value.get("kind","")).lower();strength=clamp01(value.get("strength",1.0))
+    if kind=="next": step_filtered({"indices":list(range(len(library))),"delta":1});return
+    if kind=="random":
+        if len(library):select_image(random.randrange(len(library)))
         return
-    for side in target_sides():
-        panels[side]['reactive']['preset'] = value
+    if kind=="melt":
+        for s in target_sides():panels[s]["transition"]["kind"]="Melt"
+        step_filtered({"indices":list(range(len(library))),"delta":1});return
+    guest={"kind":kind,"strength":strength,"until":time.monotonic()+float(value.get("duration",.7)),"locked":False}
+def stop_guest():guest.update(kind=None,strength=0.0,until=0.0)
 
 def command(data):
-    command_name = data.get('command')
-    value = data.get('value')
-    if command_name == 'set_target':
-        set_target(value)
+    c,v=data.get("command"),data.get("value")
+    if c=="set_target":set_target(v);return
+    if c=="effect":set_effect(v);return
+    if c=="select_image":select_image(v);return
+    if c=="filtered_step":step_filtered(v);return
+    if c=="slideshow_start":start_show(v);return
+    if c=="slideshow_stop":
+        for s in target_sides():stop_show(s)
         return
-    if command_name == 'effect':
-        set_effect(value)
+    if c=="brightness":master("brightness",v,.1,1);return
+    if c=="speed":master("speed",v,.1,5);return
+    if c=="toggle_pause":toggle_pause();return
+    if c=="reload_library":reload_library();return
+    if c=="audio_frame":update_audio(v);return
+    if c=="motion_frame":update_motion(v);return
+    if c=="reactive_enabled":set_reactive_enabled(v);return
+    if c=="reactive_strength":set_reactive_strength(v);return
+    if c=="reactive_preset":set_reactive_preset(v);return
+    if c=="reactive_layer":set_layer(v);return
+    if c=="transition_settings":set_transition(v);return
+    if c=="guest_action":trigger_guest(v);return
+    if c=="guest_stop":stop_guest();return
+    if c=="guest_lock":guest["locked"]=bool(v);return
+    if c in ("mode_prev","mode_next"):
+        a=reference_asset()
+        if a:
+            try:i=MODES.index(a.settings.mode)
+            except ValueError:i=0
+            a.settings.mode=MODES[(i+(-1 if c=="mode_prev" else 1))%len(MODES)];save_asset(a)
         return
-    if command_name == 'select_image':
-        select_image(value)
+    a=reference_asset()
+    if c=="toggle_favorite":
+        if a:library.set_favorite(a,not bool(metadata(a).get("favorite",False)))
         return
-    if command_name == 'filtered_step':
-        step_filtered(value)
+    if c=="set_favorite_index" and isinstance(v,dict):
+        try:t=library.get(int(v.get("index")))
+        except Exception:t=None
+        if t:library.set_favorite(t,bool(v.get("favorite",False)))
         return
-    if command_name == 'slideshow_start':
-        start_show(value)
+    if c=="set_tags":
+        if a and isinstance(v,list):library.set_tags(a,list(dict.fromkeys(str(x).strip() for x in v if str(x).strip())))
         return
-    if command_name == 'slideshow_stop':
-        for side in target_sides():
-            stop_show(side)
-        return
-    if command_name == 'brightness':
-        master('brightness', value, 0.1, 1.0)
-        return
-    if command_name == 'speed':
-        master('speed', value, 0.1, 5.0)
-        return
-    if command_name == 'toggle_pause':
-        toggle_pause()
-        return
-    if command_name == 'reload_library':
-        reload_library()
-        return
-    if command_name == 'audio_frame':
-        update_audio(value)
-        return
-    if command_name == 'reactive_enabled':
-        set_reactive_enabled(value)
-        return
-    if command_name == 'reactive_strength':
-        set_reactive_strength(value)
-        return
-    if command_name == 'reactive_preset':
-        set_reactive_preset(value)
-        return
-    if command_name in ('mode_prev', 'mode_next'):
-        current_asset = reference_asset()
-        if current_asset:
-            try:
-                index = MODES.index(current_asset.settings.mode)
-            except ValueError:
-                index = 0
-            if command_name == 'mode_prev':
-                index -= 1
-            else:
-                index += 1
-            current_asset.settings.mode = MODES[index % len(MODES)]
-            save_asset(current_asset)
-        return
-    current_asset = reference_asset()
-    if command_name == 'toggle_favorite':
-        if current_asset:
-            library.set_favorite(current_asset, not bool(metadata(current_asset).get('favorite', False)))
-        return
-    if command_name == 'set_favorite_index' and isinstance(value, dict):
-        try:
-            target_asset = library.get(int(value.get('index')))
-        except Exception:
-            target_asset = None
-        if target_asset:
-            library.set_favorite(target_asset, bool(value.get('favorite', False)))
-        return
-    if command_name == 'set_tags':
-        if current_asset and isinstance(value, list):
-            library.set_tags(current_asset, list(dict.fromkeys(str(item).strip() for item in value if str(item).strip())))
-        return
-    if not current_asset:
-        return
-    settings = current_asset.settings
-    changed = False
-    if command_name in ('zoom', 'crop_x', 'crop_y', 'contrast', 'saturation', 'gamma'):
-        try:
-            setattr(settings, command_name, float(value))
-            changed = True
-        except (TypeError, ValueError):
-            pass
-    elif command_name == 'toggle_sharpen':
-        settings.sharpen = not settings.sharpen
-        changed = True
-    elif command_name == 'toggle_dither':
-        settings.dither = not settings.dither
-        changed = True
-    elif command_name == 'reset_image':
-        settings.reset()
-        changed = True
-    if changed:
-        save_asset(current_asset)
+    if not a:return
+    st=a.settings;changed=False
+    if c in ("zoom","crop_x","crop_y","contrast","saturation","gamma"):
+        try:setattr(st,c,float(v));changed=True
+        except (TypeError,ValueError):pass
+    elif c=="toggle_sharpen":st.sharpen=not st.sharpen;changed=True
+    elif c=="toggle_dither":st.dither=not st.dither;changed=True
+    elif c=="reset_image":st.reset();changed=True
+    if changed:save_asset(a)
 
 def phone_panel(side):
-    controller = controllers[side]
-    current_asset = asset(side)
-    show = panels[side]['slideshow']
-    reactive = panels[side]['reactive']
-    result = {'effect': controller.effect_name, 'speed': controller.speed, 'brightness': controller.brightness, 'paused': controller.paused, 'image_index_zero': panels[side]['image_index'], 'image_index': 0, 'image_name': None, 'image_mode': None, 'image_settings': None, 'image_tags': [], 'image_favorite': False, 'slideshow': {'active': show['active'], 'duration': show['duration'], 'shuffle': show['shuffle'], 'label': show['label'], 'count': len(show['indices'])}, 'reactive': dict(reactive)}
-    if current_asset:
-        info = metadata(current_asset)
-        result.update(image_index=panels[side]['image_index'] + 1, image_name=current_asset.path.name, image_mode=current_asset.settings.mode, image_settings=current_asset.settings.to_dict(), image_tags=info.get('tags', []), image_favorite=bool(info.get('favorite', False)))
-    return result
+    ctl=controllers[side];a=asset(side);sh=panels[side]["slideshow"];r=panels[side]["reactive"];tr=panels[side]["transition"]
+    out={"effect":ctl.effect_name,"speed":ctl.speed,"brightness":ctl.brightness,"paused":ctl.paused,"image_index_zero":panels[side]["image_index"],"image_index":0,"image_name":None,"image_mode":None,"image_settings":None,"image_tags":[],"image_favorite":False,"slideshow":{"active":sh["active"],"duration":sh["duration"],"shuffle":sh["shuffle"],"label":sh["label"],"count":len(sh["indices"])},"reactive":{"enabled":r["enabled"],"strength":r["strength"],"preset":r["preset"],"layers":dict(r["layers"])},"transition":dict(tr)}
+    if a:
+        m=metadata(a);out.update(image_index=panels[side]["image_index"]+1,image_name=a.path.name,image_mode=a.settings.mode,image_settings=a.settings.to_dict(),image_tags=m.get("tags",[]),image_favorite=bool(m.get("favorite",False)))
+    return out
 
 def update_phone():
-    items = []
-    for index, item in enumerate(library.assets):
-        info = metadata(item)
-        items.append({'index': index, 'name': item.path.name, 'tags': info.get('tags', []), 'favorite': bool(info.get('favorite', False))})
-    reference = phone_panel(reference_side())
-    server.update_state({'target': active_target, 'reference_side': reference_side(), 'image_count': len(library), 'library': items, 'effects': list(controllers['front'].effects), 'panels': {'front': phone_panel('front'), 'back': phone_panel('back')}, 'audio': {'volume': audio['volume'], 'bass': audio['bass'], 'mids': audio['mids'], 'highs': audio['highs'], 'beat': audio['beat'], 'fresh': audio_fresh()}, 'reactive_presets': REACTIVE_PRESETS, **reference})
+    lib=[]
+    for i,a in enumerate(library.assets):
+        m=metadata(a);lib.append({"index":i,"name":a.path.name,"tags":m.get("tags",[]),"favorite":bool(m.get("favorite",False))})
+    ref=phone_panel(reference_side())
+    server.update_state({"target":active_target,"reference_side":reference_side(),"image_count":len(library),"library":lib,"effects":list(controllers["front"].effects),"panels":{"front":phone_panel("front"),"back":phone_panel("back")},"audio":{"volume":audio["volume"],"bass":audio["bass"],"mids":audio["mids"],"highs":audio["highs"],"beat":audio["beat"],"fresh":audio_fresh()},"motion":dict(motion),"reactive_presets":REACTIVE_PRESETS,"layer_keys":LAYER_KEYS,"transitions":TRANSITIONS,"guest":{"locked":guest["locked"]},**ref})
 
-def draw_panel(side, x):
-    display = displays[side]
-    controller = controllers[side]
+def draw_panel(side,x):
+    d,ctl=displays[side],controllers[side]
     for y in range(H):
-        for pixel_x in range(W):
-            color = display.get_pixel(pixel_x, y)
-            brightness = controller.brightness
-            pygame.draw.rect(screen, (int(color[0] * brightness), int(color[1] * brightness), int(color[2] * brightness)), (x + pixel_x * S, y * S, S - 1, S - 1))
-
+        for px in range(W):
+            c=d.get_pixel(px,y);b=ctl.brightness
+            pygame.draw.rect(screen,(int(c[0]*b),int(c[1]*b),int(c[2]*b)),(x+px*S,y*S,S-1,S-1))
 def draw_ui():
-    front = phone_panel('front')
-    back = phone_panel('back')
-    screen.blit(font.render(f"FRONT: {front['effect']} | {front['image_name'] or '-'}", True, (220, 220, 220)), (10, PH + 10))
-    screen.blit(font.render(f"BACK: {back['effect']} | {back['image_name'] or '-'}", True, (220, 220, 220)), (10, PH + 36))
-    screen.blit(font.render(f"Target: {active_target.upper()}   {phone_url}", True, (190, 190, 190)), (10, PH + 62))
-    reactive_text = f"Audio V:{audio['volume']:.2f} B:{audio['bass']:.2f} M:{audio['mids']:.2f} H:{audio['highs']:.2f} Beat:{'YES' if audio['beat'] else '-'}"
-    screen.blit(font.render(reactive_text, True, (170, 205, 255)), (10, PH + 88))
-
+    f,b=phone_panel("front"),phone_panel("back")
+    screen.blit(font.render(f"FRONT: {f['effect']} | {f['image_name'] or '-'}",True,(220,220,220)),(10,PH+10))
+    screen.blit(font.render(f"BACK: {b['effect']} | {b['image_name'] or '-'}",True,(220,220,220)),(10,PH+36))
+    screen.blit(font.render(f"Target: {active_target.upper()}   {phone_url}",True,(190,190,190)),(10,PH+62))
+    screen.blit(font.render(f"Audio V:{audio['volume']:.2f} B:{audio['bass']:.2f} M:{audio['mids']:.2f} H:{audio['highs']:.2f} Beat:{'YES' if audio['beat'] else '-'}",True,(170,205,255)),(10,PH+88))
+    screen.blit(font.render(f"Transition: {f['transition']['kind']}  Guest: {'LOCKED' if guest['locked'] else 'READY'}",True,(185,185,220)),(10,PH+114))
 def keys(key):
-    if key == pygame.K_ESCAPE:
-        return False
-    mapping = {pygame.K_1: 'Rainbow', pygame.K_2: 'Waves', pygame.K_3: 'Plasma', pygame.K_4: 'Stars', pygame.K_5: 'Text', pygame.K_6: 'Party', pygame.K_7: 'Image'}
-    if key in mapping:
-        set_effect(mapping[key])
-    elif key == pygame.K_f:
-        set_target('front')
-    elif key == pygame.K_b:
-        set_target('back')
-    elif key == pygame.K_m:
-        set_target('both')
-    elif key == pygame.K_SPACE:
-        toggle_pause()
+    if key==pygame.K_ESCAPE:return False
+    mapping={pygame.K_1:"Rainbow",pygame.K_2:"Waves",pygame.K_3:"Plasma",pygame.K_4:"Stars",pygame.K_5:"Text",pygame.K_6:"Party",pygame.K_7:"Image"}
+    if key in mapping:set_effect(mapping[key])
+    elif key==pygame.K_f:set_target("front")
+    elif key==pygame.K_b:set_target("back")
+    elif key==pygame.K_m:set_target("both")
+    elif key==pygame.K_SPACE:toggle_pause()
     return True
-update_phone()
-running = True
-frame_number = 0
+
+update_phone();running=True;frame_number=0
 while running:
-    dt = clock.tick(60) / 1000
-    frame_number += 1
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
-        elif event.type == pygame.KEYDOWN:
-            running = keys(event.key)
-    for data in server.get_commands():
-        command(data)
-    for side in ('front', 'back'):
-        controllers[side].update(dt)
-        if not controllers[side].paused:
-            particles[side].update(dt)
+    dt=clock.tick(60)/1000;frame_number+=1
+    for e in pygame.event.get():
+        if e.type==pygame.QUIT:running=False
+        elif e.type==pygame.KEYDOWN:running=keys(e.key)
+    for data in server.get_commands():command(data)
+    for s in ("front","back"):
+        controllers[s].update(dt)
+        if not controllers[s].paused:particles[s].update(dt)
+        transitions[s].update(dt)
     update_shows(dt)
-    for side in ('front', 'back'):
-        controllers[side].effect(displays[side], controllers[side].time)
-        apply_reactive(side, displays[side], frame_number)
-    screen.fill((15, 15, 18))
-    draw_panel('front', 0)
-    draw_panel('back', PW + GAP)
-    draw_ui()
-    update_phone()
-    pygame.display.flip()
-server.stop()
-pygame.quit()
+    if guest["kind"] and time.monotonic()>guest["until"]:stop_guest()
+    sig=signals()
+    for s in ("front","back"):
+        controllers[s].effect(displays[s],controllers[s].time);transitions[s].apply(displays[s])
+        r=panels[s]["reactive"]
+        if r["enabled"]:layer_engine.apply(displays[s],sig,r["layers"],r["strength"],frame_number,1000 if s=="back" else 0)
+        if guest["kind"] and not guest["locked"]:layer_engine.guest_burst(displays[s],guest["kind"],guest["strength"],frame_number)
+    motion["tap"]=False;motion["shake"]*=.90
+    screen.fill((15,15,18));draw_panel("front",0);draw_panel("back",PW+GAP);draw_ui();update_phone();pygame.display.flip()
+server.stop();pygame.quit()
