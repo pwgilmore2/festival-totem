@@ -37,9 +37,9 @@ GUEST_SECTION = r"""
 <div class="guestGrid" style="margin-top:12px">
 <button data-guest class="padBoom" onclick="guestAction('boom')">💥<br>BOOM</button><button data-guest class="padGlitch" onclick="guestAction('glitch')">⚡<br>GLITCH</button>
 <button data-guest class="padSpark" onclick="guestAction('spark')">✨<br>SPARK STORM</button><button data-guest class="padRainbow" onclick="guestAction('rainbow')">🌈<br>RAINBOW</button>
-<button data-guest class="padWarp" onclick="guestAction('ripple')">🌀<br>WARP → NEXT</button><button data-guest class="padMelt" onclick="guestAction('melt')">🫠<br>MELT → NEXT</button>
+<button data-guest class="padWarp" onclick="guestTransition('Ripple')">🌀<br>WARP → NEXT</button><button data-guest class="padMelt" onclick="guestTransition('Melt')">🫠<br>MELT → NEXT</button>
 <button data-guest class="padRandom" onclick="guestAction('random')">🎲<br>RANDOM GIF</button><button data-guest class="padNext" onclick="guestAction('next')">➡️<br>NEXT GIF</button>
-<button data-guest class="padParty" onclick="guestAction('party')">🎉<br>PARTY MODE</button><button data-guest class="padWarp" onclick="guestAction('zoom')">🛸<br>ZOOM → NEXT</button>
+<button data-guest class="padParty" onclick="guestParty()">🎉<br>PARTY MODE</button><button data-guest class="padWarp" onclick="guestTransition('Zoom')">🛸<br>ZOOM → NEXT</button>
 <button data-guest class="guestBig" onpointerdown="chaosStart(event)" onpointerup="chaosEnd(event)" onpointercancel="chaosEnd(event)" oncontextmenu="event.preventDefault()">HOLD FOR CHAOS</button>
 </div>
 <div class="guestIntensity slider"><div class="sh"><span>Chaos intensity</span><span id="guestIntensityValue">100%</span></div><input id="guestIntensity" type="range" min=".1" max="1" step=".05" value="1" oninput="pct('guestIntensityValue',this.value)"></div>
@@ -53,6 +53,8 @@ function setTransition(){const k=document.getElementById('transitionKind').value
 function toggleRandomTransition(){const r=state.transition||{};cmd('transition_settings',{random:!r.random})}
 function toggleGuestLock(){const g=state.guest||{};cmd('guest_lock',!g.locked)}
 function guestAction(kind){const g=state.guest||{};if(g.locked)return;cmd('guest_action',{kind,strength:parseFloat(document.getElementById('guestIntensity').value),duration:.8})}
+async function guestTransition(kind){const g=state.guest||{};if(g.locked)return;const tr=state.transition||{},ids=(state.library||[]).map(x=>x.index);if(!ids.length)return;const restore={kind:tr.kind||'Fade',duration:tr.duration??.8,random:!!tr.random};await cmd('transition_settings',{kind,duration:.85,random:false});await cmd('filtered_step',{indices:ids,delta:1});setTimeout(()=>cmd('transition_settings',restore),180)}
+function guestParty(){const g=state.guest||{};if(g.locked)return;cmd('effect','Party')}
 function guestHold(kind,on){const g=state.guest||{};if(g.locked)return;if(on)cmd('guest_action',{kind,strength:parseFloat(document.getElementById('guestIntensity').value),duration:30});else cmd('guest_stop')}
 function chaosStart(e){e.preventDefault();if(e.currentTarget.setPointerCapture)try{e.currentTarget.setPointerCapture(e.pointerId)}catch(_){ }e.currentTarget.classList.add('pressed');guestHold('chaos',true)}
 function chaosEnd(e){e.preventDefault();e.currentTarget.classList.remove('pressed');guestHold('chaos',false)}
