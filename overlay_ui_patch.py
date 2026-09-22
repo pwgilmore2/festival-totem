@@ -56,10 +56,10 @@ function selectOverlayIcon(name){
  textEnabledLocal=true;syncOverlayUI();cmd('text_show',textPayload());syncTextMaster();
 }
 function setOverlayFont(name){if(['Pixel','Quest','Block'].includes(name)){textFont.value=name;textChanged();syncOverlayUI()}}
-function setOverlayMotion(name){if(!['Static','Float','Bounce'].includes(name))return;overlayMotionLocal=name;textMotion.value=(name==='Static'?'Static':'Static');syncOverlayUI();textChanged()}
+function setOverlayMotion(name){if(!['Static','Float','Bounce'].includes(name))return;overlayMotionLocal=name;textMotion.value='Static';syncOverlayUI();textChanged()}
 function syncOverlayLabel(){
- const tab=[...document.querySelectorAll('button')].find(b=>(b.getAttribute('onclick')||'').includes("view('text')"));if(tab)tab.textContent='Overlay';
- const card=document.querySelector('.textCard h2');if(card)card.textContent='Overlay';
+ const tab=[...document.querySelectorAll('button')].find(b=>(b.getAttribute('onclick')||'').includes("view('text')"));if(tab&&tab.textContent!=='Overlay')tab.textContent='Overlay';
+ const card=document.querySelector('.textCard h2');if(card&&card.textContent!=='Overlay')card.textContent='Overlay';
 }
 function syncOverlayUI(){
  syncOverlayLabel();renderOverlayIcons();
@@ -78,8 +78,7 @@ syncTextUI=function(){
 const _overlayTextMasterBase=syncTextMaster;
 syncTextMaster=function(){_overlayTextMasterBase();syncOverlayUI()};
 if(typeof textSpeedLocal!=='undefined'&&!textSpeedLocal)textSpeedLocal='Medium';
-const _overlayObserver=new MutationObserver(()=>syncOverlayLabel());
-window.addEventListener('load',()=>{syncOverlayLabel();const tabs=document.querySelector('.tabs');if(tabs)_overlayObserver.observe(tabs,{childList:true,subtree:true,characterData:true})});
+window.addEventListener('load',syncOverlayLabel);
 </script>
 '''.replace('__SPRITES__', _SPRITES_JSON)
 phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('</body>', _JS + '</body>', 1)
