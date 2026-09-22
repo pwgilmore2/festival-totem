@@ -8,7 +8,7 @@ if 'id="now"' not in phone_server.PHONE_HTML:
 
 _EXTRA_CSS = r'''
 <style>
-input[type=range]{-webkit-appearance:none;appearance:none;height:46px;margin:2px 0;padding:0;background:transparent;touch-action:none;-webkit-tap-highlight-color:transparent}
+input[type=range]{-webkit-appearance:none;appearance:none;height:46px;margin:2px 0;padding:0;background:transparent;touch-action:pan-y;-webkit-tap-highlight-color:transparent}
 input[type=range]::-webkit-slider-runnable-track{height:8px;border-radius:999px;background:#ffffff26}
 input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:28px;height:28px;border-radius:50%;background:#8b7cff;border:3px solid #fff;margin-top:-10px;box-shadow:0 2px 10px #0008}
 input[type=range]::-moz-range-track{height:8px;border-radius:999px;background:#ffffff26}
@@ -27,26 +27,21 @@ input[type=range]::-moz-range-thumb{width:28px;height:28px;border-radius:50%;bac
 '''
 phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('</head>', _EXTRA_CSS + '</head>', 1)
 
-# Put text master controls and configurable quick-fire messages at the very top.
 _TEXT_HEAD = r'''<div class="card textCard"><h2>Text Engine</h2><div class="sectionHint">Build the message here, then Show Text to switch the selected display(s) into text mode.</div>'''
 _TEXT_HEAD_NEW = r'''<div class="card textCard"><h2>Text Engine</h2><div class="textTop"><button id="textMaster" class="textToggle" onclick="toggleTextMaster()">TEXT: OFF</button><button onclick="refreshText()">↻ APPLY SETTINGS</button></div><div class="quickLabel">Quick text — tap once to fire it immediately</div><div id="quickTextButtons" class="quickText"></div><div class="sectionHint">Or type a custom message:</div>'''
 phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace(_TEXT_HEAD, _TEXT_HEAD_NEW, 1)
 
-# Size and speed become discrete choices.
 _OLD_SIZE = r'''<div class="textGrid"><div class="slider"><div class="sh"><span>Size</span><span id="textScaleValue">1x</span></div><input id="textScale" type="range" min="1" max="3" step="1" value="1" oninput="textScaleValue.textContent=this.value+'x';textChanged()"></div><div class="slider"><div class="sh"><span>Speed</span><span id="textSpeedValue">12</span></div><input id="textSpeed" type="range" min="1" max="40" step="1" value="12" oninput="textSpeedValue.textContent=this.value;textChanged()"></div></div>'''
 _NEW_SIZE = r'''<div class="textGrid"><div><div class="sh"><span>Size</span></div><div class="choice3"><button id="textSize1" onclick="setTextSize(1)">1×</button><button id="textSize2" onclick="setTextSize(2)">2×</button><button id="textSize3" onclick="setTextSize(3)">3×</button></div></div><div><div class="sh"><span>Speed</span></div><div class="choice3"><button id="textSpeedSlow" onclick="setTextSpeed('Slow')">Slow</button><button id="textSpeedMedium" onclick="setTextSpeed('Medium')">Med</button><button id="textSpeedFast" onclick="setTextSpeed('Fast')">Fast</button></div></div></div>'''
 phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace(_OLD_SIZE, _NEW_SIZE, 1)
 
-# Background is intentionally fixed: current visual continues, dimmed to 30%, backplate always on.
 _BG_BOX = r'''<div class="textBgBox"><div class="sh"><span>Background</span><span class="tiny">GIF brightness capped at 55%</span></div><select id="textBackground" class="selectDark" onchange="textChanged()"></select><div class="slider"><div class="sh"><span>Background brightness</span><span id="textBgValue">28%</span></div><input id="textBgBrightness" type="range" min=".05" max=".55" step=".05" value=".28" oninput="pct('textBgValue',this.value);textChanged()"></div><button id="textBackplate" style="width:100%" onclick="toggleBackplate()">▰ Text Backplate</button></div>'''
 phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace(_BG_BOX, '', 1)
 phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('<button class="textShow" style="margin-top:12px" onclick="showText()">SHOW TEXT</button>', '', 1)
 
-# Configure quick-text buttons in Setup. These persist in the controlling browser.
 _PRESET_SETUP = r'''<div class="card"><h2>Quick Text Presets</h2><div class="sectionHint">Add or remove the one-tap messages shown on the Text tab. Saved on this controller device.</div><div id="quickPresetList" class="presetManage"></div><div class="presetAdd"><input id="quickPresetInput" maxlength="120" placeholder="Add quick text"><button onclick="addQuickPreset()">Add</button></div><button style="width:100%;margin-top:8px" onclick="resetQuickPresets()">Restore Defaults</button></div>'''
 phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('<section id="edit" class="view">', '<section id="edit" class="view">' + _PRESET_SETUP, 1)
 
-# Replace Chaos Pad with a large bank of holdable effects + XY performance surface.
 _GUEST_START = phone_server.PHONE_HTML.find('<section id="guest" class="view">')
 _GUEST_END = phone_server.PHONE_HTML.find('</section>', _GUEST_START)
 if _GUEST_START >= 0 and _GUEST_END >= 0:
@@ -58,7 +53,7 @@ _EXTRA_JS = r'''
 <script>
 let textScaleLocal=2,textSpeedLocal='Medium',textEnabledLocal=false;
 const textSpeeds={Slow:12,Medium:22,Fast:34};
-const quickPresetDefaults=['DRINK WATER','MEET ME HERE','FOLLOW THE TOTEM',"WHERE'S THE AFTERS?",'YOU GOOD?','HAPPY BIRTHDAY'];
+const quickPresetDefaults=['DRINK WATER','YOU GOOD?','WAKAAN','K HOLE','SPAGHETTI TIME','BASS FACE'];
 let quickPresets=[];
 function loadQuickPresets(){try{let raw=localStorage.getItem('festivalTotem.quickText');quickPresets=raw?JSON.parse(raw):[...quickPresetDefaults];if(!Array.isArray(quickPresets))throw 0}catch(_){quickPresets=[...quickPresetDefaults]}quickPresets=quickPresets.map(x=>String(x).trim()).filter(Boolean).slice(0,24);renderQuickPresets()}
 function saveQuickPresets(){localStorage.setItem('festivalTotem.quickText',JSON.stringify(quickPresets));renderQuickPresets()}
