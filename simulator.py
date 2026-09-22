@@ -119,11 +119,13 @@ def step_filtered(value):
 
 def pixel_melt_next(value):
     if not isinstance(value,dict):return
-    ids=clean_indices(value.get("indices",[]))
-    if not ids:return
+    fallback_ids=clean_indices(value.get("indices",[]))
     try:duration=max(.25,min(5.0,float(value.get("duration",1.8))))
     except (TypeError,ValueError):duration=1.8
     for side in target_sides():
+        sh=panels[side]["slideshow"]
+        ids=list(sh.get("indices",[])) if sh.get("active") and sh.get("indices") else fallback_ids
+        if not ids:continue
         cur=panels[side]["image_index"]
         try:p=ids.index(cur)
         except ValueError:p=-1
@@ -131,9 +133,8 @@ def pixel_melt_next(value):
         transitions[side].begin(displays[side],"Melt",duration)
         panels[side]["image_index"]=nxt
         controllers[side].set_effect("Image")
-        sh=panels[side]["slideshow"]
         if sh.get("active"):
-            if nxt in sh.get("indices",[]):sh["position"]=sh["indices"].index(nxt)
+            sh["position"]=(p+1)%len(ids)
             sh["elapsed"]=0.0
 
 def start_show(value):
