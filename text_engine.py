@@ -5,7 +5,7 @@ import random
 from text import FONT
 
 TEXT_FONTS = ["Pixel", "Block", "Thin", "Arcade", "Quest"]
-TEXT_MOTIONS = ["Scroll Left", "Static"]
+TEXT_MOTIONS = ["Static"]
 TEXT_COLORS = ["Solid", "Rainbow", "Audio"]
 TEXT_EFFECTS = ["Glow", "Glitch", "Beat Pulse"]
 TEXT_BACKGROUNDS = ["Black", "Dimmed GIF", "Tinted GIF"]
@@ -44,11 +44,11 @@ class TextRenderer:
         return {
             "message": "FESTIVAL MODE",
             "font": "Pixel",
-            "motion": "Scroll Left",
+            "motion": "Static",
             "color_mode": "Rainbow",
             "color": "#ffffff",
             "scale": 1,
-            "speed": 12.0,
+            "speed": 34.0,
             "glow": False,
             "wave": False,
             "glitch": False,
@@ -88,10 +88,10 @@ class TextRenderer:
         signals = signals or {}
         text = str(settings.get("message", "") or " ").upper()[:120]
         font = settings.get("font", "Pixel")
-        motion = settings.get("motion", "Scroll Left")
+        motion = settings.get("motion", "Static")
         color_mode = settings.get("color_mode", "Rainbow")
         scale = max(1, min(3, int(settings.get("scale", 1))))
-        speed = max(1.0, min(40.0, float(settings.get("speed", 12.0))))
+        speed = max(1.0, min(40.0, float(settings.get("speed", 34.0))))
         beat = bool(signals.get("beat", False))
         bass = clamp01(signals.get("bass", 0.0))
         mids = clamp01(signals.get("mids", 0.0))
@@ -182,8 +182,6 @@ class TextRenderer:
         return self.width - offset, y
 
     def _spacing(self, scale, font):
-        # Extra breathing room keeps glow/rave halos from visually merging letters.
-        # Width calculations use this same spacing, so Static auto-fit remains accurate.
         if font == "Arcade":
             return max(2, scale + 1)
         if font == "Quest":
