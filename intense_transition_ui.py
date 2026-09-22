@@ -14,7 +14,9 @@ _CSS = r'''
 '''
 phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('</head>', _CSS + '</head>', 1)
 
-_anchor = '<div class="chaosGroup"><div class="chaosGroupLabel">Chill / Flow'
+# Keep the performance instrument ordered by usage: impact first, chill/flow
+# second, then one-shot transition tricks.
+_anchor = '<div class="xyWrap">'
 if _anchor in phone_server.PHONE_HTML and 'id="intenseTransitionGrid"' not in phone_server.PHONE_HTML:
     block = r'''<div class="chaosGroup"><div class="chaosGroupLabel">Intense → Next <span class="chaosGroupHint">one-shot transition to the next GIF</span></div><div id="intenseTransitionGrid" class="intenseGrid"></div></div>
 '''
@@ -62,8 +64,6 @@ function intenseHoldEnd(e){
 '''
 phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('</body>', _JS + '</body>', 1)
 
-# Route one-shot intense commands explicitly. The simulator now owns transition
-# scope, so no TransitionManager monkeypatch or disguised Melt command is needed.
 _base_get_commands = controller_state_ui.PhoneControlServer.get_commands
 
 def _get_commands(self):
