@@ -1,8 +1,14 @@
-import phone_server
-import controller_state_ui
-import intense_transition_patch  # noqa: F401
+"""Phone controls for deliberate full-scene transitions.
 
-INTENSE = list(intense_transition_patch.INTENSE_TRANSITIONS)
+The runtime handles ``intense_transition_next`` directly. This module only adds
+the Chaos-tab controls and sends the command; importing it does not rewrite the
+server command stream.
+"""
+
+import phone_server
+from transition_engine import INTENSE_TRANSITIONS
+
+INTENSE = list(INTENSE_TRANSITIONS)
 
 _CSS = r'''
 <style>
@@ -63,27 +69,3 @@ function intenseHoldEnd(e){
 </script>
 '''
 phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('</body>', _JS + '</body>', 1)
-
-_base_get_commands = controller_state_ui.PhoneControlServer.get_commands
-
-def _get_commands(self):
-    out=[]
-    for data in _base_get_commands(self):
-        if not isinstance(data, dict) or data.get('command') != 'intense_transition_next':
-            out.append(data);continue
-        value=data.get('value') if isinstance(data.get('value'),dict) else {}
-        kind=str(value.get('kind','Morph'))
-        if kind not in INTENSE: kind='Morph'
-        try:
-            duration=max(.25,min(4.0,float(value.get('duration',1.15))))
-        except (TypeError,ValueError):
-            duration=1.15
-        out.append({'command':'set_target','value':'both'})
-        out.append({'command':'pixel_melt_next','value':{
-            'indices':value.get('indices',[]),
-            'duration':duration,
-            'kind':kind,
-        }})
-    return out
-
-controller_state_ui.PhoneControlServer.get_commands = _get_commands
