@@ -11,6 +11,7 @@ import overlay_ui_patch  # noqa: F401
 import image_processing_ui
 import safe_controls_patch  # noqa: F401
 import intense_transition_ui  # noqa: F401
+import transition_scope_patch  # noqa: F401
 
 if Path(sys.argv[0]).name == "simulator.py":
     import simulator_display_patch  # noqa: F401
