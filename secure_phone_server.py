@@ -5,6 +5,7 @@ import sys
 import phone_server
 import controller_state_ui
 import chaos_layout_patch  # noqa: F401
+import text_ui_patch  # noqa: F401
 
 if Path(sys.argv[0]).name == "simulator.py":
     import simulator_display_patch  # noqa: F401
