@@ -35,10 +35,11 @@ class OverlayRenderer:
         motion = state.get("motion", "Static")
         rgba = sprite_rgba(name)
 
-        # Neutral placement is the exact 32x32 authored canvas at (0, 0).
-        # Motion only translates by whole pixels; it never resizes the art.
-        x0 = 0
-        y0 = 0
+        # Center the exact 32x32 authored canvas inside the panel. On the
+        # current 64x32 simulator this is x=16, y=0. Motion only translates by
+        # whole pixels; it never resizes the art.
+        x0 = (self.width - 32) // 2
+        y0 = (self.height - 32) // 2
         speed = max(1.0, min(40.0, float(text_settings.get("speed", 22.0))))
         rate = speed / 22.0
         if motion == "Float":
