@@ -1,5 +1,6 @@
 import math
 import random
+import time
 
 from icon_assets import ICON_LIBRARY
 from text_engine import TextRenderer, clamp01, hsv_color, parse_color
@@ -9,7 +10,8 @@ class OverlayRenderer:
     """Native final-frame overlay compositor.
 
     Icons come from ``IconLibrary`` and render from authored 32x32 masters 1:1.
-    Bounce is the standard icon motion; no icon scaling or morphology occurs.
+    Motion and transitions only translate/filter authored pixels; no scaling or
+    morphology occurs.
     """
 
     def __init__(self, width, height):
@@ -21,13 +23,54 @@ class OverlayRenderer:
         if 0 <= x < display.width and 0 <= y < display.height:
             display.set_pixel(x, y, color)
 
+    def _icon_origin(self, state, t):
+        # x/y are normalized resting positions. 32x32 artwork has 32 px of
+        # horizontal travel on a 64x32 panel; vertical travel intentionally
+        # allows clipping beyond the top/bottom for expressive motion.
+        x = clamp01(state.get("x", 0.5))
+        y = clamp01(state.get("y", 0.5))
+        x0 = int(round(x * max(0, self.width - 32)))
+        y0 = int(round((y - 0.5) * 16.0))
+        motion = state.get("motion", "Bounce")
+
+        if motion == "Bounce":
+            y0 += int(round(-abs(math.sin(t * 2.5)) * 2.0 + 1.0))
+        elif motion == "Drift":
+            x0 += int(round(math.sin(t * 0.75) * 7.0))
+            y0 += int(round(math.sin(t * 1.1 + 1.3) * 3.0))
+        elif motion == "Orbit":
+            x0 += int(round(math.cos(t * 1.15) * 8.0))
+            y0 += int(round(math.sin(t * 1.15) * 5.0))
+        # Manual intentionally adds no automatic motion.
+        return x0, y0
+
+    def _transition(self, state, t, seed):
+        kind = state.get("transition_kind")
+        if not kind:
+            return 1.0, 0, 0, None
+        started = float(state.get("transition_started", 0.0))
+        duration = max(0.08, float(state.get("transition_duration", 0.55)))
+        p = max(0.0, min(1.0, (time.monotonic() - started) / duration))
+        entering = bool(state.get("transition_entering", True))
+        amount = p if entering else 1.0 - p
+        dx = dy = 0
+        reveal = None
+
+        if kind == "Slide":
+            dx = int(round((1.0 - amount) * -40.0))
+        elif kind == "Drop":
+            dy = int(round((1.0 - amount) * -36.0))
+        elif kind == "Flicker":
+            rng = random.Random(seed + int(p * 90))
+            amount = amount if rng.random() > (1.0 - amount) * 0.65 else 0.08
+        elif kind == "Pixel Reveal":
+            reveal = amount
+        # Fade uses amount directly; None never reaches here.
+        return amount, dx, dy, reveal
+
     def draw_icon(self, display, state, text_settings, t, signals=None, seed=0, text_enabled=False):
         if not state or not state.get("icon_enabled"):
             return
-
-        # 32x32 icon mode and text mode are deliberately exclusive until
-        # separately authored mini icons exist. The runtime state/UI makes this
-        # explicit, so the renderer never rescales a full-size master.
         if text_enabled:
             return
 
@@ -37,14 +80,10 @@ class OverlayRenderer:
 
         signals = signals or {}
         rgba = asset.pixels
-
-        # Exact 32x32 authored canvas, centered horizontally on a 64x32 panel.
-        # Bounce/phone-audio motion translates whole pixels only.
-        x0 = (self.width - 32) // 2
-        y0 = 0
-        speed = max(1.0, min(40.0, float(text_settings.get("speed", 22.0))))
-        rate = speed / 22.0
-        y0 += int(round(-abs(math.sin(t * 2.5 * rate)) * 2.0 + 1.0))
+        x0, y0 = self._icon_origin(state, t)
+        amount, tx, ty, reveal = self._transition(state, t, seed)
+        x0 += tx
+        y0 += ty
 
         bass = clamp01(signals.get("bass", 0.0))
         mids = clamp01(signals.get("mids", 0.0))
@@ -70,11 +109,17 @@ class OverlayRenderer:
             for sx, (r, g, b, a) in enumerate(row):
                 if a == 0:
                     continue
+                if reveal is not None:
+                    # Stable per-pixel threshold = deterministic pixel reveal.
+                    rr = random.Random(seed + sy * 97 + sx * 193)
+                    if rr.random() > reveal:
+                        continue
                 px = x0 + sx
                 py = y0 + sy
                 if glitch and rng.random() < .05:
                     px += rng.choice((-1, 1))
-                color = (r, g, b)
+                brightness = max(0.0, min(1.0, amount))
+                color = (int(r * brightness), int(g * brightness), int(b * brightness))
                 if pulse:
                     color = tuple(min(255, int(c * (1.0 + pulse))) for c in color)
                 pixels.append((px, py, color))
