@@ -1,9 +1,9 @@
-"""CircuitPython MatrixPortal display backend.
+"""CircuitPython MatrixPortal S3 display backend.
 
-Two logical panels share one caller-owned RGB565 framebuffer. The backend writes
-that framebuffer directly and calls ``RGBMatrix.refresh()`` once per composed
-frame, avoiding a second displayio bitmap/compositing layer on RAM-constrained
-MatrixPortal hardware.
+Two logical 64x32 panels share one caller-owned 128x32 RGB565 framebuffer. The
+backend writes that framebuffer directly and calls ``RGBMatrix.refresh()`` once
+per composed frame. ``rgbmatrix`` owns HUB75 refresh timing and native double
+buffering while Python prepares the next frame cooperatively.
 """
 
 from array import array
@@ -151,18 +151,19 @@ class MatrixPortalPanel:
 
 
 class MatrixPortalDisplayBackend:
-    """Direct framebuffer backend for two chained MatrixPortal RGB panels.
+    """Direct framebuffer backend for two chained MatrixPortal S3 panels.
 
-    ``bit_depth=2`` is intentionally conservative for MatrixPortal M4. The
-    framebuffer remains RGB565 regardless of output bit depth; bit depth controls
-    panel refresh/color precision and its CPU/RAM cost.
+    S3 is the target hardware. ``bit_depth=4`` is the initial quality/performance
+    target; it remains configurable so physical testing can compare 3/4/5 while
+    monitoring FPS and free RAM. The framebuffer is always RGB565 regardless of
+    panel output bit depth.
     """
 
     def __init__(
         self,
         width=64,
         height=32,
-        bit_depth=2,
+        bit_depth=4,
         serpentine=True,
         front_rotation=0,
         back_rotation=0,
@@ -181,9 +182,8 @@ class MatrixPortalDisplayBackend:
         self.height = int(height)
         self.total_width = self.width * 2
         self.bit_depth = int(bit_depth)
+        self.doublebuffer = bool(doublebuffer)
 
-        # MatrixPortal boards expose the shared pin definitions through board.
-        # Four address lines drive common 32-row HUB75 panels.
         displayio.release_displays()
         self.framebuffer = array("H", [0]) * (self.total_width * self.height)
         self.matrix = rgbmatrix.RGBMatrix(
@@ -193,7 +193,7 @@ class MatrixPortalDisplayBackend:
             addr_pins=board.MTX_ADDRESS[:4],
             tile=1,
             serpentine=bool(serpentine),
-            doublebuffer=bool(doublebuffer),
+            doublebuffer=self.doublebuffer,
             framebuffer=self.framebuffer,
             **board.MTX_COMMON,
         )
@@ -222,12 +222,10 @@ class MatrixPortalDisplayBackend:
         return self.displays[side]
 
     def present(self):
-        """Transmit the finished RGB565 framebuffer to the HUB75 panels."""
+        """Swap/transmit the completed RGB565 frame through native RGBMatrix."""
         self.matrix.refresh()
 
     def set_brightness(self, value):
-        # Current rgbmatrix implementations expose brightness as effectively
-        # off/on on some boards; visual brightness is still handled in rendering.
         try:
             self.matrix.brightness = max(0.0, min(1.0, float(value)))
         except (AttributeError, TypeError, ValueError):
