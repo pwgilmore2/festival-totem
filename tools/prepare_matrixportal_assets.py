@@ -10,7 +10,17 @@ controller UI.
 import argparse
 import json
 import shutil
+import sys
 from pathlib import Path
+
+from PIL import Image
+
+# Running ``python tools/prepare_matrixportal_assets.py`` makes ``tools`` the
+# first import directory. Add the project root explicitly so this script can use
+# the simulator's canonical ImageLibrary without requiring PYTHONPATH setup.
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from image_assets import ImageLibrary
 
@@ -46,7 +56,7 @@ def prepare_asset(asset, output_path):
 
 def prepare_thumbnail(asset, output_path, width=256, height=128):
     frame = asset.prepare_frame(asset.frames[0], asset.settings)
-    frame = frame.resize((width, height), resample=0)
+    frame = frame.resize((width, height), Image.Resampling.NEAREST)
     frame.save(output_path, format="JPEG", quality=78, optimize=True)
 
 
