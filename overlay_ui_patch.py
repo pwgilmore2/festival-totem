@@ -23,7 +23,7 @@ _anchor = '<div class="textTop"><button id="textMaster" class="textToggle" oncli
 if _anchor not in phone_server.PHONE_HTML:
     _anchor = '<div class="textTop"><button id="textMaster" class="textToggle" onclick="toggleTextMaster()">TEXT: OFF</button><button onclick="refreshText()">↻ APPLY SETTINGS</button></div>'
 _insert = _anchor.replace('TEXT: OFF', 'OVERLAY: OFF') + r'''
-<div class="iconSection"><div class="quickLabel">Pixel Icons — tap to add, tap the active icon again to remove</div><div class="overlayHint">Icons use the full-detail 32×32 masters when alone, then scale down only when text shares the screen.</div><div id="overlayIconGrid" class="iconGrid"></div></div>
+<div class="iconSection"><div class="quickLabel">Pixel Icons — tap to add, tap the active icon again to remove</div><div class="overlayHint">Icons use the full-detail 32×32 masters and stay large when text shares the screen.</div><div id="overlayIconGrid" class="iconGrid"></div></div>
 '''
 phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace(_anchor, _insert, 1)
 
@@ -53,13 +53,10 @@ function renderOverlayIcons(){
  document.querySelectorAll('[data-overlay-icon]').forEach(b=>b.classList.toggle('active',overlayIconEnabledLocal&&b.dataset.overlayIcon===overlayIconLocal));
 }
 function selectOverlayIcon(name){
- const wasEnabled=overlayIconEnabledLocal;
- if(wasEnabled&&overlayIconLocal===name)overlayIconEnabledLocal=false;else{overlayIconLocal=name;overlayIconEnabledLocal=true}
+ if(overlayIconEnabledLocal&&overlayIconLocal===name)overlayIconEnabledLocal=false;else{overlayIconLocal=name;overlayIconEnabledLocal=true}
  syncOverlayUI();
- const p=textPayload();
- if(textEnabledLocal){cmd('text_settings',p)}
- else if(overlayIconEnabledLocal){cmd('text_show',p)}
- else{cmd('text_hide')}
+ // Icon state is independent from text visibility. Never issue text_show here.
+ cmd('text_settings',textPayload());
 }
 function setOverlayFont(name){if(['Pixel','Quest','Block'].includes(name)){textFont.value=name;textChanged();syncOverlayUI()}}
 function setOverlayMotion(name){if(!['Static','Float','Bounce'].includes(name))return;overlayMotionLocal=name;textMotion.value='Static';syncOverlayUI();textChanged()}
@@ -75,17 +72,13 @@ function syncOverlayUI(){
  const wave=document.getElementById('textWaveToggle');if(wave)wave.style.display='none';
 }
 const _overlayPayloadBase=textPayload;
-textPayload=function(){let p=_overlayPayloadBase();p.overlay_icon=overlayIconLocal;p.overlay_icon_enabled=overlayIconEnabledLocal;p.overlay_motion=overlayMotionLocal;p.overlay_text_visible=!!textEnabledLocal;p.wave=false;p.speed=textSpeeds[textSpeedLocal]||22;return p};
+textPayload=function(){let p=_overlayPayloadBase();p.overlay_icon=overlayIconLocal;p.overlay_icon_enabled=overlayIconEnabledLocal;p.overlay_motion=overlayMotionLocal;p.wave=false;p.speed=textSpeeds[textSpeedLocal]||22;return p};
 
-// Replace, rather than wrap, the legacy master functions so they can no longer
-// write TEXT: ON/OFF during polling.
-syncTextMaster=function(){let b=document.getElementById('textMaster');if(!b)return;b.textContent='OVERLAY: '+(textEnabledLocal?'ON':'OFF');b.classList.toggle('active',textEnabledLocal)};
+syncTextMaster=function(){let b=document.getElementById('textMaster');if(!b)return;b.textContent='OVERLAY TEXT: '+(textEnabledLocal?'ON':'OFF');b.classList.toggle('active',textEnabledLocal)};
 toggleTextMaster=function(){
  textEnabledLocal=!textEnabledLocal;
  const p=textPayload();
- if(textEnabledLocal)cmd('text_show',p);
- else if(overlayIconEnabledLocal)cmd('text_show',p);
- else cmd('text_hide');
+ if(textEnabledLocal)cmd('text_show',p);else cmd('text_hide');
  syncTextMaster();
 };
 
@@ -93,7 +86,7 @@ const _overlaySyncBase=syncTextUI;
 syncTextUI=function(){
  _overlaySyncBase();let t=state.text||{};
  overlayIconLocal=t.overlay_icon||overlayIconLocal||'Heart';overlayIconEnabledLocal=!!t.overlay_icon_enabled;overlayMotionLocal=t.overlay_motion||overlayMotionLocal||'Static';
- textEnabledLocal=!!t.overlay_text_visible;
+ textEnabledLocal=!!t.enabled;
  if(!['Pixel','Quest','Block'].includes(textFont.value))textFont.value='Pixel';if(!textSpeedLocal)textSpeedLocal='Medium';textWaveLocal=false;syncOverlayUI();
 };
 if(typeof textSpeedLocal!=='undefined'&&!textSpeedLocal)textSpeedLocal='Medium';
