@@ -1,5 +1,5 @@
 import phone_server
-import performance_extras
+import ui_cleanup_server
 
 # State-driven controller UI: text tiles and tab indicators reflect the runtime,
 # not browser-local guesses about what should be active.
@@ -93,32 +93,10 @@ setInterval(syncTabStatus,120);
 phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('</body>', _STATE_JS + '</body>', 1)
 
 
-class PhoneControlServer(performance_extras.PhoneControlServer):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._active_guest_kind = None
+class PhoneControlServer(ui_cleanup_server.PhoneControlServer):
+    """Controller state UI over the normal server chain.
 
-    def get_commands(self):
-        commands = list(super().get_commands())
-        for data in commands:
-            if not isinstance(data, dict):
-                continue
-            command = data.get('command')
-            value = data.get('value')
-            if command == 'guest_action' and isinstance(value, dict):
-                kind = str(value.get('kind', '')).lower()
-                self._active_guest_kind = getattr(performance_extras, '_chaos_mode', None) or kind or None
-            elif command == 'guest_xy':
-                self._active_guest_kind = 'XY Pad'
-            elif command == 'guest_stop':
-                self._active_guest_kind = None
-        return commands
-
-    def update_state(self, state):
-        if isinstance(state, dict):
-            guest = dict(state.get('guest') or {})
-            guest['active'] = bool(self._active_guest_kind)
-            guest['kind'] = self._active_guest_kind
-            state = dict(state)
-            state['guest'] = guest
-        return super().update_state(state)
+    Runtime features such as Chaos own their state in simulator.py; this class
+    no longer intercepts commands or synthesizes runtime status.
+    """
+    pass
