@@ -130,14 +130,14 @@ class OverlayRenderer:
         return None if best is None else (best[1], best[2])
 
     def _text_layout(self, text, requested_scale, font):
-        for scale in range(requested_scale, 0, -1):
-            width = self.text.text_width(text, scale, font)
-            if width <= self.width - 4:
-                return "single", scale, (text,)
-            lines = self._split_two_lines(text, scale, font)
-            if lines:
-                return "double", scale, lines
-        return "scroll", 1, (text,)
+        """Respect the chosen size exactly; only layout is automatic."""
+        width = self.text.text_width(text, requested_scale, font)
+        if width <= self.width - 4:
+            return "single", requested_scale, (text,)
+        lines = self._split_two_lines(text, requested_scale, font)
+        if lines:
+            return "double", requested_scale, lines
+        return "scroll", requested_scale, (text,)
 
     def _text_time(self, seed, signature):
         side = "back" if int(seed or 0) >= 1000 else "front"
