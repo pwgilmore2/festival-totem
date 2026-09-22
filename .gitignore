@@ -1,11 +1,13 @@
-# macOS
-.DS_Store
-
-# Python
+.venv/
+venv/
 __pycache__/
 *.py[cod]
+.DS_Store
 
-# Local certificates
+assets/images/*
+!assets/images/.gitkeep
+
+# Local HTTPS certificates and private keys
 certs/
 
 # Editor / local tooling
