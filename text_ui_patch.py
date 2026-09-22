@@ -3,11 +3,36 @@ import random
 
 import phone_server
 import performance_extras
+import controller_state_ui
 from text_engine import parse_color, hsv_color, clamp01
+
+_audio_modes = {"front": "Off", "back": "Off"}
+_startup_seeded = False
+
+
+def _side(seed):
+    return "back" if int(seed or 0) >= 1000 else "front"
+
+
+# The normal scrolling renderer lives behind performance_extras._original_render.
+# Wrap it so the audio mode can stay device/runtime state without requiring a
+# simulator-core rewrite just for this UI feature.
+_base_original_render = performance_extras._original_render
+
+
+def _audio_render(renderer, display, settings, t, signals=None, seed=0, clear_background=True):
+    st = dict(settings)
+    st["audio_reactivity"] = _audio_modes[_side(seed)]
+    return _base_original_render(renderer, display, st, t, signals, seed, clear_background)
+
+
+performance_extras._original_render = _audio_render
 
 
 def _static_auto(renderer, display, settings, t, signals, seed, clear_background):
     signals = signals or {}
+    settings = dict(settings)
+    settings["audio_reactivity"] = _audio_modes[_side(seed)]
     text = str(settings.get("message", "") or " ").upper()[:120]
     font = settings.get("font", "Pixel")
     color_mode = settings.get("color_mode", "Rainbow")
@@ -96,6 +121,77 @@ def _static_auto(renderer, display, settings, t, signals, seed, clear_background
 
 performance_extras._draw_static_auto = _static_auto
 
+
+# Capture audio-reactivity settings before simulator.py consumes the commands.
+_base_get_commands = controller_state_ui.PhoneControlServer.get_commands
+
+
+def _get_commands(self):
+    commands = list(_base_get_commands(self))
+    target = getattr(performance_extras, "_target", "both")
+    for data in commands:
+        if not isinstance(data, dict):
+            continue
+        if data.get("command") == "set_target" and data.get("value") in ("front", "back", "both"):
+            target = data.get("value")
+        if data.get("command") in ("text_settings", "text_show", "text_refresh"):
+            value = data.get("value")
+            if isinstance(value, dict):
+                mode = str(value.get("audio_reactivity", "Off"))
+                if mode not in ("Off", "Subtle", "Reactive"):
+                    mode = "Off"
+                sides = ("front", "back") if target == "both" else (target,)
+                for side in sides:
+                    _audio_modes[side] = mode
+    return commands
+
+
+controller_state_ui.PhoneControlServer.get_commands = _get_commands
+
+
+# Seed startup with two independent 10-second shuffles on the first full state.
+# This also injects the runtime-only audio mode back into phone state so polling
+# never snaps the selector to Off.
+_base_update_state = controller_state_ui.PhoneControlServer.update_state
+
+
+def _update_state(self, state):
+    global _startup_seeded
+    if isinstance(state, dict):
+        state = dict(state)
+        panels = dict(state.get("panels") or {})
+        for side in ("front", "back"):
+            panel = dict(panels.get(side) or {})
+            text = dict(panel.get("text") or {})
+            text["audio_reactivity"] = _audio_modes[side]
+            panel["text"] = text
+            panels[side] = panel
+        state["panels"] = panels
+        ref = state.get("reference_side", "front")
+        if isinstance(state.get("text"), dict):
+            t = dict(state["text"])
+            t["audio_reactivity"] = _audio_modes.get(ref, "Off")
+            state["text"] = t
+
+        if not _startup_seeded:
+            library = list(state.get("library") or [])
+            ids = [int(item.get("index")) for item in library if isinstance(item, dict) and item.get("index") is not None]
+            if ids:
+                _startup_seeded = True
+                front = list(ids); back = list(ids)
+                random.shuffle(front); random.shuffle(back)
+                if len(ids) > 1 and front[0] == back[0]:
+                    back[0], back[1] = back[1], back[0]
+                self.add_command("set_target", "front")
+                self.add_command("slideshow_start", {"indices": front, "duration": 10.0, "shuffle": False, "label": "All"})
+                self.add_command("set_target", "back")
+                self.add_command("slideshow_start", {"indices": back, "duration": 10.0, "shuffle": False, "label": "All"})
+                self.add_command("set_target", "both")
+    return _base_update_state(self, state)
+
+
+controller_state_ui.PhoneControlServer.update_state = _update_state
+
 _CSS = r'''
 <style>
 .textMotionExtras{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
@@ -120,6 +216,8 @@ let textWaveLocal=false;
       row.insertAdjacentElement('afterend',extra);
     }
   }
+  const duration=document.getElementById('duration');
+  if(duration&&durationPending==null){duration.value='10';dv.textContent='10s'}
 })();
 function toggleTextWave(){textWaveLocal=!textWaveLocal;syncTextMotionExtras();textChanged()}
 function syncTextMotionExtras(){
