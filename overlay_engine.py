@@ -1,15 +1,15 @@
 import math
 import random
 
-from overlay_sprite_assets import SPRITES
+from overlay_exact_assets import sprite_rgba
 from text_engine import TextRenderer, clamp01, hsv_color, parse_color
 
 
 class OverlayRenderer:
     """Native final-frame overlay compositor.
 
-    This renderer owns icon and overlay-text drawing. It deliberately does not
-    patch TextRenderer or the controller effect system.
+    Icons use authored 32x32 masters rendered 1:1. No icon scaling, outlining,
+    gap filling, or sprite morphology occurs here.
     """
 
     def __init__(self, width, height):
@@ -17,90 +17,65 @@ class OverlayRenderer:
         self.height = height
         self.text = TextRenderer(width, height)
 
-    @staticmethod
-    def _palette_index(ch):
-        return ord(ch) - 33
-
     def _put(self, display, x, y, color):
         if 0 <= x < display.width and 0 <= y < display.height:
             display.set_pixel(x, y, color)
-
-    def _sprite(self, name):
-        return SPRITES.get(name, SPRITES["Heart"])
-
-    def _dims(self, name):
-        rows = self._sprite(name)["rows"]
-        return max(len(r) for r in rows), len(rows)
 
     def draw_icon(self, display, state, text_settings, t, signals=None, seed=0, text_enabled=False):
         if not state or not state.get("icon_enabled"):
             return
 
+        # Until we add separately authored 16x16 companions, mixed text+icon
+        # mode deliberately shows text only. Never resample a 32x32 master.
+        if text_enabled:
+            return
+
         signals = signals or {}
         name = state.get("icon", "Heart")
         motion = state.get("motion", "Static")
-        data = self._sprite(name)
-        rows = data["rows"]
-        palette = data["palette"]
-        sw, sh = self._dims(name)
+        rgba = sprite_rgba(name)
 
-        # Keep the approved sprite large. When text is present, move it upward
-        # instead of aggressively shrinking it.
-        target_h = 30 if not text_enabled else 27
-        cx = self.width / 2
-        cy = self.height / 2 if not text_enabled else 12.5
-
+        # Neutral placement is the exact 32x32 authored canvas at (0, 0).
+        # Motion only translates by whole pixels; it never resizes the art.
+        x0 = 0
+        y0 = 0
         speed = max(1.0, min(40.0, float(text_settings.get("speed", 22.0))))
         rate = speed / 22.0
         if motion == "Float":
-            cx += math.sin(t * 1.35 * rate) * 2.0
-            cy += math.cos(t * 1.05 * rate) * 1.25
+            x0 += int(round(math.sin(t * 1.35 * rate) * 2.0))
+            y0 += int(round(math.cos(t * 1.05 * rate) * 1.0))
         elif motion == "Bounce":
-            cy += -abs(math.sin(t * 2.5 * rate)) * 2.5 + 1.25
+            y0 += int(round(-abs(math.sin(t * 2.5 * rate)) * 2.0 + 1.0))
 
         bass = clamp01(signals.get("bass", 0.0))
         mids = clamp01(signals.get("mids", 0.0))
         beat = bool(signals.get("beat", False))
         audio_mode = text_settings.get("audio_reactivity", "Off")
         if audio_mode == "Subtle":
-            cy += math.sin(t * 5.0) * bass * 1.0
+            y0 += int(round(math.sin(t * 5.0) * bass))
             if beat:
-                cy -= 1
+                y0 -= 1
         elif audio_mode == "Reactive":
-            cy += math.sin(t * 6.0) * bass * 1.6
-            cx += math.sin(t * 3.1) * mids * 1.2
+            y0 += int(round(math.sin(t * 6.0) * bass * 1.5))
+            x0 += int(round(math.sin(t * 3.1) * mids))
             if beat:
-                cy -= 1
+                y0 -= 1
 
         pulse = .12 if text_settings.get("beat_pulse") and beat else 0.0
         glow = bool(text_settings.get("glow"))
         glitch = bool(text_settings.get("glitch"))
         rng = random.Random(seed + int(t * 18))
 
-        target_h = max(6, min(self.height, int(round(target_h))))
-        target_w = max(6, int(round(sw * target_h / max(1, sh))))
-        x0 = int(round(cx - target_w / 2))
-        y0 = int(round(cy - target_h / 2))
-
         pixels = []
-        for ty in range(target_h):
-            sy = min(sh - 1, int(ty * sh / target_h))
-            row = rows[sy]
-            for tx in range(target_w):
-                sx = min(sw - 1, int(tx * sw / target_w))
-                if sx >= len(row):
+        for sy, row in enumerate(rgba):
+            for sx, (r, g, b, a) in enumerate(row):
+                if a == 0:
                     continue
-                ch = row[sx]
-                if ch == ".":
-                    continue
-                idx = self._palette_index(ch)
-                if not 0 <= idx < len(palette):
-                    continue
-                px = x0 + tx
-                py = y0 + ty
+                px = x0 + sx
+                py = y0 + sy
                 if glitch and rng.random() < .05:
                     px += rng.choice((-1, 1))
-                color = palette[idx]
+                color = (r, g, b)
                 if pulse:
                     color = tuple(min(255, int(c * (1.0 + pulse))) for c in color)
                 pixels.append((px, py, color))
