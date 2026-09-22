@@ -7,7 +7,8 @@ from image_assets import ImageLibrary
 from icon_assets import ICON_LIBRARY
 from runtime_io import SignalStore, VirtualDisplayBackend
 from secure_phone_server import PhoneControlServer
-from visual_engine import TransitionManager, VisualLayerEngine, TRANSITIONS, LAYER_KEYS
+from visual_engine import VisualLayerEngine, TRANSITIONS, LAYER_KEYS, copy_pixels
+from transition_engine import TransitionManager, INTENSE_TRANSITIONS
 from text_engine import TextRenderer, TEXT_FONTS, TEXT_MOTIONS, TEXT_COLORS, TEXT_EFFECTS, TEXT_BACKGROUNDS
 from overlay_engine import OverlayRenderer
 
@@ -28,7 +29,10 @@ signal_store=SignalStore()
 audio=signal_store.audio
 motion=signal_store.motion
 particles={s:ParticleSystem(W,H,count=60) for s in SIDES}
-transitions={s:TransitionManager(W,H) for s in SIDES}
+content_transitions={s:TransitionManager(W,H) for s in SIDES}
+scene_transitions={s:TransitionManager(W,H) for s in SIDES}
+content_snapshots={s:None for s in SIDES}
+scene_snapshots={s:None for s in SIDES}
 layer_engine=VisualLayerEngine(W,H)
 text_engine=TextRenderer(W,H)
 overlay_engine=OverlayRenderer(W,H)
@@ -106,7 +110,8 @@ def choose_transition(side):
     ts=panels[side]["transition"]
     return random.choice([x for x in TRANSITIONS if x!="None"]) if ts["random"] else ts["kind"]
 def begin_transition(side):
-    ts=panels[side]["transition"];transitions[side].begin(displays[side],choose_transition(side),ts["duration"])
+    ts=panels[side]["transition"]
+    content_transitions[side].begin(displays[side],choose_transition(side),ts["duration"],source=content_snapshots[side])
 def stop_show(side):
     sh=panels[side]["slideshow"];sh["active"]=False;sh["elapsed"]=0.0
 
@@ -144,25 +149,49 @@ def step_filtered(value):
         except ValueError:p=-1 if delta>0 else 0
         select_for_side(side,ids[(p+delta)%len(ids)])
 
+def next_index_for_side(side,fallback_ids):
+    sh=panels[side]["slideshow"]
+    ids=list(sh.get("indices",[])) if sh.get("active") and sh.get("indices") else fallback_ids
+    if not ids:return None,None
+    cur=panels[side]["image_index"]
+    try:p=ids.index(cur)
+    except ValueError:p=-1
+    return ids[(p+1)%len(ids)],p
+
+def commit_transition_next(side,nxt,p):
+    if nxt is None:return
+    sh=panels[side]["slideshow"]
+    panels[side]["image_index"]=nxt
+    controllers[side].set_effect("Image")
+    if sh.get("active"):
+        sh["position"]=(p+1)%len(sh["indices"])
+        sh["elapsed"]=0.0
+
 def pixel_melt_next(value):
     if not isinstance(value,dict):return
     fallback_ids=clean_indices(value.get("indices",[]))
     try:duration=max(.25,min(5.0,float(value.get("duration",1.8))))
     except (TypeError,ValueError):duration=1.8
     for side in target_sides():
-        sh=panels[side]["slideshow"]
-        ids=list(sh.get("indices",[])) if sh.get("active") and sh.get("indices") else fallback_ids
-        if not ids:continue
-        cur=panels[side]["image_index"]
-        try:p=ids.index(cur)
-        except ValueError:p=-1
-        nxt=ids[(p+1)%len(ids)]
-        transitions[side].begin(displays[side],"Melt",duration)
-        panels[side]["image_index"]=nxt
-        controllers[side].set_effect("Image")
-        if sh.get("active"):
-            sh["position"]=(p+1)%len(ids)
-            sh["elapsed"]=0.0
+        nxt,p=next_index_for_side(side,fallback_ids)
+        if nxt is None:continue
+        content_transitions[side].begin(displays[side],"Melt",duration,source=content_snapshots[side])
+        commit_transition_next(side,nxt,p)
+
+def intense_transition_next(value):
+    global active_target
+    if not isinstance(value,dict):return
+    fallback_ids=clean_indices(value.get("indices",[]))
+    kind=str(value.get("kind","Morph"))
+    if kind not in INTENSE_TRANSITIONS:kind="Morph"
+    try:duration=max(.25,min(4.0,float(value.get("duration",1.15))))
+    except (TypeError,ValueError):duration=1.15
+    active_target="both"
+    for side in SIDES:
+        nxt,p=next_index_for_side(side,fallback_ids)
+        if nxt is None:continue
+        scene_transitions[side].begin(displays[side],kind,duration,source=scene_snapshots[side])
+        commit_transition_next(side,nxt,p)
 
 def start_show(value):
     global current_scene
@@ -174,10 +203,11 @@ def start_show(value):
     shuffle=bool(value.get("shuffle",False));label=str(value.get("label","Selection"))[:80]
     order=list(ids)
     if shuffle:random.shuffle(order)
-    for side in target_sides():
+    sides=target_sides()
+    for side in sides:
         beat_sync=panels[side]["slideshow"].get("beat_sync",True)
         side_order=list(order)
-        if shuffle and len(target_sides())==1:random.shuffle(side_order)
+        if shuffle and len(sides)==1:random.shuffle(side_order)
         panels[side]["slideshow"].update(active=True,indices=side_order,position=0,duration=duration,elapsed=0.0,shuffle=shuffle,label=label,beat_sync=beat_sync)
         select_for_side(side,side_order[0],stop=False)
     current_scene="Custom"
@@ -364,7 +394,7 @@ def refresh_text(value=None):
 def trigger_guest(value):
     global guest
     if guest["locked"] or not isinstance(value,dict):return
-    kind=str(value.get("kind","")).lower();strength=clamp01(value.get("strength",1.0))
+    kind=str(value.get("kind","" )).lower();strength=clamp01(value.get("strength",1.0))
     guest={"kind":kind,"strength":strength,"until":time.monotonic()+float(value.get("duration",30)),"locked":False,"x":.5,"y":.5,"velocity":0.0}
 
 def update_guest_xy(value):
@@ -413,6 +443,7 @@ def command(data):
     if c=="select_image":select_image(v);return
     if c=="filtered_step":step_filtered(v);return
     if c=="pixel_melt_next":pixel_melt_next(v);return
+    if c=="intense_transition_next":intense_transition_next(v);return
     if c=="slideshow_start":start_show(v);return
     if c=="slideshow_stop":
         for s in target_sides():stop_show(s)
@@ -513,13 +544,18 @@ while running:
     for s in SIDES:
         controllers[s].update(dt)
         if not controllers[s].paused:particles[s].update(dt)
-        transitions[s].update(dt)
+        content_transitions[s].update(dt)
+        scene_transitions[s].update(dt)
     update_shows(dt);update_icon_transitions()
     if guest["kind"] and time.monotonic()>guest["until"]:stop_guest()
     sig=signals()
     for s in SIDES:
         controllers[s].effect(displays[s],controllers[s].time)
-        transitions[s].apply(displays[s])
+
+        # Content transitions affect only the GIF/effect beneath audio and overlays.
+        content_transitions[s].apply(displays[s])
+        content_snapshots[s]=copy_pixels(displays[s])
+
         r=panels[s]["reactive"]
         if r["enabled"]:layer_engine.apply(displays[s],sig,r["layers"],r["strength"],frame_number,1000 if s=="back" else 0)
 
@@ -531,6 +567,11 @@ while running:
         icon_settings=dict(st);icon_settings["audio_reactivity"]="Off"
         overlay_engine.draw_icon(displays[s],icon,icon_settings,controllers[s].time,sig,1000 if s=="back" else 0,text_enabled=text_enabled)
 
+        # Full-scene transitions intentionally move GIF + reactive layers + overlays.
+        scene_transitions[s].apply(displays[s])
+        scene_snapshots[s]=copy_pixels(displays[s])
+
+        # Chaos/guest effects remain final-frame performance effects.
         apply_guest_effect(displays[s],frame_number+(1000 if s=="back" else 0))
     signal_store.end_frame()
     screen.fill((15,15,18));draw_panel("front",0);draw_panel("back",PW+GAP);draw_ui()
