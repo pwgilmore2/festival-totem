@@ -182,11 +182,13 @@ class TextRenderer:
         return self.width - offset, y
 
     def _spacing(self, scale, font):
+        # Extra breathing room keeps glow/rave halos from visually merging letters.
+        # Width calculations use this same spacing, so Static auto-fit remains accurate.
         if font == "Arcade":
-            return max(1, scale + 1)
+            return max(2, scale + 1)
         if font == "Quest":
-            return max(1, scale + (1 if scale > 1 else 0))
-        return max(1, scale)
+            return max(2, scale + (1 if scale > 1 else 0))
+        return max(2, scale + 1)
 
     def _draw_text(self, display, text, x, y, base_color, scale, font, color_mode, t, pulse):
         cursor = x
