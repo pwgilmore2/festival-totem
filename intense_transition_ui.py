@@ -1,9 +1,8 @@
 import phone_server
 import controller_state_ui
 import intense_transition_patch  # noqa: F401
-import visual_engine
 
-INTENSE = list(getattr(visual_engine, "INTENSE_TRANSITIONS", []))
+INTENSE = list(intense_transition_patch.INTENSE_TRANSITIONS)
 
 _CSS = r'''
 <style>
@@ -63,29 +62,11 @@ function intenseHoldEnd(e){
 '''
 phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('</body>', _JS + '</body>', 1)
 
-# Route the one-shot command through the proven pixel_melt_next simulator path.
-# The override expires after the front/back begin calls so normal Melt remains Melt.
-_pending_kind = None
-_pending_uses = 0
-_original_begin = visual_engine.TransitionManager.begin
-
-def _begin_with_pending(self, display, kind='Fade', duration=0.8):
-    global _pending_kind, _pending_uses
-    if kind == 'Melt' and _pending_kind in INTENSE and _pending_uses > 0:
-        chosen = _pending_kind
-        _pending_uses -= 1
-        if _pending_uses <= 0:
-            _pending_kind = None
-            _pending_uses = 0
-        return _original_begin(self, display, chosen, duration)
-    return _original_begin(self, display, kind, duration)
-
-visual_engine.TransitionManager.begin = _begin_with_pending
-
+# Route one-shot intense commands explicitly. The simulator now owns transition
+# scope, so no TransitionManager monkeypatch or disguised Melt command is needed.
 _base_get_commands = controller_state_ui.PhoneControlServer.get_commands
 
 def _get_commands(self):
-    global _pending_kind, _pending_uses
     out=[]
     for data in _base_get_commands(self):
         if not isinstance(data, dict) or data.get('command') != 'intense_transition_next':
@@ -93,10 +74,16 @@ def _get_commands(self):
         value=data.get('value') if isinstance(data.get('value'),dict) else {}
         kind=str(value.get('kind','Morph'))
         if kind not in INTENSE: kind='Morph'
-        _pending_kind=kind
-        _pending_uses=2
+        try:
+            duration=max(.25,min(4.0,float(value.get('duration',1.15))))
+        except (TypeError,ValueError):
+            duration=1.15
         out.append({'command':'set_target','value':'both'})
-        out.append({'command':'pixel_melt_next','value':{'indices':value.get('indices',[]),'duration':value.get('duration',1.15)}})
+        out.append({'command':'pixel_melt_next','value':{
+            'indices':value.get('indices',[]),
+            'duration':duration,
+            'kind':kind,
+        }})
     return out
 
 controller_state_ui.PhoneControlServer.get_commands = _get_commands
