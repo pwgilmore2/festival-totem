@@ -4,7 +4,7 @@ import random
 import controller_state_ui
 import performance_extras
 from overlay_sprite_assets import OVERLAY_ICONS, SPRITES
-from text_engine import clamp01
+from text_engine import TextRenderer, clamp01
 
 _overlay = {
     "front": {"icon_enabled": False, "icon": "Heart", "motion": "Static"},
@@ -49,6 +49,8 @@ def _draw_sprite(display, name, cx, cy, target_h, glow=False, glitch=False, puls
     y0 = int(round(cy - target_h / 2))
     rng = random.Random(seed)
 
+    # At 64x32 this is only a few hundred pixels. Build the final colored points
+    # once per frame, then optionally add a 1px glow around them.
     pixels = []
     for ty in range(target_h):
         sy = min(sh - 1, int(ty * sh / target_h))
@@ -82,9 +84,8 @@ def _icon_layout(renderer, settings, name):
     if not message:
         return renderer.width / 2, renderer.height / 2, 27
 
-    # With text present, preserve the text first and let the icon flex around it.
-    # Short static messages get an icon above the text; scrolling/long text gets
-    # a compact pinned icon at the left edge so it stays readable.
+    # Text + icon: protect text readability first. Short static messages put the
+    # icon above; scrolling or longer text pins a compact icon to the left.
     if motion == "Static" and len(message) <= 10:
         return renderer.width / 2, 6.5, 11
     return 7.0, renderer.height / 2, 12
@@ -136,34 +137,24 @@ def _render_icon_layer(renderer, display, settings, t, signals=None, seed=0):
     )
 
 
-_base_original_render = performance_extras._original_render
-_base_static_auto = performance_extras._draw_static_auto
+# IMPORTANT: wrap the final TextRenderer entry point, not performance_extras'
+# internal fallback helpers. The previous implementation wrapped
+# performance_extras._original_render, which static text can call internally;
+# that created a recursive render loop as soon as an icon was enabled.
+_base_text_render = TextRenderer.render
 
 
-def _overlay_render(renderer, display, settings, t, signals=None, seed=0, clear_background=True):
-    side = _side(seed)
-    st = _overlay[side]
-    adjusted = dict(settings)
-    if st.get("icon_enabled") and str(adjusted.get("message", "") or "").strip():
-        # Give combined layouts more breathing room. The icon is allowed to shrink
-        # first; text remains legible and centered/scrolling as before.
-        adjusted["scale"] = min(1, int(adjusted.get("scale", 1)))
-    _base_original_render(renderer, display, adjusted, t, signals, seed, clear_background)
-    _render_icon_layer(renderer, display, adjusted, t, signals, seed)
-
-
-def _overlay_static(renderer, display, settings, t, signals, seed, clear_background):
+def _render_with_overlay(self, display, settings, t, signals=None, seed=0, clear_background=True):
     side = _side(seed)
     st = _overlay[side]
     adjusted = dict(settings)
     if st.get("icon_enabled") and str(adjusted.get("message", "") or "").strip():
         adjusted["scale"] = 1
-    _base_static_auto(renderer, display, adjusted, t, signals, seed, clear_background)
-    _render_icon_layer(renderer, display, adjusted, t, signals, seed)
+    _base_text_render(self, display, adjusted, t, signals, seed, clear_background)
+    _render_icon_layer(self, display, adjusted, t, signals, seed)
 
 
-performance_extras._original_render = _overlay_render
-performance_extras._draw_static_auto = _overlay_static
+TextRenderer.render = _render_with_overlay
 
 _base_get_commands = controller_state_ui.PhoneControlServer.get_commands
 
