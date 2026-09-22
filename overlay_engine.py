@@ -9,9 +9,10 @@ from text_engine import TextRenderer, clamp01, hsv_color, parse_color
 class OverlayRenderer:
     """Native final-frame overlay compositor.
 
-    Icons come from ``IconLibrary`` and render from authored 32x32 masters 1:1.
-    Icon motion only translates authored pixels; no scaling or morphology occurs.
-    Text layout is automatic: static one-line, static two-line, then fast scroll.
+    Icons render from authored 32x32 masters 1:1. Text layout is automatic:
+    static one-line, static two-line, then fast scroll. Text visuals are clean
+    when audio reactivity is Off and derive their motion/pulse from the live
+    music signal when Subtle or Reactive is selected.
     """
 
     def __init__(self, width, height):
@@ -77,11 +78,7 @@ class OverlayRenderer:
             if beat:
                 y0 -= 1
 
-        pulse = .12 if text_settings.get("beat_pulse") and beat else 0.0
-        glow = bool(text_settings.get("glow"))
-        glitch = bool(text_settings.get("glitch"))
         rng = random.Random(seed + int(t * 18))
-
         pixels = []
         for sy, row in enumerate(rgba):
             for sx, (r, g, b, a) in enumerate(row):
@@ -93,19 +90,10 @@ class OverlayRenderer:
                         continue
                 px = x0 + sx
                 py = y0 + sy
-                if glitch and rng.random() < .05:
-                    px += rng.choice((-1, 1))
                 brightness = max(0.0, min(1.0, amount))
                 color = (int(r * brightness), int(g * brightness), int(b * brightness))
-                if pulse:
-                    color = tuple(min(255, int(c * (1.0 + pulse))) for c in color)
                 pixels.append((px, py, color))
 
-        if glow:
-            for px, py, color in pixels:
-                halo = tuple(max(8, int(c * .24)) for c in color)
-                for ox, oy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
-                    self._put(display, px + ox, py + oy, halo)
         for px, py, color in pixels:
             self._put(display, px, py, color)
 
@@ -130,7 +118,6 @@ class OverlayRenderer:
         return None if best is None else (best[1], best[2])
 
     def _text_layout(self, text, requested_scale, font):
-        """Respect the chosen size exactly; only layout is automatic."""
         width = self.text.text_width(text, requested_scale, font)
         if width <= self.width - 4:
             return "single", requested_scale, (text,)
@@ -148,7 +135,6 @@ class OverlayRenderer:
         return max(0.0, time.monotonic() - clock["started"])
 
     def draw_text(self, display, settings, t, signals=None, seed=0, bottom=False):
-        """Draw text without clearing/replacing the underlying content."""
         signals = signals or {}
         text = str(settings.get("message", "") or "").upper()[:120]
         if not text:
@@ -156,6 +142,8 @@ class OverlayRenderer:
 
         font = settings.get("font", "Pixel")
         color_mode = settings.get("color_mode", "Rainbow")
+        if color_mode == "Audio":
+            color_mode = "Rainbow"
         requested_scale = max(1, min(3, int(settings.get("scale", 1))))
         if bottom:
             requested_scale = 1
@@ -169,21 +157,32 @@ class OverlayRenderer:
         highs = clamp01(signals.get("highs", 0.0))
         beat = bool(signals.get("beat", False))
         audio_mode = settings.get("audio_reactivity", "Off")
+        if audio_mode not in ("Off", "Subtle", "Reactive"):
+            audio_mode = "Off"
 
         base = parse_color(settings.get("color", "#ffffff"))
-        if color_mode == "Audio":
-            base = hsv_color(210 + mids * 130 + bass * 30, .85, .65 + .35 * max(bass, mids, highs))
-
-        pulse = 1.35 if settings.get("beat_pulse") and beat else 1.0
+        pulse = 1.0
+        if audio_mode == "Subtle":
+            pulse = 1.0 + bass * 0.10 + (0.06 if beat else 0.0)
+        elif audio_mode == "Reactive":
+            pulse = 1.0 + bass * 0.24 + (0.16 if beat else 0.0)
 
         def draw_line(line, x, y):
             width = self.text.text_width(line, scale, font)
             if settings.get("backplate"):
                 self.text._backplate(display, x, y, width, 7 * scale)
-            if settings.get("glow"):
-                glow = tuple(min(255, int(c * .22)) for c in base)
+
+            # Audio-reactive glow replaces the old independent Text Style menu.
+            glow_strength = 0.0
+            if audio_mode == "Subtle":
+                glow_strength = 0.10 + highs * 0.05
+            elif audio_mode == "Reactive":
+                glow_strength = 0.17 + highs * 0.12
+            if glow_strength > 0:
+                glow = tuple(min(255, int(c * glow_strength)) for c in base)
                 for ox, oy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
                     self.text._draw_text(display, line, x + ox, y + oy, glow, scale, font, color_mode, text_t, pulse)
+
             self.text._draw_text(display, line, x, y, base, scale, font, color_mode, text_t, pulse)
 
         if layout == "single":
@@ -198,9 +197,15 @@ class OverlayRenderer:
             y2 = y1 + 7 * scale + gap
             for line, y in zip(lines, (y1, y2)):
                 width = self.text.text_width(line, scale, font)
-                draw_line(line, (self.width - width) // 2, y)
-            if settings.get("beat_pulse") and beat:
-                self.text._beat_flash(display, .10 + bass * .18)
+                x = (self.width - width) // 2
+                if audio_mode == "Subtle" and beat:
+                    y -= 1
+                elif audio_mode == "Reactive":
+                    x += int(round(math.sin(text_t * 3.1) * mids * 1.5))
+                    y += int(round(math.sin(text_t * 5.7) * bass * 1.5)) - (1 if beat else 0)
+                draw_line(line, x, y)
+            if audio_mode == "Reactive" and beat:
+                self.text._beat_flash(display, .08 + bass * .10)
             return
         else:
             line = lines[0]
@@ -212,13 +217,13 @@ class OverlayRenderer:
         if audio_mode == "Subtle":
             y -= 1 if beat else 0
         elif audio_mode == "Reactive":
-            x += int(round(math.sin(text_t * 3.2) * mids))
-            y -= 1 if beat else 0
-            if highs > .55:
+            x += int(round(math.sin(text_t * 3.1) * mids * 1.5))
+            y += int(round(math.sin(text_t * 5.7) * bass * 1.5)) - (1 if beat else 0)
+            if highs > .60:
                 rng = random.Random(seed + int(text_t * 20))
-                if rng.random() < highs * .2:
+                if rng.random() < highs * .12:
                     x += rng.choice((-1, 1))
 
         draw_line(line, x, y)
-        if settings.get("beat_pulse") and beat:
-            self.text._beat_flash(display, .10 + bass * .18)
+        if audio_mode == "Reactive" and beat:
+            self.text._beat_flash(display, .08 + bass * .10)
