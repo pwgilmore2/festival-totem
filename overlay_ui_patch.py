@@ -1,78 +1,111 @@
 import base64
 import io
-import json
-
-from PIL import Image
 
 import phone_server
+from PIL import Image
 from icon_assets import ICON_LIBRARY
-
-
-def _preview_data_urls():
-    out = {}
-    for asset in ICON_LIBRARY.assets:
-        im = Image.new("RGBA", (32, 32), (0, 0, 0, 0))
-        px = im.load()
-        for y, row in enumerate(asset.pixels):
-            for x, rgba in enumerate(row):
-                px[x, y] = tuple(rgba)
-        buf = io.BytesIO()
-        im.save(buf, format="PNG", optimize=True)
-        out[asset.name] = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
-    return out
-
 
 _CSS = r'''
 <style>
 .fontButtons{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:6px}.fontButtons button{min-height:48px}.fontButtons button.active,.iconTile.active{background:linear-gradient(135deg,#6c4cff,#00b8ff);box-shadow:0 0 0 2px #ffffff33 inset}
-.iconSection{margin:10px 0 16px;padding:12px 0 14px;border-bottom:1px solid #ffffff16}.iconGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin:9px 0 4px}.iconTile{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;min-height:112px;padding:8px}.iconTile canvas{width:72px;height:72px;image-rendering:pixelated}.iconTile span{font-size:11px;opacity:.8}.iconTile.active span{opacity:1;font-weight:700}
-#textWaveToggle{display:none!important}.textMotionExtras{grid-template-columns:1fr!important}.overlayHint{font-size:11px;opacity:.66;line-height:1.35;margin-top:5px}.modeNotice{margin:7px 0 0;padding:8px 10px;border-radius:10px;background:#ffffff0b;font-size:11px;opacity:.72}
+.iconCard{background:radial-gradient(circle at 15% 0%,#ff3d9a22,transparent 38%),radial-gradient(circle at 95% 5%,#00e5ff20,transparent 40%),#ffffff12}.iconGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin:9px 0 4px}.iconTile{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;min-height:112px;padding:8px}.iconTile img{width:72px;height:72px;object-fit:contain;image-rendering:pixelated}.iconTile span{font-size:11px;opacity:.8}.iconTile.active span{opacity:1;font-weight:700}
+#textWaveToggle{display:none!important}.textMotionExtras{grid-template-columns:1fr!important}.iconHint{font-size:11px;opacity:.68;line-height:1.4;margin:5px 0 10px}.modeNotice{margin:9px 0 0;padding:9px 10px;border-radius:10px;background:#ffffff0b;font-size:11px;opacity:.74}
 @media(max-width:520px){.iconGrid{grid-template-columns:repeat(2,1fr)}.iconTile{min-height:116px}.fontButtons{grid-template-columns:repeat(3,1fr)}}
 </style>
 '''
 phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('</head>', _CSS + '</head>', 1)
 
-phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('id="tabText" onclick="view(\'text\')">Text</button>', 'id="tabText" onclick="view(\'text\')">Overlay</button>')
-phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('>Text</button>', '>Overlay</button>')
-phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('<h2>Text Engine</h2>', '<h2>Overlay</h2>')
+# Icons are now a first-class controller surface. Restore the legacy text tab
+# wording and add a dedicated Icons tab immediately after it.
+phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('id="tabText" onclick="view(\'text\')">Overlay</button>', 'id="tabText" onclick="view(\'text\')">Text</button>')
+phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('id="tabText" onclick="view(\'text\')">Text</button>', 'id="tabText" onclick="view(\'text\')">Text</button><button id="tabIcons" onclick="view(\'icons\')">Icons</button>', 1)
+phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('<div class="card textCard"><h2>Overlay</h2>', '<div class="card textCard"><h2>Text</h2>')
 
-_anchor = '<div class="textTop"><button id="textMaster" class="textToggle" onclick="toggleTextMaster()">OVERLAY: OFF</button><button onclick="refreshText()">↻ APPLY SETTINGS</button></div>'
-if _anchor not in phone_server.PHONE_HTML:
-    _anchor = '<div class="textTop"><button id="textMaster" class="textToggle" onclick="toggleTextMaster()">TEXT: OFF</button><button onclick="refreshText()">↻ APPLY SETTINGS</button></div>'
-_insert = _anchor.replace('OVERLAY: OFF', 'TEXT: OFF') + r'''
-<div class="iconSection"><div class="quickLabel">32×32 Icon Layer — tap an icon to show it, tap again to clear</div><div class="overlayHint">Icons render authored PNG pixels 1:1 and bounce by default. Full-size icons and text are currently exclusive.</div><div id="overlayIconGrid" class="iconGrid"></div><div id="iconModeNotice" class="modeNotice">Selecting an icon hides text. Showing text hides the full-size icon.</div></div>
-'''
-phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace(_anchor, _insert, 1)
-
+# Text keeps the compact font buttons from the prior controller work.
 _font = '<div><div class="sh"><span>Font</span></div><select id="textFont" class="selectDark" onchange="textChanged()"></select></div>'
 _font_new = r'''<div><div class="sh"><span>Font</span></div><select id="textFont" class="selectDark" style="display:none" onchange="textChanged()"></select><div class="fontButtons"><button id="fontPixel" onclick="setOverlayFont('Pixel')">Pixel</button><button id="fontQuest" onclick="setOverlayFont('Quest')">Quest</button><button id="fontBlock" onclick="setOverlayFont('Block')">Block</button></div></div>'''
 phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace(_font, _font_new, 1)
 phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('Quick text — tap once to fire it immediately', 'Quick text — tap once to show it')
 
-_PREVIEWS_JSON = json.dumps(_preview_data_urls(), separators=(",", ":"))
+
+def _icon_preview_data():
+    out = {}
+    for asset in ICON_LIBRARY.assets:
+        im = Image.new('RGBA', (32, 32), (0, 0, 0, 0))
+        px = im.load()
+        for y, row in enumerate(asset.pixels):
+            for x, rgba in enumerate(row):
+                px[x, y] = tuple(rgba)
+        buf = io.BytesIO()
+        im.save(buf, format='PNG', optimize=True)
+        out[asset.name] = 'data:image/png;base64,' + base64.b64encode(buf.getvalue()).decode('ascii')
+    return out
+
+
+_ICON_PREVIEWS = _icon_preview_data()
+_ICONS_SECTION = r'''
+<section id="icons" class="view"><div class="card iconCard"><h2>Icons</h2>
+<div class="iconHint">32×32 PNG assets render 1:1 and bounce automatically. Tap an icon to show it; tap the active icon again to clear it.</div>
+<div id="overlayIconGrid" class="iconGrid"></div>
+<div class="modeNotice">Full-size icons and text are currently exclusive: selecting an icon hides text, and showing text hides the icon.</div>
+</div></section>
+'''
+# Keep the new section beside the other controller views.
+if '<section id="edit" class="view">' in phone_server.PHONE_HTML:
+    phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('<section id="edit" class="view">', _ICONS_SECTION + '<section id="edit" class="view">', 1)
+else:
+    phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('</body>', _ICONS_SECTION + '</body>', 1)
+
+import json
+_PREVIEWS_JSON = json.dumps(_ICON_PREVIEWS, separators=(',', ':'))
 _JS = r'''
 <script>
 let overlayIconLocal='',overlayIconEnabledLocal=false;
-const overlayIconPreviews=__PREVIEWS__;
-function drawIconPreview(canvas,name){
- const ctx=canvas.getContext('2d');canvas.width=32;canvas.height=32;ctx.clearRect(0,0,32,32);ctx.imageSmoothingEnabled=false;
- const src=overlayIconPreviews[name];if(!src)return;let img=new Image();img.onload=()=>{ctx.imageSmoothingEnabled=false;ctx.drawImage(img,0,0,32,32)};img.src=src;
-}
+const iconPreviews=__PREVIEWS__;
+
 function renderOverlayIcons(){
- const g=document.getElementById('overlayIconGrid');if(!g)return;const names=(state.overlay_icons||[]),sig=names.join('|');
- if(g.dataset.sig!==sig){g.dataset.sig=sig;g.innerHTML='';names.forEach(name=>{let b=document.createElement('button');b.className='iconTile';b.dataset.overlayIcon=name;b.onclick=()=>selectOverlayIcon(name);let c=document.createElement('canvas'),s=document.createElement('span');s.textContent=name;b.append(c,s);g.appendChild(b);drawIconPreview(c,name)})}
+ const g=document.getElementById('overlayIconGrid');if(!g)return;
+ const names=(state.overlay_icons||[]),sig=names.join('|');
+ if(g.dataset.sig!==sig){
+   g.dataset.sig=sig;g.innerHTML='';
+   names.forEach(name=>{
+     let b=document.createElement('button');b.className='iconTile';b.dataset.overlayIcon=name;b.onclick=()=>selectOverlayIcon(name);
+     let im=document.createElement('img');im.alt=name;im.src=iconPreviews[name]||'';
+     let s=document.createElement('span');s.textContent=name;b.append(im,s);g.appendChild(b)
+   })
+ }
  document.querySelectorAll('[data-overlay-icon]').forEach(b=>b.classList.toggle('active',overlayIconEnabledLocal&&b.dataset.overlayIcon===overlayIconLocal));
 }
 function selectOverlayIcon(name){cmd('icon_toggle',name)}
-function setOverlayFont(name){if(['Pixel','Quest','Block'].includes(name)){textFont.value=name;textChanged();syncOverlayUI()}}
-function syncOverlayLabel(){
- const tab=document.getElementById('tabText');if(tab)tab.textContent=(overlayIconEnabledLocal||textEnabledLocal)?'Overlay ●':'Overlay';
- const card=document.querySelector('.textCard h2');if(card)card.textContent='Overlay';
+function setOverlayFont(name){if(['Pixel','Quest','Block'].includes(name)){textFont.value=name;textChanged();syncSplitUI()}}
+
+// Extend the existing navigation without changing the behavior of Live,
+// Library, Text, Audio, Chaos, or Setup.
+const _iconsBaseView=view;
+view=function(n){
+ if(n==='icons'){
+   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+   document.querySelectorAll('.tabs button').forEach(b=>b.classList.remove('active'));
+   const panel=document.getElementById('icons'),tab=document.getElementById('tabIcons');
+   if(panel)panel.classList.add('active');if(tab)tab.classList.add('active');
+   const tc=document.getElementById('targetCard');if(tc)tc.style.display='';
+   renderOverlayIcons();return;
+ }
+ _iconsBaseView(n);
+ const panel=document.getElementById('icons'),tab=document.getElementById('tabIcons');
+ if(panel)panel.classList.remove('active');if(tab)tab.classList.remove('active');
 }
-function syncOverlayUI(){
+
+function syncSplitTabs(){
+ const tt=document.getElementById('tabText'),ti=document.getElementById('tabIcons');
+ if(tt){tt.textContent=textEnabledLocal?'Text ●':'Text';tt.classList.toggle('runtimeOn',!!textEnabledLocal)}
+ if(ti){ti.textContent=overlayIconEnabledLocal?'Icons ●':'Icons';ti.classList.toggle('runtimeOn',!!overlayIconEnabledLocal)}
+ const card=document.querySelector('.textCard h2');if(card)card.textContent='Text';
+}
+function syncSplitUI(){
  renderOverlayIcons();
  ['Pixel','Quest','Block'].forEach(n=>{let b=document.getElementById('font'+n);if(b)b.classList.toggle('active',textFont.value===n)});
- syncTextMaster();syncOverlayLabel();
+ syncTextMaster();syncSplitTabs();
  const wave=document.getElementById('textWaveToggle');if(wave)wave.style.display='none';
 }
 
@@ -83,14 +116,14 @@ toggleTextMaster=function(){
  syncTextMaster();
 };
 
-const _overlaySyncBase=syncTextUI;
+const _splitSyncBase=syncTextUI;
 syncTextUI=function(){
- _overlaySyncBase();let t=state.text||{},i=state.icon||{};
+ _splitSyncBase();let t=state.text||{},i=state.icon||{};
  overlayIconLocal=i.icon||overlayIconLocal||'';overlayIconEnabledLocal=!!i.icon_enabled;textEnabledLocal=!!t.enabled;
- if(!['Pixel','Quest','Block'].includes(textFont.value))textFont.value='Pixel';if(!textSpeedLocal)textSpeedLocal='Medium';textWaveLocal=false;syncOverlayUI();
+ if(!['Pixel','Quest','Block'].includes(textFont.value))textFont.value='Pixel';if(!textSpeedLocal)textSpeedLocal='Medium';textWaveLocal=false;syncSplitUI();
 };
-if(typeof textSpeedLocal!=='undefined'&&!textSpeedLocal)textSpeedLocal='Medium';
-window.addEventListener('load',()=>{syncOverlayUI()});
+setInterval(syncSplitTabs,150);
+window.addEventListener('load',()=>{syncSplitUI()});
 </script>
 '''.replace('__PREVIEWS__', _PREVIEWS_JSON)
 phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('</body>', _JS + '</body>', 1)
