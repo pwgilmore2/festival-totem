@@ -27,7 +27,7 @@ if start >= 0 and end >= 0:
 <button class="fxGlitch" onpointerdown="safeHoldStart(event,'glitch')" onpointermove="safeHoldMove(event)" onpointerup="safeHoldEnd(event)" onpointercancel="safeHoldEnd(event)">⚡<br>GLITCH</button>
 <button class="fxJumble" onpointerdown="safeHoldStart(event,'jumble')" onpointermove="safeHoldMove(event)" onpointerup="safeHoldEnd(event)" onpointercancel="safeHoldEnd(event)">🧩<br>JUMBLE</button>
 <button class="fxPixelMelt" onpointerdown="safeHoldStart(event,'pixelmelt')" onpointermove="safeHoldMove(event)" onpointerup="safeHoldEnd(event)" onpointercancel="safeHoldEnd(event)">🔥<br>PIXEL MELT → NEXT</button>
-<button class="fxMelt" onpointerdown="safeHoldStart(event,'meltdown')" onpointermove="safeHoldMove(event)" onpointerup="safeHoldEnd(event)" onpointercancel="safeHoldEnd(event)">🫠<br>MELTDOWN</button>
+<button class="fxMelt" onpointerdown="safeHoldStart(event,'meltdown')" onpointermove="safeHoldMove(event)" onpointerup="safeHoldEnd(event)" onpointercancel="safeHoldEnd(event)">🫠<br>MELT / REBUILD</button>
 </div></div>
 <div class="chaosGroup"><div class="chaosGroupLabel">Chill / Flow <span class="chaosGroupHint">slow builds, color drift, gentle warps</span></div><div class="chaosFxGrid">
 <button class="fxTrance" onpointerdown="safeHoldStart(event,'trance')" onpointermove="safeHoldMove(event)" onpointerup="safeHoldEnd(event)" onpointercancel="safeHoldEnd(event)">🌊<br>TRANCE</button>
@@ -47,13 +47,9 @@ _JS = r'''
 let safeHold=null;
 async function pixelMeltNext(){
   await cmd('set_target','both');
-  const tr=state.transition||{};
-  const restore={kind:tr.kind||'Fade',duration:tr.duration??.8,random:!!tr.random};
   const ids=(typeof visible==='function'?visible():(state.library||[])).map(x=>x.index);
   if(!ids.length)return;
-  await cmd('transition_settings',{kind:'Melt',duration:1.8,random:false});
-  await cmd('filtered_step',{indices:ids,delta:1});
-  setTimeout(()=>cmd('transition_settings',restore),220);
+  await cmd('pixel_melt_next',{indices:ids,duration:1.8});
 }
 function safeHoldStart(e,kind){
   if(e.pointerType==='mouse'&&e.button!==0)return;
