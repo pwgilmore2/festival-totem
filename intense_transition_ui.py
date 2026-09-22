@@ -15,7 +15,6 @@ _CSS = r'''
 '''
 phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('</head>', _CSS + '</head>', 1)
 
-# Add Intense -> Next below the existing Heavy / Impact controls.
 _anchor = '<div class="chaosGroup"><div class="chaosGroupLabel">Chill / Flow'
 if _anchor in phone_server.PHONE_HTML and 'id="intenseTransitionGrid"' not in phone_server.PHONE_HTML:
     block = r'''<div class="chaosGroup"><div class="chaosGroupLabel">Intense → Next <span class="chaosGroupHint">one-shot transition to the next GIF</span></div><div id="intenseTransitionGrid" class="intenseGrid"></div></div>
@@ -65,17 +64,19 @@ function intenseHoldEnd(e){
 phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('</body>', _JS + '</body>', 1)
 
 # Route the one-shot command through the proven pixel_melt_next simulator path.
-# We arm a one-use transition override; simulator.py then advances the slideshow
-# exactly as before while its hard-coded Melt begin becomes the requested kind.
+# The override expires after the front/back begin calls so normal Melt remains Melt.
 _pending_kind = None
+_pending_uses = 0
 _original_begin = visual_engine.TransitionManager.begin
 
 def _begin_with_pending(self, display, kind='Fade', duration=0.8):
-    global _pending_kind
-    if kind == 'Melt' and _pending_kind in INTENSE:
+    global _pending_kind, _pending_uses
+    if kind == 'Melt' and _pending_kind in INTENSE and _pending_uses > 0:
         chosen = _pending_kind
-        # Both panels call begin once for a target=both action. Keep the override
-        # alive for those paired calls; get_commands clears/re-arms per command.
+        _pending_uses -= 1
+        if _pending_uses <= 0:
+            _pending_kind = None
+            _pending_uses = 0
         return _original_begin(self, display, chosen, duration)
     return _original_begin(self, display, kind, duration)
 
@@ -84,7 +85,7 @@ visual_engine.TransitionManager.begin = _begin_with_pending
 _base_get_commands = controller_state_ui.PhoneControlServer.get_commands
 
 def _get_commands(self):
-    global _pending_kind
+    global _pending_kind, _pending_uses
     out=[]
     for data in _base_get_commands(self):
         if not isinstance(data, dict) or data.get('command') != 'intense_transition_next':
@@ -93,6 +94,7 @@ def _get_commands(self):
         kind=str(value.get('kind','Morph'))
         if kind not in INTENSE: kind='Morph'
         _pending_kind=kind
+        _pending_uses=2
         out.append({'command':'set_target','value':'both'})
         out.append({'command':'pixel_melt_next','value':{'indices':value.get('indices',[]),'duration':value.get('duration',1.15)}})
     return out
