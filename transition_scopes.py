@@ -1,15 +1,15 @@
 """Transition scope metadata used by the compositor.
 
-Content transitions operate on the background/content buffer and leave overlays
-stable. Scene transitions operate on the fully composed frame so icon and text
-participate in the transition intentionally.
+Background transitions operate on the image/content layer and leave overlays
+steady. Full-scene transitions intentionally move the composed image + icon +
+text together.
 """
 
 CONTENT_SCOPE = "content"
 SCENE_SCOPE = "scene"
 
 TRANSITION_SCOPES = {
-    # Standard slideshow transitions: background/content only.
+    # Background/slideshow transitions. These should never move Overlay.
     "None": CONTENT_SCOPE,
     "Fade": CONTENT_SCOPE,
     "Melt": CONTENT_SCOPE,
@@ -19,9 +19,9 @@ TRANSITION_SCOPES = {
     "Zoom": CONTENT_SCOPE,
     "Wipe": CONTENT_SCOPE,
 
-    # Intense transitions. Morph behaves best as a content transformation;
-    # the others intentionally move/distort the entire composed scene.
-    "Morph": CONTENT_SCOPE,
+    # Deliberate full-scene one-shot transitions. Keep this whole family
+    # together so the controller UI has one simple rule: these move everything.
+    "Morph": SCENE_SCOPE,
     "Spin": SCENE_SCOPE,
     "Rip": SCENE_SCOPE,
     "Slam": SCENE_SCOPE,
