@@ -1,7 +1,8 @@
-"""Runtime-facing IO seams for simulator and future physical hardware.
+"""Runtime-facing IO seams for simulator and physical hardware.
 
-Keep visual/controller code talking to stable display and signal shapes while the
-actual source (pygame/phone today, MatrixPortal + sensors later) can change.
+Visual/controller code talks to the same front/back display and normalized signal
+interfaces. Hardware-specific imports stay lazy so the desktop simulator never
+loads CircuitPython-only modules.
 """
 
 import time
@@ -18,11 +19,7 @@ def _clamp01(value):
 
 
 class VirtualDisplayBackend:
-    """Current simulator display backend.
-
-    A physical backend only needs to expose the same ``displays`` mapping with
-    front/back display objects implementing the existing pixel API.
-    """
+    """Desktop simulator display backend."""
 
     def __init__(self, width, height):
         self.width = int(width)
@@ -32,12 +29,46 @@ class VirtualDisplayBackend:
     def get(self, side):
         return self.displays[side]
 
+    def present(self):
+        """Simulator pixels are already consumed directly by Pygame."""
+        return None
+
+    def deinit(self):
+        return None
+
+
+class HardwareDisplayBackend:
+    """Lazy MatrixPortal backend adapter.
+
+    Constructing this class on CircuitPython creates one chained 128x32 matrix
+    and exposes two independent logical 64x32 displays. Importing this module on
+    desktop remains safe because MatrixPortal libraries are loaded only here.
+    """
+
+    def __init__(self, width=64, height=32, **kwargs):
+        from matrixportal_backend import MatrixPortalDisplayBackend
+
+        self._backend = MatrixPortalDisplayBackend(width, height, **kwargs)
+        self.width = self._backend.width
+        self.height = self._backend.height
+        self.displays = self._backend.displays
+
+    def get(self, side):
+        return self.displays[side]
+
+    def present(self):
+        return self._backend.present()
+
+    def deinit(self):
+        return self._backend.deinit()
+
 
 class SignalStore:
     """Stable normalized signal interface shared by phone and future sensors.
 
     Phone audio/motion can feed this today. A physical runtime can update the
-    exact same store from an I2S microphone and LIS3DH without changing effects.
+    exact same store from a microphone or accelerometer without changing visual
+    effect code.
     """
 
     def __init__(self, audio_timeout=1.0):
@@ -107,23 +138,8 @@ class SignalStore:
         self.motion["shake"] *= 0.90
 
 
-class HardwareDisplayBackend:
-    """Placeholder contract for the MatrixPortal implementation.
-
-    Intentionally raises until the board arrives; importing simulator code never
-    touches hardware-specific libraries.
-    """
-
-    def __init__(self, width, height):
-        raise NotImplementedError("MatrixPortal display backend not installed yet")
-
-
 class HardwareSignalSource:
-    """Future I2S microphone + LIS3DH source contract.
-
-    Physical code will call ``SignalStore.update_audio`` and ``update_motion``
-    with the same normalized values the simulator already consumes.
-    """
+    """Sensor-source contract for a future on-device microphone/accelerometer."""
 
     def __init__(self, store):
         self.store = store
