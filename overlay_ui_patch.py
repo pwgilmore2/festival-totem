@@ -1,7 +1,26 @@
+import base64
+import io
 import json
 
+from PIL import Image
+
 import phone_server
-from overlay_sprite_assets import SPRITES
+from icon_assets import ICON_LIBRARY
+
+
+def _preview_data_urls():
+    out = {}
+    for asset in ICON_LIBRARY.assets:
+        im = Image.new("RGBA", (32, 32), (0, 0, 0, 0))
+        px = im.load()
+        for y, row in enumerate(asset.pixels):
+            for x, rgba in enumerate(row):
+                px[x, y] = tuple(rgba)
+        buf = io.BytesIO()
+        im.save(buf, format="PNG", optimize=True)
+        out[asset.name] = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+    return out
+
 
 _CSS = r'''
 <style>
@@ -16,7 +35,6 @@ phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('</head>', _CSS + '</h
 phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('id="tabText" onclick="view(\'text\')">Text</button>', 'id="tabText" onclick="view(\'text\')">Overlay</button>')
 phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('>Text</button>', '>Overlay</button>')
 phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('<h2>Text Engine</h2>', '<h2>Overlay</h2>')
-phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('TEXT: OFF', 'TEXT: OFF')
 
 _anchor = '<div class="textTop"><button id="textMaster" class="textToggle" onclick="toggleTextMaster()">OVERLAY: OFF</button><button onclick="refreshText()">↻ APPLY SETTINGS</button></div>'
 if _anchor not in phone_server.PHONE_HTML:
@@ -29,23 +47,16 @@ phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace(_anchor, _insert, 1)
 _font = '<div><div class="sh"><span>Font</span></div><select id="textFont" class="selectDark" onchange="textChanged()"></select></div>'
 _font_new = r'''<div><div class="sh"><span>Font</span></div><select id="textFont" class="selectDark" style="display:none" onchange="textChanged()"></select><div class="fontButtons"><button id="fontPixel" onclick="setOverlayFont('Pixel')">Pixel</button><button id="fontQuest" onclick="setOverlayFont('Quest')">Quest</button><button id="fontBlock" onclick="setOverlayFont('Block')">Block</button></div></div>'''
 phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace(_font, _font_new, 1)
-phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('<span>Text Style</span>', '<span>Text Style</span>')
 phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('Quick text — tap once to fire it immediately', 'Quick text — tap once to show it')
 
-# Existing approved sprites are only used for controller thumbnails. Runtime
-# rendering comes from IconLibrary/assets/icons. New file-backed icons still
-# appear by name even before a dedicated thumbnail endpoint is added.
-_SPRITES_JSON = json.dumps(SPRITES, separators=(',', ':'))
+_PREVIEWS_JSON = json.dumps(_preview_data_urls(), separators=(",", ":"))
 _JS = r'''
 <script>
 let overlayIconLocal='',overlayIconEnabledLocal=false;
-const overlaySprites=__SPRITES__;
-function spriteIndex(ch){return ch.charCodeAt(0)-33}
+const overlayIconPreviews=__PREVIEWS__;
 function drawIconPreview(canvas,name){
- const d=overlaySprites[name],ctx=canvas.getContext('2d');canvas.width=32;canvas.height=32;ctx.clearRect(0,0,32,32);ctx.imageSmoothingEnabled=false;
- if(!d){ctx.fillStyle='#ffffff18';ctx.fillRect(5,5,22,22);ctx.strokeStyle='#ffffff55';ctx.strokeRect(5.5,5.5,21,21);return}
- const rows=d.rows,pal=d.palette;
- rows.forEach((row,y)=>[...row].forEach((ch,x)=>{if(ch==='.')return;let i=spriteIndex(ch),c=pal[i];if(!c)return;ctx.fillStyle=`rgb(${c[0]},${c[1]},${c[2]})`;ctx.fillRect(x,y,1,1)}));
+ const ctx=canvas.getContext('2d');canvas.width=32;canvas.height=32;ctx.clearRect(0,0,32,32);ctx.imageSmoothingEnabled=false;
+ const src=overlayIconPreviews[name];if(!src)return;let img=new Image();img.onload=()=>{ctx.imageSmoothingEnabled=false;ctx.drawImage(img,0,0,32,32)};img.src=src;
 }
 function renderOverlayIcons(){
  const g=document.getElementById('overlayIconGrid');if(!g)return;const names=(state.overlay_icons||[]),sig=names.join('|');
@@ -81,5 +92,5 @@ syncTextUI=function(){
 if(typeof textSpeedLocal!=='undefined'&&!textSpeedLocal)textSpeedLocal='Medium';
 window.addEventListener('load',()=>{syncOverlayUI()});
 </script>
-'''.replace('__SPRITES__', _SPRITES_JSON)
+'''.replace('__PREVIEWS__', _PREVIEWS_JSON)
 phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('</body>', _JS + '</body>', 1)
