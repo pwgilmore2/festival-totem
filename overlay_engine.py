@@ -10,8 +10,8 @@ class OverlayRenderer:
     """Native final-frame overlay compositor.
 
     Icons come from ``IconLibrary`` and render from authored 32x32 masters 1:1.
-    Motion and transitions only translate/filter authored pixels; no scaling or
-    morphology occurs.
+    Motion only translates whole pixels; icon transitions use a combined
+    dissolve/fade and never rescale or reshape the authored artwork.
     """
 
     def __init__(self, width, height):
@@ -24,49 +24,23 @@ class OverlayRenderer:
             display.set_pixel(x, y, color)
 
     def _icon_origin(self, state, t):
-        # x/y are normalized resting positions. 32x32 artwork has 32 px of
-        # horizontal travel on a 64x32 panel; vertical travel intentionally
-        # allows clipping beyond the top/bottom for expressive motion.
-        x = clamp01(state.get("x", 0.5))
-        y = clamp01(state.get("y", 0.5))
-        x0 = int(round(x * max(0, self.width - 32)))
-        y0 = int(round((y - 0.5) * 16.0))
+        x0 = (self.width - 32) // 2
+        y0 = 0
         motion = state.get("motion", "Bounce")
-
-        if motion == "Bounce":
-            y0 += int(round(-abs(math.sin(t * 2.5)) * 2.0 + 1.0))
-        elif motion == "Drift":
-            x0 += int(round(math.sin(t * 0.75) * 7.0))
-            y0 += int(round(math.sin(t * 1.1 + 1.3) * 3.0))
-        elif motion == "Orbit":
+        if motion == "Orbit":
             x0 += int(round(math.cos(t * 1.15) * 8.0))
             y0 += int(round(math.sin(t * 1.15) * 5.0))
-        # Manual intentionally adds no automatic motion.
+        else:
+            y0 += int(round(-abs(math.sin(t * 2.5)) * 2.0 + 1.0))
         return x0, y0
 
-    def _transition(self, state, t, seed):
-        kind = state.get("transition_kind")
-        if not kind:
-            return 1.0, 0, 0, None
+    def _transition_amount(self, state):
+        if not state.get("transition_active"):
+            return 1.0
         started = float(state.get("transition_started", 0.0))
         duration = max(0.08, float(state.get("transition_duration", 0.55)))
         p = max(0.0, min(1.0, (time.monotonic() - started) / duration))
-        entering = bool(state.get("transition_entering", True))
-        amount = p if entering else 1.0 - p
-        dx = dy = 0
-        reveal = None
-
-        if kind == "Slide":
-            dx = int(round((1.0 - amount) * -40.0))
-        elif kind == "Drop":
-            dy = int(round((1.0 - amount) * -36.0))
-        elif kind == "Flicker":
-            rng = random.Random(seed + int(p * 90))
-            amount = amount if rng.random() > (1.0 - amount) * 0.65 else 0.08
-        elif kind == "Pixel Reveal":
-            reveal = amount
-        # Fade uses amount directly; None never reaches here.
-        return amount, dx, dy, reveal
+        return p if state.get("transition_entering", True) else 1.0 - p
 
     def draw_icon(self, display, state, text_settings, t, signals=None, seed=0, text_enabled=False):
         if not state or not state.get("icon_enabled"):
@@ -81,9 +55,7 @@ class OverlayRenderer:
         signals = signals or {}
         rgba = asset.pixels
         x0, y0 = self._icon_origin(state, t)
-        amount, tx, ty, reveal = self._transition(state, t, seed)
-        x0 += tx
-        y0 += ty
+        amount = self._transition_amount(state)
 
         bass = clamp01(signals.get("bass", 0.0))
         mids = clamp01(signals.get("mids", 0.0))
@@ -109,11 +81,11 @@ class OverlayRenderer:
             for sx, (r, g, b, a) in enumerate(row):
                 if a == 0:
                     continue
-                if reveal is not None:
-                    # Stable per-pixel threshold = deterministic pixel reveal.
-                    rr = random.Random(seed + sy * 97 + sx * 193)
-                    if rr.random() > reveal:
-                        continue
+                # Dissolve uses a stable per-pixel threshold. The same amount
+                # also fades surviving pixels, producing one clean in/out look.
+                rr = random.Random(seed + sy * 97 + sx * 193)
+                if rr.random() > amount:
+                    continue
                 px = x0 + sx
                 py = y0 + sy
                 if glitch and rng.random() < .05:
