@@ -14,9 +14,6 @@ def _side(seed):
     return "back" if int(seed or 0) >= 1000 else "front"
 
 
-# The normal scrolling renderer lives behind performance_extras._original_render.
-# Wrap it so the audio mode can stay device/runtime state without requiring a
-# simulator-core rewrite just for this UI feature.
 _base_original_render = performance_extras._original_render
 
 
@@ -110,7 +107,7 @@ def _static_auto(renderer, display, settings, t, signals, seed, clear_background
             fallback = dict(settings)
             fallback["motion"] = "Scroll Left"
             fallback["scale"] = 1
-            fallback["speed"] = min(8.0, float(settings.get("speed", 8.0)))
+            fallback["speed"] = 34.0
             performance_extras._original_render(renderer, display, fallback, t, signals, seed, clear_background=False)
             return
 
@@ -122,7 +119,6 @@ def _static_auto(renderer, display, settings, t, signals, seed, clear_background
 performance_extras._draw_static_auto = _static_auto
 
 
-# Capture audio-reactivity settings before simulator.py consumes the commands.
 _base_get_commands = controller_state_ui.PhoneControlServer.get_commands
 
 
@@ -137,6 +133,8 @@ def _get_commands(self):
         if data.get("command") in ("text_settings", "text_show", "text_refresh"):
             value = data.get("value")
             if isinstance(value, dict):
+                value["motion"] = "Static"
+                value["speed"] = 34.0
                 mode = str(value.get("audio_reactivity", "Off"))
                 if mode not in ("Off", "Subtle", "Reactive"):
                     mode = "Off"
@@ -149,9 +147,6 @@ def _get_commands(self):
 controller_state_ui.PhoneControlServer.get_commands = _get_commands
 
 
-# Seed startup with two independent 10-second shuffles on the first full state.
-# This also injects the runtime-only audio mode back into phone state so polling
-# never snaps the selector to Off.
 _base_update_state = controller_state_ui.PhoneControlServer.update_state
 
 
@@ -164,6 +159,8 @@ def _update_state(self, state):
             panel = dict(panels.get(side) or {})
             text = dict(panel.get("text") or {})
             text["audio_reactivity"] = _audio_modes[side]
+            text["motion"] = "Static"
+            text["speed"] = 34.0
             panel["text"] = text
             panels[side] = panel
         state["panels"] = panels
@@ -171,6 +168,8 @@ def _update_state(self, state):
         if isinstance(state.get("text"), dict):
             t = dict(state["text"])
             t["audio_reactivity"] = _audio_modes.get(ref, "Off")
+            t["motion"] = "Static"
+            t["speed"] = 34.0
             state["text"] = t
 
         if not _startup_seeded:
@@ -194,9 +193,10 @@ controller_state_ui.PhoneControlServer.update_state = _update_state
 
 _CSS = r'''
 <style>
-.textMotionExtras{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.textMotionExtras{display:grid;grid-template-columns:1fr;gap:8px;margin-top:10px}
 .textMotionExtras button{min-height:46px}
 .textMotionExtras button.active{background:linear-gradient(135deg,#6c4cff,#00b8ff);box-shadow:0 0 0 2px #ffffff33 inset}
+#textMotion{display:none!important}
 @media(max-width:520px){.textMotionExtras{grid-template-columns:1fr}}
 </style>
 '''
@@ -218,6 +218,13 @@ let textWaveLocal=false;
   }
   const duration=document.getElementById('duration');
   if(duration&&durationPending==null){duration.value='10';dv.textContent='10s'}
+
+  // Keep legacy elements alive for older polling code, but remove the choices
+  // from the performance UI. Layout and scroll speed are automatic now.
+  const motion=document.getElementById('textMotion');
+  if(motion){motion.value='Static';const box=motion.parentElement;if(box)box.style.display='none'}
+  const fast=document.getElementById('textSpeedFast');
+  if(fast){const choices=fast.closest('.choice3');const box=choices&&choices.parentElement;if(box)box.style.display='none'}
 })();
 function toggleTextWave(){textWaveLocal=!textWaveLocal;syncTextMotionExtras();textChanged()}
 function syncTextMotionExtras(){
@@ -226,7 +233,7 @@ function syncTextMotionExtras(){
 }
 styleFlags=function(){let s=textStyle.value;return {glow:s==='Glow'||s==='Rave',glitch:s==='Glitch',beat_pulse:s==='Beat Pulse'||s==='Rave'}};
 styleFromState=function(t){if(t.glitch)return'Glitch';if(t.glow&&t.beat_pulse)return'Rave';if(t.glow)return'Glow';if(t.beat_pulse)return'Beat Pulse';return'Clean'};
-textPayload=function(){return {message:textMessage.value,font:textFont.value,motion:textMotion.value,color_mode:textColorMode.value,color:textColor.value,scale:textScaleLocal,speed:textSpeeds[textSpeedLocal]||22,wave:textWaveLocal,audio_reactivity:(document.getElementById('textAudioMode')?.value||'Off'),background:'Dimmed GIF',background_brightness:.30,backplate:true,...styleFlags()}};
+textPayload=function(){return {message:textMessage.value,font:textFont.value,motion:'Static',color_mode:textColorMode.value,color:textColor.value,scale:textScaleLocal,speed:34,wave:textWaveLocal,audio_reactivity:(document.getElementById('textAudioMode')?.value||'Off'),background:'Dimmed GIF',background_brightness:.30,backplate:true,...styleFlags()}};
 const _textPolishSync=syncTextUI;
 syncTextUI=function(){
   _textPolishSync();
@@ -234,6 +241,8 @@ syncTextUI=function(){
   textWaveLocal=!!t.wave;
   const a=document.getElementById('textAudioMode');
   if(a&&document.activeElement!==a)a.value=t.audio_reactivity||'Off';
+  const m=document.getElementById('textMotion');if(m)m.value='Static';
+  textSpeedLocal='Fast';
   syncTextMotionExtras();
 };
 </script>
