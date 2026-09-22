@@ -4,11 +4,12 @@ import random
 
 from text import FONT
 
-TEXT_FONTS = ["Pixel", "Block", "Thin", "Arcade"]
-TEXT_MOTIONS = ["Scroll Left", "Scroll Right", "Static", "Bounce"]
+TEXT_FONTS = ["Pixel", "Block", "Thin", "Arcade", "Quest"]
+TEXT_MOTIONS = ["Scroll Left", "Static"]
 TEXT_COLORS = ["Solid", "Rainbow", "Audio"]
-TEXT_EFFECTS = ["Glow", "Wave", "Glitch", "Beat Pulse"]
+TEXT_EFFECTS = ["Glow", "Glitch", "Beat Pulse"]
 TEXT_BACKGROUNDS = ["Black", "Dimmed GIF", "Tinted GIF"]
+TEXT_AUDIO_MODES = ["Off", "Subtle", "Reactive"]
 
 
 def clamp01(value):
@@ -52,6 +53,7 @@ class TextRenderer:
             "wave": False,
             "glitch": False,
             "beat_pulse": True,
+            "audio_reactivity": "Off",
             "background": "Black",
             "background_brightness": 0.28,
             "backplate": True,
@@ -94,14 +96,31 @@ class TextRenderer:
         bass = clamp01(signals.get("bass", 0.0))
         mids = clamp01(signals.get("mids", 0.0))
         highs = clamp01(signals.get("highs", 0.0))
+        audio_mode = settings.get("audio_reactivity", "Off")
 
         if clear_background:
             display.clear()
         width = self.text_width(text, scale, font)
         text_h = 7 * scale
         x, y = self._position(motion, width, text_h, t, speed)
+
         if settings.get("wave"):
-            y += int(round(math.sin(t * 4.0) * 2))
+            y += int(round(math.sin(t * 3.8) * 2.0))
+
+        if audio_mode == "Subtle":
+            y += int(round(math.sin(t * 5.1) * bass * 1.6))
+            if beat:
+                y -= 1
+        elif audio_mode == "Reactive":
+            y += int(round(math.sin(t * 6.0) * bass * 3.2))
+            x += int(round(math.sin(t * 3.2) * mids * 1.4))
+            if beat:
+                y -= 2
+            if highs > .45:
+                rng = random.Random(seed + int(t * 20))
+                if rng.random() < highs * .35:
+                    x += rng.choice((-1, 1))
+
         if settings.get("glitch") and highs > .18:
             rng = random.Random(seed + int(t * 18))
             x += rng.randint(-2, 2) if rng.random() < highs else 0
@@ -110,23 +129,39 @@ class TextRenderer:
         pulse = 1.0
         if settings.get("beat_pulse") and beat:
             pulse = 1.35
+        if audio_mode == "Subtle":
+            pulse = max(pulse, 1.0 + bass * .08)
+        elif audio_mode == "Reactive":
+            pulse = max(pulse, 1.0 + bass * .18 + (0.12 if beat else 0.0))
 
         base = parse_color(settings.get("color", "#ffffff"))
         if color_mode == "Audio":
             base = hsv_color(210 + mids * 130 + bass * 30, .85, .65 + .35 * max(bass, mids, highs))
+        elif audio_mode == "Reactive" and mids > .08:
+            tint = hsv_color(260 + mids * 120, .72, 1.0)
+            mix = mids * .24
+            base = tuple(int(base[i] * (1.0 - mix) + tint[i] * mix) for i in range(3))
 
         if settings.get("backplate"):
             self._backplate(display, x, y, width, text_h)
 
         if settings.get("glow"):
-            glow = tuple(int(c * .22) for c in base)
+            glow_strength = .22
+            if audio_mode == "Subtle":
+                glow_strength += bass * .06
+            elif audio_mode == "Reactive":
+                glow_strength += bass * .16 + highs * .08
+            glow = tuple(min(255, int(c * glow_strength)) for c in base)
             for ox, oy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
                 self._draw_text(display, text, x + ox, y + oy, glow, scale, font, color_mode, t, pulse)
 
         self._draw_text(display, text, x, y, base, scale, font, color_mode, t, pulse)
 
         if settings.get("beat_pulse") and beat:
-            self._beat_flash(display, .10 + bass * .18)
+            flash = .10 + bass * .18
+            if audio_mode == "Reactive":
+                flash += .08
+            self._beat_flash(display, flash)
 
     def _backplate(self, display, x, y, width, text_h):
         left = max(0, x - 2)
@@ -142,28 +177,15 @@ class TextRenderer:
         y = (self.height - text_h) // 2
         if motion == "Static":
             return (self.width - width) // 2, y
-        if motion == "Scroll Right":
-            total = self.width + width
-            offset = int(t * speed) % max(1, total)
-            return -width + offset, y
-        if motion == "Bounce":
-            span = max(0, self.width - width)
-            if span <= 0:
-                total = self.width + width
-                offset = int(t * speed) % max(1, total)
-                return self.width - offset, y
-            phase = (t * speed / max(1, span)) % 2.0
-            pos = phase if phase <= 1 else 2 - phase
-            return int(pos * span), y
         total = self.width + width
         offset = int(t * speed) % max(1, total)
         return self.width - offset, y
 
     def _spacing(self, scale, font):
-        if font == "Block":
-            return max(1, scale)
         if font == "Arcade":
             return max(1, scale + 1)
+        if font == "Quest":
+            return max(1, scale + (1 if scale > 1 else 0))
         return max(1, scale)
 
     def _draw_text(self, display, text, x, y, base_color, scale, font, color_mode, t, pulse):
@@ -180,6 +202,12 @@ class TextRenderer:
 
     def _draw_glyph(self, display, ch, x, y, color, scale, font):
         pattern = FONT.get(ch, FONT["?"])
+        if font == "Quest":
+            shadow = tuple(max(0, int(c * .28)) for c in color)
+            for row, line in enumerate(pattern):
+                for col, pixel in enumerate(line):
+                    if pixel == "1":
+                        display.set_pixel(x + col * scale + 1, y + row * scale + 1, shadow)
         for row, line in enumerate(pattern):
             for col, pixel in enumerate(line):
                 if pixel != "1":
@@ -199,6 +227,10 @@ class TextRenderer:
                     elif font == "Arcade" and (row + col) % 2 == 0:
                         bright = tuple(min(255, int(c * 1.18)) for c in color)
                         display.set_pixel(px, py, bright)
+                    elif font == "Quest":
+                        if row in (0, 6) and col in (0, 4):
+                            accent = tuple(min(255, int(c * 1.20)) for c in color)
+                            display.set_pixel(px, py, accent)
 
     def _beat_flash(self, display, amount):
         amount = clamp01(amount)
