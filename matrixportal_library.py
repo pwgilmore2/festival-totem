@@ -1,4 +1,4 @@
-"""Read-only MatrixPortal media library backed by the desktop build manifest."""
+"""Read-only MatrixPortal media library and shared-runtime adapter."""
 
 import json
 
@@ -70,11 +70,88 @@ class MatrixPortalMediaDeck:
     def current(self, side):
         return self.library.get(self.indices[side])
 
-    def advance(self, now=None):
-        return self.players.advance(now)
+    def advance(self, now=None, max_decodes=1):
+        return self.players.advance(now, max_decodes=max_decodes)
+
+    def render_side(self, side, display):
+        self.players.players[side].render(display)
 
     def render(self, displays):
         self.players.render(displays)
 
     def close(self):
         self.players.close()
+
+
+class MatrixPortalMediaAdapter:
+    """MatrixPortal implementation of the TotemRuntime media contract.
+
+    The adapter is intentionally read-only at runtime. Crop/color/tag editing is
+    done on the Mac and baked into manifest/media files before deployment.
+    """
+
+    def __init__(self, manifest_path="/manifest.json"):
+        self.library = MatrixPortalAssetLibrary(manifest_path)
+        self.deck = MatrixPortalMediaDeck(self.library)
+
+    def __len__(self):
+        return len(self.library)
+
+    def name(self, index):
+        asset = self.library.get(index)
+        return str(asset.get("name", "")) if asset else None
+
+    def find_index(self, name):
+        if not name:
+            return None
+        for index, asset in enumerate(self.library.assets):
+            if str(asset.get("name", "")) == name:
+                return index
+        return None
+
+    def select(self, side, index):
+        return self.deck.select(side, index)
+
+    def render(self, side, index, display, t):
+        # TotemRuntime calls select() whenever the logical index changes. The
+        # render path therefore only blits the already-decoded current frame.
+        if self.deck.indices.get(side) != int(index):
+            self.deck.select(side, index)
+        self.deck.render_side(side, display)
+
+    def advance(self, now=None, max_decodes=1):
+        """Advance at most max_decodes streams; call from the S3 timer loop."""
+        return self.deck.advance(now, max_decodes=max_decodes)
+
+    def info(self, index):
+        asset = self.library.get(index)
+        if not asset:
+            return {
+                "image_name": None,
+                "image_mode": None,
+                "image_settings": None,
+                "image_tags": [],
+                "image_favorite": False,
+            }
+        settings = asset.get("settings")
+        return {
+            "image_name": str(asset.get("name", "")),
+            "image_mode": settings.get("mode") if isinstance(settings, dict) else None,
+            "image_settings": settings if isinstance(settings, dict) else None,
+            "image_tags": list(asset.get("tags", [])),
+            "image_favorite": bool(asset.get("favorite", False)),
+        }
+
+    def library_state(self):
+        return self.library.controller_state()
+
+    def reload(self):
+        self.library.load()
+
+    def handle_command(self, command, value, reference_index):
+        # Hardware media is deliberately immutable. Editing remains a desktop
+        # preparation step so festival runtime never writes/reprocesses assets.
+        return False
+
+    def close(self):
+        self.deck.close()
