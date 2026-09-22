@@ -15,6 +15,7 @@ import intense_transition_ui  # noqa: F401
 import transition_scope_patch  # noqa: F401
 import transition_stability_patch  # noqa: F401
 import transition_ui_patch  # noqa: F401
+import performance_ui_reorg_patch  # noqa: F401
 
 if Path(sys.argv[0]).name == "simulator.py":
     import simulator_display_patch  # noqa: F401
