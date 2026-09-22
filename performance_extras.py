@@ -10,6 +10,9 @@ _target = "both"
 _audio = {"bass": 0.0, "beat": False, "volume": 0.0}
 _chaos_mode = None
 _chaos_started = 0.0
+_chaos_releasing = 0.0
+_chaos_release_duration = 0.0
+_xy = {"x": .5, "y": .5, "velocity": 0.0}
 _delayed_commands = []
 _text_transitions = {
     "front": None,
@@ -19,6 +22,8 @@ _text_started = {
     "front": time.monotonic(),
     "back": time.monotonic(),
 }
+
+_CHILL_MODES = {"trance", "liquid", "tunnel", "warp", "prism", "rainbow"}
 
 
 def _target_sides():
@@ -57,6 +62,26 @@ def _side_from_seed(seed):
 def _blend(a, b, amount):
     amount = max(0.0, min(1.0, amount))
     return tuple(int(a[i] + (b[i] - a[i]) * amount) for i in range(3))
+
+
+def _smooth01(v):
+    v = max(0.0, min(1.0, float(v)))
+    return v * v * (3.0 - 2.0 * v)
+
+
+def _effect_envelope(mode):
+    now = time.monotonic()
+    if mode == "xyintent":
+        ramp = .18
+    elif mode in _CHILL_MODES:
+        ramp = 2.4
+    else:
+        ramp = .12
+    env = _smooth01((now - _chaos_started) / max(.01, ramp))
+    if _chaos_releasing:
+        release = (now - _chaos_releasing) / max(.01, _chaos_release_duration)
+        env *= 1.0 - _smooth01(release)
+    return max(0.0, min(1.0, env))
 
 
 def _split_two_lines(renderer, text, font):
@@ -138,7 +163,6 @@ def _draw_static_auto(renderer, display, settings, t, signals, seed, clear_backg
         renderer._beat_flash(display, .10 + bass * .18)
 
 
-# Text defaults: 2x and the new Medium speed.
 _original_defaults = TextRenderer.defaults
 
 
@@ -193,54 +217,47 @@ def _render(self, display, settings, t, signals=None, seed=0, clear_background=T
 
 TextRenderer.render = _render
 
-
-# Pause slideshow transitions under the most destructive held effects. The next
-# transition is allowed to continue as soon as the finger is released.
 _original_transition_update = TransitionManager.update
 
 
 def _transition_update(self, dt):
-    if _chaos_mode in ("pixelmelt", "jumble", "bassjostle"):
+    if _chaos_mode in ("jumble", "bassjostle"):
         return
     _original_transition_update(self, dt)
 
 
 TransitionManager.update = _transition_update
 
-
 _original_guest_burst = VisualLayerEngine.guest_burst
 
 
-def _row_wave(engine, display, amount, frame, tint=None):
+def _row_wave(engine, display, amount, frame, tint=None, speed=.035, frequency=.34):
     src = copy_pixels(display)
-    amp = 1 + int(amount * 6)
+    amp = max(1, int(1 + amount * 4))
     for y in range(display.height):
-        shift = int(math.sin(y * .45 + frame * .12) * amp)
+        shift = int(math.sin(y * frequency + frame * speed) * amp)
         for x in range(display.width):
             sx = max(0, min(display.width - 1, x - shift))
             r, g, b = src[y][sx]
             if tint == "teal":
-                r = int(r * .34)
-                g = min(255, int(g * 1.04 + b * .20))
-                b = min(255, int(b * 1.13 + g * .06))
+                r = int(r * .48)
+                g = min(255, int(g * 1.02 + b * .12))
+                b = min(255, int(b * 1.08 + g * .04))
             display.set_pixel(x, y, (r, g, b))
 
 
 def _pixel_melt(display, amount, frame):
     src = copy_pixels(display)
     elapsed = max(0.0, time.monotonic() - _chaos_started)
-    strength = min(1.0, elapsed * .42) * amount
+    strength = min(1.0, elapsed * .30) * amount
     rng = random.Random(4107)
     for x in range(display.width):
         speed = .35 + rng.random() * .9
-        drop = int(strength * speed * (display.height + 12))
-        wobble = int(math.sin(frame * .08 + x * .7) * amount * 2)
+        drop = int(strength * speed * (display.height + 6))
+        wobble = int(math.sin(frame * .055 + x * .7) * amount)
         for y in range(display.height):
             sy = y - drop - wobble
-            if sy < 0:
-                display.set_pixel(x, y, (0, 0, 0))
-            else:
-                display.set_pixel(x, y, src[min(display.height - 1, sy)][x])
+            display.set_pixel(x, y, src[max(0, min(display.height - 1, sy))][x])
 
 
 def _jumble(display, amount, frame):
@@ -268,9 +285,15 @@ def _jumble(display, amount, frame):
 
 def _guest_burst(self, display, kind, amount, frame_number=0):
     mode = _chaos_mode if kind == "chaos" and _chaos_mode else kind
-    amount = max(0.0, min(1.0, float(amount)))
-    if mode in ("glitch", "rainbow", "chaos"):
+    amount = max(0.0, min(1.0, float(amount))) * _effect_envelope(mode)
+    if amount <= .002:
+        return
+    if mode in ("glitch", "chaos"):
         return _original_guest_burst(self, display, mode, amount, frame_number)
+    if mode == "rainbow":
+        self._hue(display, math.sin(frame_number * .016) * 95 * amount)
+        self._brighten(display, amount * .06)
+        return
     if mode == "pixelmelt":
         _pixel_melt(display, amount, frame_number); return
     if mode == "jumble":
@@ -284,20 +307,51 @@ def _guest_burst(self, display, kind, amount, frame_number=0):
         if hit: self._zoom(display, power * .16)
         return
     if mode == "trance":
-        wave = .5 + .5 * math.sin(frame_number * .06)
-        self._zoom(display, (.05 + wave * .11) * amount)
-        _row_wave(self, display, (.35 + wave * .45) * amount, frame_number, "teal")
-        self._rgb_split(display, .06 + wave * .15 * amount)
+        wave = .5 + .5 * math.sin(frame_number * .025)
+        self._zoom(display, (.025 + wave * .055) * amount)
+        _row_wave(self, display, (.14 + wave * .20) * amount, frame_number, "teal", speed=.025)
+        self._rgb_split(display, (.025 + wave * .065) * amount)
         return
     if mode == "liquid":
-        _row_wave(self, display, amount, frame_number)
-        self._hue(display, math.sin(frame_number * .05) * 90 * amount)
+        wave = .5 + .5 * math.sin(frame_number * .022)
+        _row_wave(self, display, (.16 + wave * .24) * amount, frame_number, speed=.022, frequency=.30)
+        self._hue(display, math.sin(frame_number * .018) * 46 * amount)
+        return
+    if mode == "warp":
+        wave = .5 + .5 * math.sin(frame_number * .022)
+        self._zoom(display, (.025 + wave * .07) * amount)
+        self._shift(display, int(math.sin(frame_number * .03) * amount * 2), int(math.cos(frame_number * .024) * amount))
+        self._hue(display, math.sin(frame_number * .014) * 62 * amount)
+        return
+    if mode == "prism":
+        wave = .5 + .5 * math.sin(frame_number * .024)
+        self._rgb_split(display, (.055 + wave * .19) * amount)
+        self._hue(display, math.sin(frame_number * .016) * 50 * amount)
+        self._sparkles(display, amount * .08, frame_number * 7)
         return
     if mode == "tunnel":
-        wave = .5 + .5 * math.sin(frame_number * .12)
-        self._zoom(display, (.12 + .30 * wave) * amount)
-        self._rgb_split(display, (.08 + .32 * (1-wave)) * amount)
-        self._hue(display, frame_number * 3.5 * amount)
+        wave = .5 + .5 * math.sin(frame_number * .028)
+        self._zoom(display, (.035 + .11 * wave) * amount)
+        self._rgb_split(display, (.025 + .075 * (1-wave)) * amount)
+        self._hue(display, math.sin(frame_number * .014) * 70 * amount)
+        return
+    if mode == "xyintent":
+        x = max(0.0, min(1.0, float(_xy.get("x", .5))))
+        y = max(0.0, min(1.0, float(_xy.get("y", .5))))
+        dead = .10
+        left = max(0.0, (-((x - .5)) - dead) / (.5 - dead))
+        right = max(0.0, ((x - .5) - dead) / (.5 - dead))
+        up = max(0.0, (-((y - .5)) - dead) / (.5 - dead))
+        down = max(0.0, ((y - .5) - dead) / (.5 - dead))
+        if up > 0:
+            self._zoom(display, up * amount * .28)
+        if down > 0:
+            self._shift(display, int(math.sin(frame_number * 1.7) * down * amount * 6), int(math.cos(frame_number * 1.35) * down * amount * 4))
+        if right > 0:
+            self._rgb_split(display, right * amount * .85)
+        if left > 0:
+            self._rgb_split(display, left * amount * .32)
+            self._shift(display, int(math.sin(frame_number * 2.5) * left * amount * 7), 0)
         return
     return _original_guest_burst(self, display, kind, amount, frame_number)
 
@@ -307,12 +361,10 @@ VisualLayerEngine.guest_burst = _guest_burst
 
 class PhoneControlServer(ui_cleanup_server.PhoneControlServer):
     def get_commands(self):
-        global _target, _audio, _chaos_mode, _chaos_started
+        global _target, _audio, _chaos_mode, _chaos_started, _chaos_releasing, _chaos_release_duration, _xy
         commands = list(super().get_commands())
         now = time.monotonic()
 
-        # Delayed commands carry an internal completion marker so they pass through
-        # exactly once instead of re-scheduling the same text exit forever.
         ready = [item for item in _delayed_commands if item[0] <= now]
         if ready:
             commands.extend(item[1] for item in ready)
@@ -345,17 +397,51 @@ class PhoneControlServer(ui_cleanup_server.PhoneControlServer):
                     continue
             elif c == "guest_action" and isinstance(v, dict):
                 kind = str(v.get("kind", "")).lower()
-                if kind in ("pixelmelt", "jumble", "bassjostle", "trance", "liquid", "tunnel"):
+                mapped = {"pixelmelt", "jumble", "bassjostle", "trance", "liquid", "tunnel", "warp", "prism", "rainbow"}
+                if kind in mapped:
                     _chaos_mode = kind
                     _chaos_started = now
+                    _chaos_releasing = 0.0
+                    _chaos_release_duration = 0.0
                     nv = dict(v); nv["kind"] = "chaos"
                     data = dict(data); data["value"] = nv
                 else:
                     _chaos_mode = None
                     _chaos_started = now
-            elif c == "guest_xy":
-                _chaos_mode = None
+                    _chaos_releasing = 0.0
+            elif c == "guest_xy" and isinstance(v, dict):
+                try:
+                    _xy = {"x": float(v.get("x", .5)), "y": float(v.get("y", .5)), "velocity": float(v.get("velocity", 0))}
+                except Exception:
+                    _xy = {"x": .5, "y": .5, "velocity": 0.0}
+                if _chaos_mode != "xyintent":
+                    _chaos_started = now
+                _chaos_mode = "xyintent"
+                _chaos_releasing = 0.0
+                nv = {"kind": "chaos", "strength": v.get("strength", 1.0), "duration": .35}
+                data = {"command": "guest_action", "value": nv}
             elif c == "guest_stop":
-                _chaos_mode = None
+                if data.get("_guest_release_complete"):
+                    _chaos_mode = None
+                    _chaos_releasing = 0.0
+                    _chaos_release_duration = 0.0
+                    data = {k: val for k, val in data.items() if k != "_guest_release_complete"}
+                elif _chaos_mode in _CHILL_MODES:
+                    _chaos_releasing = now
+                    _chaos_release_duration = .95
+                    delayed = dict(data)
+                    delayed["_guest_release_complete"] = True
+                    _delayed_commands.append((now + _chaos_release_duration, delayed))
+                    continue
+                elif _chaos_mode == "xyintent":
+                    _chaos_releasing = now
+                    _chaos_release_duration = .32
+                    delayed = dict(data)
+                    delayed["_guest_release_complete"] = True
+                    _delayed_commands.append((now + _chaos_release_duration, delayed))
+                    continue
+                else:
+                    _chaos_mode = None
+                    _chaos_releasing = 0.0
             out.append(data)
         return out
