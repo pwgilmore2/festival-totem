@@ -117,6 +117,25 @@ def step_filtered(value):
         except ValueError:p=-1 if delta>0 else 0
         select_for_side(side,ids[(p+delta)%len(ids)])
 
+def pixel_melt_next(value):
+    if not isinstance(value,dict):return
+    ids=clean_indices(value.get("indices",[]))
+    if not ids:return
+    try:duration=max(.25,min(5.0,float(value.get("duration",1.8))))
+    except (TypeError,ValueError):duration=1.8
+    for side in target_sides():
+        cur=panels[side]["image_index"]
+        try:p=ids.index(cur)
+        except ValueError:p=-1
+        nxt=ids[(p+1)%len(ids)]
+        transitions[side].begin(displays[side],"Melt",duration)
+        panels[side]["image_index"]=nxt
+        controllers[side].set_effect("Image")
+        sh=panels[side]["slideshow"]
+        if sh.get("active"):
+            if nxt in sh.get("indices",[]):sh["position"]=sh["indices"].index(nxt)
+            sh["elapsed"]=0.0
+
 def start_show(value):
     global current_scene
     if not isinstance(value,dict):return
@@ -312,6 +331,7 @@ def command(data):
     if c=="effect":set_effect(v);return
     if c=="select_image":select_image(v);return
     if c=="filtered_step":step_filtered(v);return
+    if c=="pixel_melt_next":pixel_melt_next(v);return
     if c=="slideshow_start":start_show(v);return
     if c=="slideshow_stop":
         for s in target_sides():stop_show(s)
