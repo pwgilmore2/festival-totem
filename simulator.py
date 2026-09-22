@@ -8,6 +8,8 @@ from runtime_io import SignalStore, VirtualDisplayBackend
 from secure_phone_server import PhoneControlServer
 from visual_engine import TransitionManager, VisualLayerEngine, TRANSITIONS, LAYER_KEYS
 from text_engine import TextRenderer, TEXT_FONTS, TEXT_MOTIONS, TEXT_COLORS, TEXT_EFFECTS, TEXT_BACKGROUNDS
+from overlay_engine import OverlayRenderer
+from overlay_runtime_patch import get_overlay_state
 
 W,H,S,GAP,UI = 64,32,8,24,185
 PW,PH = W*S,H*S
@@ -25,6 +27,7 @@ particles={s:ParticleSystem(W,H,count=60) for s in ("front","back")}
 transitions={s:TransitionManager(W,H) for s in ("front","back")}
 layer_engine=VisualLayerEngine(W,H)
 text_engine=TextRenderer(W,H)
+overlay_engine=OverlayRenderer(W,H)
 MODES=["crop","pixel","optimize","dither"]
 REACTIVE_PRESETS=["Pulse","Neon","Spark","Chaos"]
 SCENES={
@@ -66,9 +69,7 @@ def image_fx(side,display,t):
     a=asset(side)
     if a:a.render(display,t,a.settings)
     else:display.clear()
-def text_fx(side,display,t):
-    display.clear();text_engine.render(display,panels[side]["text"],t,signals(),1000 if side=="back" else 0)
-def make_effects(side): return {**EFFECTS,"Text":lambda d,t,s=side:text_fx(s,d,t),"Party":lambda d,t,s=side:party_fx(s,d,t),"Image":lambda d,t,s=side:image_fx(s,d,t)}
+def make_effects(side): return {**EFFECTS,"Party":lambda d,t,s=side:party_fx(s,d,t),"Image":lambda d,t,s=side:image_fx(s,d,t)}
 controllers={s:TotemController(make_effects(s)) for s in ("front","back")}
 for s in ("front","back"):
     sh=panels[s]["slideshow"]
@@ -441,10 +442,17 @@ while running:
         transitions[s].apply(displays[s])
         r=panels[s]["reactive"]
         if r["enabled"]:layer_engine.apply(displays[s],sig,r["layers"],r["strength"],frame_number,1000 if s=="back" else 0)
+
+        # Native overlay compositor: content/transition/reactivity are complete
+        # before overlays are added. Text is drawn low on the panel, then the
+        # icon is drawn last so its approved sprite art wins any overlap.
         st=panels[s]["text"]
-        if st.get("enabled",False):
-            text_engine.prepare_background(displays[s],st)
-            text_engine.render(displays[s],st,controllers[s].time,sig,1000 if s=="back" else 0,clear_background=False)
+        overlay=get_overlay_state(s)
+        text_enabled=bool(st.get("enabled",False))
+        if text_enabled:
+            overlay_engine.draw_text(displays[s],st,controllers[s].time,sig,1000 if s=="back" else 0,bottom=bool(overlay.get("icon_enabled")))
+        overlay_engine.draw_icon(displays[s],overlay,st,controllers[s].time,sig,1000 if s=="back" else 0,text_enabled=text_enabled)
+
         apply_guest_effect(displays[s],frame_number+(1000 if s=="back" else 0))
     signal_store.end_frame()
     screen.fill((15,15,18));draw_panel("front",0);draw_panel("back",PW+GAP);draw_ui();update_phone();pygame.display.flip()
