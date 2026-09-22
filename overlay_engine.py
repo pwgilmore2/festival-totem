@@ -1,15 +1,15 @@
 import math
 import random
 
-from overlay_exact_assets import sprite_rgba
+from icon_assets import ICON_LIBRARY
 from text_engine import TextRenderer, clamp01, hsv_color, parse_color
 
 
 class OverlayRenderer:
     """Native final-frame overlay compositor.
 
-    Icons use authored 32x32 masters rendered 1:1. No icon scaling, outlining,
-    gap filling, or sprite morphology occurs here.
+    Icons come from ``IconLibrary`` and render from authored 32x32 masters 1:1.
+    Bounce is the standard icon motion; no icon scaling or morphology occurs.
     """
 
     def __init__(self, width, height):
@@ -25,28 +25,26 @@ class OverlayRenderer:
         if not state or not state.get("icon_enabled"):
             return
 
-        # Until we add separately authored 16x16 companions, mixed text+icon
-        # mode deliberately shows text only. Never resample a 32x32 master.
+        # 32x32 icon mode and text mode are deliberately exclusive until
+        # separately authored mini icons exist. The runtime state/UI makes this
+        # explicit, so the renderer never rescales a full-size master.
         if text_enabled:
             return
 
-        signals = signals or {}
-        name = state.get("icon", "Heart")
-        motion = state.get("motion", "Static")
-        rgba = sprite_rgba(name)
+        asset = ICON_LIBRARY.get(state.get("icon"))
+        if asset is None:
+            return
 
-        # Center the exact 32x32 authored canvas inside the panel. On the
-        # current 64x32 simulator this is x=16, y=0. Motion only translates by
-        # whole pixels; it never resizes the art.
+        signals = signals or {}
+        rgba = asset.pixels
+
+        # Exact 32x32 authored canvas, centered horizontally on a 64x32 panel.
+        # Bounce/phone-audio motion translates whole pixels only.
         x0 = (self.width - 32) // 2
-        y0 = (self.height - 32) // 2
+        y0 = 0
         speed = max(1.0, min(40.0, float(text_settings.get("speed", 22.0))))
         rate = speed / 22.0
-        if motion == "Float":
-            x0 += int(round(math.sin(t * 1.35 * rate) * 2.0))
-            y0 += int(round(math.cos(t * 1.05 * rate) * 1.0))
-        elif motion == "Bounce":
-            y0 += int(round(-abs(math.sin(t * 2.5 * rate)) * 2.0 + 1.0))
+        y0 += int(round(-abs(math.sin(t * 2.5 * rate)) * 2.0 + 1.0))
 
         bass = clamp01(signals.get("bass", 0.0))
         mids = clamp01(signals.get("mids", 0.0))
