@@ -1,6 +1,6 @@
 """Post-process the approved 32x32 overlay sprites for LED readability.
 
-The source sprite pack stays untouched. This module mutates the decoded
+The source sprite pack stays untouched.  This module mutates the decoded
 ``SPRITES`` dictionary once at import time so UI previews and the simulator use
 exactly the same polished masters.
 """
@@ -38,6 +38,7 @@ def _decode(sprite):
 
 
 def _encode(grid):
+    # Preserve exact RGB values while keeping the same compact indexed format.
     colors = []
     lookup = {}
     for row in grid:
@@ -49,6 +50,7 @@ def _encode(grid):
                 lookup[c] = len(colors)
                 colors.append(c)
     if len(colors) > 90:
+        # These sprites are far below this; guard printable-index encoding.
         colors = colors[:90]
         lookup = {c: i for i, c in enumerate(colors)}
     rows = []
@@ -90,17 +92,17 @@ def _nearest_fill_color(grid, component):
     for x, y in component:
         for nx, ny in _neighbors8(x, y, w, h):
             c = grid[ny][nx]
-            if c is not None and sum(c) > 45:
+            if c is not None and sum(c) > 45:  # avoid using outline black as fill
                 candidates.append(c)
     if not candidates:
         return (120, 120, 120)
     return tuple(int(sum(c[k] for c in candidates) / len(candidates)) for k in range(3))
 
 
-def _transparent_components(grid):
+def _fill_small_holes(grid, max_area=10):
+    """Fill enclosed transparent pinholes but keep deliberate large cutouts."""
     h = len(grid); w = len(grid[0]) if h else 0
     seen = set()
-    out = []
     for y in range(h):
         for x in range(w):
             if grid[y][x] is not None or (x, y) in seen:
@@ -114,79 +116,23 @@ def _transparent_components(grid):
                 for nx, ny in _neighbors4(px, py, w, h):
                     if grid[ny][nx] is None and (nx, ny) not in seen:
                         seen.add((nx, ny)); q.append((nx, ny))
-            out.append((comp, touches_edge))
-    return out
-
-
-def _protected_negative_space(name, grid):
-    """Return deliberate transparent pixels that must stay transparent."""
-    if name != "Wakaan Sigil":
-        return set()
-
-    # The sigil's center triangle is its one intentional enclosed cutout.
-    enclosed = [comp for comp, edge in _transparent_components(grid) if not edge]
-    if not enclosed:
-        return set()
-    return set(max(enclosed, key=len))
-
-
-def _fill_enclosed_holes(grid, protected=None):
-    """Fill every enclosed transparent pocket except explicitly protected art."""
-    protected = protected or set()
-    for comp, touches_edge in _transparent_components(grid):
-        if touches_edge:
-            continue
-        fillable = [(x, y) for x, y in comp if (x, y) not in protected]
-        if not fillable:
-            continue
-        fill = _nearest_fill_color(grid, fillable)
-        for x, y in fillable:
-            grid[y][x] = fill
+            if not touches_edge and len(comp) <= max_area:
+                fill = _nearest_fill_color(grid, comp)
+                for px, py in comp:
+                    grid[py][px] = fill
     return grid
 
 
-def _fill_internal_cracks(grid, protected=None, passes=3):
-    """Close transparent cracks that visually sit inside the sprite silhouette.
-
-    Unlike flood-fill holes, these can still connect to the outside through a
-    one-pixel channel. A pixel is treated as internal when sprite pixels bracket
-    it horizontally/vertically or it has strong local occupancy.
-    """
-    protected = protected or set()
-    h = len(grid); w = len(grid[0]) if h else 0
-    for _ in range(passes):
-        add = []
-        for y in range(1, h - 1):
-            for x in range(1, w - 1):
-                if grid[y][x] is not None or (x, y) in protected:
-                    continue
-                left = any(grid[y][xx] is not None for xx in range(0, x))
-                right = any(grid[y][xx] is not None for xx in range(x + 1, w))
-                up = any(grid[yy][x] is not None for yy in range(0, y))
-                down = any(grid[yy][x] is not None for yy in range(y + 1, h))
-                occupied = sum(1 for nx, ny in _neighbors8(x, y, w, h) if grid[ny][nx] is not None)
-
-                bracketed_both = left and right and up and down
-                narrow_crack = occupied >= 4 and ((left and right) or (up and down))
-                if bracketed_both or narrow_crack:
-                    add.append((x, y, _nearest_fill_color(grid, [(x, y)])))
-        if not add:
-            break
-        for x, y, c in add:
-            grid[y][x] = c
-    return grid
-
-
-def _close_edge_nicks(grid, protected=None):
-    protected = protected or set()
+def _close_edge_nicks(grid):
+    """Fill tiny one-pixel notches that are mostly surrounded by sprite pixels."""
     h = len(grid); w = len(grid[0]) if h else 0
     add = []
     for y in range(1, h - 1):
         for x in range(1, w - 1):
-            if grid[y][x] is not None or (x, y) in protected:
+            if grid[y][x] is not None:
                 continue
             ns = [(nx, ny) for nx, ny in _neighbors8(x, y, w, h) if grid[ny][nx] is not None]
-            if len(ns) >= 5:
+            if len(ns) >= 6:
                 add.append((x, y, _nearest_fill_color(grid, [(x, y)])))
     for x, y, c in add:
         grid[y][x] = c
@@ -194,6 +140,7 @@ def _close_edge_nicks(grid, protected=None):
 
 
 def _outline(grid, color=_DARK):
+    """Add a one-pixel dark silhouette outside the existing artwork."""
     h = len(grid); w = len(grid[0]) if h else 0
     add = set()
     for y in range(h):
@@ -209,6 +156,7 @@ def _outline(grid, color=_DARK):
 
 
 def _rotate45(grid):
+    """Rotate the sword master ~45 degrees with nearest-neighbor pixel sampling."""
     h = len(grid); w = len(grid[0]) if h else 0
     pts = [(x, y, grid[y][x]) for y in range(h) for x in range(w) if grid[y][x] is not None]
     if not pts:
@@ -234,6 +182,7 @@ def _rotate45(grid):
         py = int(round((ry - (miny + maxy) / 2) * scale + (h - 1) / 2))
         if 0 <= px < w and 0 <= py < h:
             out[py][px] = c
+            # bridge diagonal nearest-neighbor gaps without making it chunky
             if px + 1 < w and out[py][px + 1] is None:
                 out[py][px + 1] = c
     return out
@@ -241,34 +190,33 @@ def _rotate45(grid):
 
 def _define_smiley_mouth(grid):
     h = len(grid); w = len(grid[0]) if h else 0
+    # Darken existing low-center facial pixels and bridge tiny mouth breaks.
     for y in range(h // 2, min(h, h // 2 + 9)):
         for x in range(max(0, w // 2 - 8), min(w, w // 2 + 9)):
             c = grid[y][x]
             if c is not None and sum(c) < 180:
                 grid[y][x] = _DARK
-    return grid
+    return _close_edge_nicks(grid)
 
 
 def _polish(name):
     if name not in SPRITES:
         return
     grid = _decode(SPRITES[name])
-    protected = _protected_negative_space(name, grid)
 
-    # Fill transparency that reads as accidental missing LEDs. This is now
-    # intentionally aggressive; the sprite's exterior is still preserved by
-    # only filling enclosed pockets or pixels visually bracketed by artwork.
-    _fill_enclosed_holes(grid, protected)
-    _fill_internal_cracks(grid, protected, passes=3)
-    _close_edge_nicks(grid, protected)
+    # Conservative cleanup common to the whole approved pack.
+    hole_limit = 6 if name == "Wakaan Sigil" else 12
+    _fill_small_holes(grid, hole_limit)
+    _close_edge_nicks(grid)
 
     if name == "Rune 2H":
         grid = _rotate45(grid)
-        _fill_internal_cracks(grid, passes=2)
         _close_edge_nicks(grid)
     if name == "Smiley":
         _define_smiley_mouth(grid)
 
+    # Black/dark silhouette requested for every polished icon. For Wakaan this
+    # expands outward only, so the deliberate center triangle remains open.
     _outline(grid)
     SPRITES[name] = _encode(grid)
 
