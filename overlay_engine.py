@@ -167,12 +167,11 @@ class OverlayRenderer:
         elif audio_mode == "Reactive":
             pulse = 1.0 + bass * 0.24 + (0.16 if beat else 0.0)
 
-        def draw_line(line, x, y):
+        def draw_line(line, x, y, draw_backplate=True):
             width = self.text.text_width(line, scale, font)
-            if settings.get("backplate"):
+            if draw_backplate and settings.get("backplate"):
                 self.text._backplate(display, x, y, width, 7 * scale)
 
-            # Audio-reactive glow replaces the old independent Text Style menu.
             glow_strength = 0.0
             if audio_mode == "Subtle":
                 glow_strength = 0.10 + highs * 0.05
@@ -195,6 +194,7 @@ class OverlayRenderer:
             total_h = 14 * scale + gap
             y1 = self.height - total_h - 1 if bottom else (self.height - total_h) // 2
             y2 = y1 + 7 * scale + gap
+            positions = []
             for line, y in zip(lines, (y1, y2)):
                 width = self.text.text_width(line, scale, font)
                 x = (self.width - width) // 2
@@ -203,7 +203,20 @@ class OverlayRenderer:
                 elif audio_mode == "Reactive":
                     x += int(round(math.sin(text_t * 3.1) * mids * 1.5))
                     y += int(round(math.sin(text_t * 5.7) * bass * 1.5)) - (1 if beat else 0)
-                draw_line(line, x, y)
+                positions.append((line, x, y, width))
+
+            if settings.get("backplate"):
+                left = max(0, min(x for _, x, _, _ in positions) - 2)
+                right = min(self.width, max(x + width for _, x, _, width in positions) + 2)
+                top = max(0, min(y for _, _, y, _ in positions) - 2)
+                bottom_y = min(self.height, max(y + 7 * scale for _, _, y, _ in positions) + 2)
+                for py in range(top, bottom_y):
+                    for px in range(left, right):
+                        r, g, b = display.get_pixel(px, py)
+                        display.set_pixel(px, py, (int(r * .28), int(g * .28), int(b * .28)))
+
+            for line, x, y, _ in positions:
+                draw_line(line, x, y, draw_backplate=False)
             if audio_mode == "Reactive" and beat:
                 self.text._beat_flash(display, .08 + bass * .10)
             return
