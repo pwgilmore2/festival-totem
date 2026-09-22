@@ -9,6 +9,7 @@ from runtime_io import SignalStore, VirtualDisplayBackend
 from secure_phone_server import PhoneControlServer
 from visual_engine import VisualLayerEngine, TRANSITIONS, LAYER_KEYS, copy_pixels
 from transition_engine import TransitionManager, INTENSE_TRANSITIONS
+from chaos_engine import ChaosEngine
 from text_engine import TextRenderer, TEXT_FONTS, TEXT_MOTIONS, TEXT_COLORS, TEXT_EFFECTS, TEXT_BACKGROUNDS
 from overlay_engine import OverlayRenderer
 
@@ -34,6 +35,7 @@ scene_transitions={s:TransitionManager(W,H) for s in SIDES}
 content_snapshots={s:None for s in SIDES}
 scene_snapshots={s:None for s in SIDES}
 layer_engine=VisualLayerEngine(W,H)
+chaos_engine=ChaosEngine(layer_engine)
 text_engine=TextRenderer(W,H)
 overlay_engine=OverlayRenderer(W,H)
 MODES=["crop","pixel","optimize","dither"]
@@ -46,7 +48,6 @@ SCENES={
 }
 active_target="both"
 current_scene="Custom"
-guest={"kind":None,"strength":0.0,"until":0.0,"locked":False,"x":.5,"y":.5,"velocity":0.0}
 _library_state_cache=None
 
 def slideshow_state():
@@ -90,7 +91,6 @@ def library_state():
         _library_state_cache=out
     return _library_state_cache
 
-def clamp01(v): return max(0.0,min(1.0,float(v)))
 def audio_fresh(): return signal_store.audio_fresh()
 def signals(): return signal_store.snapshot()
 
@@ -391,50 +391,9 @@ def hide_text():
 def refresh_text(value=None):
     if isinstance(value,dict):set_text_settings(value)
 
-def trigger_guest(value):
-    global guest
-    if guest["locked"] or not isinstance(value,dict):return
-    kind=str(value.get("kind","" )).lower();strength=clamp01(value.get("strength",1.0))
-    guest={"kind":kind,"strength":strength,"until":time.monotonic()+float(value.get("duration",30)),"locked":False,"x":.5,"y":.5,"velocity":0.0}
-
-def update_guest_xy(value):
-    global guest
-    if guest["locked"] or not isinstance(value,dict):return
-    try:x=clamp01(value.get("x",.5));y=clamp01(value.get("y",.5));velocity=clamp01(value.get("velocity",0));strength=clamp01(value.get("strength",1))
-    except Exception:return
-    guest={"kind":"xy","strength":strength,"until":time.monotonic()+.30,"locked":False,"x":x,"y":y,"velocity":velocity}
-
-def stop_guest():
-    guest.update(kind=None,strength=0.0,until=0.0,velocity=0.0)
-
-def apply_guest_effect(display,frame_number):
-    kind=guest.get("kind");amount=clamp01(guest.get("strength",1.0))
-    if not kind or guest.get("locked"):return
-    if kind in ("glitch","rainbow","chaos"):
-        layer_engine.guest_burst(display,kind,amount,frame_number);return
-    if kind=="warp":
-        layer_engine._zoom(display,.10+amount*.32)
-        layer_engine._shift(display,int(random.choice((-1,1))*amount*2),int(random.choice((-1,1))*amount))
-        layer_engine._hue(display,(frame_number*5)%360)
-        return
-    if kind=="prism":
-        layer_engine._rgb_split(display,.28+amount*.70)
-        layer_engine._hue(display,(frame_number*8)%360)
-        layer_engine._sparkles(display,amount*.35,frame_number*23)
-        return
-    if kind=="meltdown":
-        layer_engine._zoom(display,amount*.16)
-        layer_engine._shift(display,int(__import__('math').sin(frame_number*.45)*amount*5),int(__import__('math').cos(frame_number*.31)*amount*4))
-        layer_engine._hue(display,(frame_number*3)%240)
-        return
-    if kind=="xy":
-        x=clamp01(guest.get("x",.5));y=clamp01(guest.get("y",.5));v=clamp01(guest.get("velocity",0))
-        layer_engine._hue(display,(x-.5)*300*amount)
-        layer_engine._rgb_split(display,abs(x-.5)*1.55*amount)
-        layer_engine._zoom(display,y*.34*amount)
-        if v>.03:
-            layer_engine._shift(display,int(__import__('math').sin(frame_number*1.8)*v*amount*7),int(__import__('math').cos(frame_number*1.4)*v*amount*4))
-            layer_engine._sparkles(display,v*amount,frame_number*37)
+def trigger_guest(value): chaos_engine.trigger(value)
+def update_guest_xy(value): chaos_engine.update_xy(value)
+def stop_guest(): chaos_engine.stop()
 
 def command(data):
     c,v=data.get("command"),data.get("value")
@@ -472,7 +431,7 @@ def command(data):
     if c=="guest_action":trigger_guest(v);return
     if c=="guest_xy":update_guest_xy(v);return
     if c=="guest_stop":stop_guest();return
-    if c=="guest_lock":guest["locked"]=bool(v);return
+    if c=="guest_lock":chaos_engine.set_locked(v);return
     if c in ("mode_prev","mode_next"):
         a=reference_asset()
         if a:
@@ -511,7 +470,7 @@ def phone_panel(side):
 
 def update_phone():
     ref=phone_panel(reference_side())
-    server.update_state({"target":active_target,"reference_side":reference_side(),"image_count":len(library),"library":library_state(),"effects":list(controllers["front"].effects),"panels":{"front":phone_panel("front"),"back":phone_panel("back")},"audio":{"volume":audio["volume"],"bass":audio["bass"],"mids":audio["mids"],"highs":audio["highs"],"beat":audio["beat"],"fresh":audio_fresh()},"motion":dict(motion),"reactive_presets":REACTIVE_PRESETS,"layer_keys":LAYER_KEYS,"transitions":TRANSITIONS,"performance_scenes":list(SCENES),"current_scene":current_scene,"text_fonts":TEXT_FONTS,"text_motions":TEXT_MOTIONS,"text_color_modes":TEXT_COLORS,"text_effects":TEXT_EFFECTS,"text_backgrounds":TEXT_BACKGROUNDS,"overlay_icons":ICON_LIBRARY.names(),"icon_library_errors":list(ICON_LIBRARY.errors),"icon_motions":list(ICON_MOTIONS),"guest":{"locked":guest["locked"]},**ref})
+    server.update_state({"target":active_target,"reference_side":reference_side(),"image_count":len(library),"library":library_state(),"effects":list(controllers["front"].effects),"panels":{"front":phone_panel("front"),"back":phone_panel("back")},"audio":{"volume":audio["volume"],"bass":audio["bass"],"mids":audio["mids"],"highs":audio["highs"],"beat":audio["beat"],"fresh":audio_fresh()},"motion":dict(motion),"reactive_presets":REACTIVE_PRESETS,"layer_keys":LAYER_KEYS,"transitions":TRANSITIONS,"performance_scenes":list(SCENES),"current_scene":current_scene,"text_fonts":TEXT_FONTS,"text_motions":TEXT_MOTIONS,"text_color_modes":TEXT_COLORS,"text_effects":TEXT_EFFECTS,"text_backgrounds":TEXT_BACKGROUNDS,"overlay_icons":ICON_LIBRARY.names(),"icon_library_errors":list(ICON_LIBRARY.errors),"icon_motions":list(ICON_MOTIONS),"guest":chaos_engine.snapshot(),**ref})
 
 def draw_panel(side,x):
     d,ctl=displays[side],controllers[side]
@@ -546,8 +505,7 @@ while running:
         if not controllers[s].paused:particles[s].update(dt)
         content_transitions[s].update(dt)
         scene_transitions[s].update(dt)
-    update_shows(dt);update_icon_transitions()
-    if guest["kind"] and time.monotonic()>guest["until"]:stop_guest()
+    update_shows(dt);update_icon_transitions();chaos_engine.update()
     sig=signals()
     for s in SIDES:
         controllers[s].effect(displays[s],controllers[s].time)
@@ -571,8 +529,8 @@ while running:
         scene_transitions[s].apply(displays[s])
         scene_snapshots[s]=copy_pixels(displays[s])
 
-        # Chaos/guest effects remain final-frame performance effects.
-        apply_guest_effect(displays[s],frame_number+(1000 if s=="back" else 0))
+        # Chaos is an explicit final-frame performance stage.
+        chaos_engine.apply(displays[s],frame_number+(1000 if s=="back" else 0),sig)
     signal_store.end_frame()
     screen.fill((15,15,18));draw_panel("front",0);draw_panel("back",PW+GAP);draw_ui()
     now=time.monotonic()
