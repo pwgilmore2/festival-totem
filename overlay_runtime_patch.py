@@ -3,57 +3,12 @@ import random
 
 import controller_state_ui
 import performance_extras
-from text_engine import parse_color, hsv_color, clamp01
-
-OVERLAY_ICONS = [
-    "Heart", "Mushroom", "Wakaan Sigil", "Sprout", "Rune 2H", "Eye",
-    "Skull", "Alien", "Smiley", "Crystal", "Moth", "Orb",
-]
-
-# Compact hand-drawn pixel sprites. These are original simplified designs meant
-# to read cleanly on a 64x32 LED matrix rather than imitate source artwork.
-SPRITES = {
-    "Heart": [
-        "01100110","11111111","11111111","11111111","01111110","00111100","00011000",
-    ],
-    "Mushroom": [
-        "00111100","01111110","11111111","11011011","01111110","00011000","00111100","00111100",
-    ],
-    "Wakaan Sigil": [
-        "10000001","10011001","10111101","11100111","11100111","10111101","10011001","10000001",
-    ],
-    "Sprout": [
-        "00100100","01110110","00111100","00011000","00011000","00011000","00111100","01111110",
-    ],
-    "Rune 2H": [
-        "00011000","00111100","01111110","00111100","00011000","00011000","01111110","00111100","00011000","00011000","00100100",
-    ],
-    "Eye": [
-        "00011000","01111110","11100111","11011011","11011011","11100111","01111110","00011000",
-    ],
-    "Skull": [
-        "00111100","01111110","11111111","11011011","11111111","01111110","00100100","00111100",
-    ],
-    "Alien": [
-        "00111100","01111110","11111111","11011011","10000001","01100110","00111100",
-    ],
-    "Smiley": [
-        "00111100","01111110","11011011","11111111","10111101","11000011","01111110","00111100",
-    ],
-    "Crystal": [
-        "00011000","00111100","01111110","11111111","01111110","00111100","00011000",
-    ],
-    "Moth": [
-        "10000001","11011011","11111111","01111110","00111100","01111110","11111111","10000001",
-    ],
-    "Orb": [
-        "00111100","01111110","11100111","11011011","11011011","11100111","01111110","00111100",
-    ],
-}
+from overlay_sprite_assets import OVERLAY_ICONS, SPRITES
+from text_engine import clamp01
 
 _overlay = {
-    "front": {"type": "Text", "icon": "Heart", "motion": "Static"},
-    "back": {"type": "Text", "icon": "Heart", "motion": "Static"},
+    "front": {"icon_enabled": False, "icon": "Heart", "motion": "Static"},
+    "back": {"icon_enabled": False, "icon": "Heart", "motion": "Static"},
 }
 
 
@@ -61,121 +16,124 @@ def _side(seed):
     return "back" if int(seed or 0) >= 1000 else "front"
 
 
+def _sprite(name):
+    return SPRITES.get(name, SPRITES["Heart"])
+
+
+def _dims(name):
+    rows = _sprite(name)["rows"]
+    return max(len(r) for r in rows), len(rows)
+
+
 def _put(display, x, y, color):
     if 0 <= x < display.width and 0 <= y < display.height:
         display.set_pixel(x, y, color)
 
 
-def _sprite_dimensions(name):
-    rows = SPRITES.get(name, SPRITES["Heart"])
-    return max(len(r) for r in rows), len(rows)
+def _tint(color, amount):
+    if amount <= 0:
+        return color
+    r, g, b = color
+    boost = 1.0 + amount
+    return (min(255, int(r * boost)), min(255, int(g * boost)), min(255, int(b * boost)))
 
 
-def _draw_sprite(display, name, cx, cy, scale, color, glow=False, glitch=False, seed=0):
-    rows = SPRITES.get(name, SPRITES["Heart"])
-    w, h = _sprite_dimensions(name)
-    x0 = int(round(cx - (w * scale) / 2))
-    y0 = int(round(cy - (h * scale) / 2))
+def _draw_sprite(display, name, cx, cy, target_h, glow=False, glitch=False, pulse=0.0, seed=0):
+    data = _sprite(name)
+    rows = data["rows"]
+    palette = data["palette"]
+    sw, sh = _dims(name)
+    target_h = max(5, int(round(target_h)))
+    target_w = max(5, int(round(sw * target_h / max(1, sh))))
+    x0 = int(round(cx - target_w / 2))
+    y0 = int(round(cy - target_h / 2))
     rng = random.Random(seed)
 
-    points = []
-    for yy, row in enumerate(rows):
-        for xx, bit in enumerate(row):
-            if bit != "1":
+    pixels = []
+    for ty in range(target_h):
+        sy = min(sh - 1, int(ty * sh / target_h))
+        row = rows[sy]
+        for tx in range(target_w):
+            sx = min(sw - 1, int(tx * sw / target_w))
+            if sx >= len(row):
                 continue
-            px = x0 + xx * scale
-            py = y0 + yy * scale
-            if glitch and rng.random() < .10:
+            ch = row[sx]
+            if ch == ".":
+                continue
+            px = x0 + tx
+            py = y0 + ty
+            if glitch and rng.random() < .08:
                 px += rng.choice((-2, -1, 1, 2))
-            for sy in range(scale):
-                for sx in range(scale):
-                    points.append((px + sx, py + sy))
+            color = _tint(palette[int(ch)], pulse)
+            pixels.append((px, py, color))
 
     if glow:
-        g = tuple(max(12, int(c * .28)) for c in color)
-        for px, py in points:
-            for ox, oy in ((-1,0),(1,0),(0,-1),(0,1)):
+        for px, py, color in pixels:
+            g = tuple(max(10, int(c * .30)) for c in color)
+            for ox, oy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
                 _put(display, px + ox, py + oy, g)
-    for px, py in points:
+    for px, py, color in pixels:
         _put(display, px, py, color)
 
 
-def _render_icon(renderer, display, settings, t, signals=None, seed=0, clear_background=True):
+def _icon_layout(renderer, settings, name):
+    message = str(settings.get("message", "") or "").strip()
+    motion = str(settings.get("motion", "Static"))
+    if not message:
+        return renderer.width / 2, renderer.height / 2, 27
+
+    # With text present, preserve the text first and let the icon flex around it.
+    # Short static messages get an icon above the text; scrolling/long text gets
+    # a compact pinned icon at the left edge so it stays readable.
+    if motion == "Static" and len(message) <= 10:
+        return renderer.width / 2, 6.5, 11
+    return 7.0, renderer.height / 2, 12
+
+
+def _render_icon_layer(renderer, display, settings, t, signals=None, seed=0):
     signals = signals or {}
     side = _side(seed)
     st = _overlay[side]
-    if clear_background:
-        display.clear()
+    if not st.get("icon_enabled"):
+        return
 
     name = st.get("icon", "Heart")
-    scale = max(1, min(3, int(settings.get("scale", 2))))
-    w, h = _sprite_dimensions(name)
-    while scale > 1 and (w * scale > renderer.width - 6 or h * scale > renderer.height - 6):
-        scale -= 1
-
+    cx, cy, target_h = _icon_layout(renderer, settings, name)
     bass = clamp01(signals.get("bass", 0.0))
     mids = clamp01(signals.get("mids", 0.0))
-    highs = clamp01(signals.get("highs", 0.0))
     beat = bool(signals.get("beat", False))
     audio_mode = settings.get("audio_reactivity", "Off")
     speed = max(1.0, min(40.0, float(settings.get("speed", 22.0))))
-
-    cx = renderer.width / 2
-    cy = renderer.height / 2
-    motion = st.get("motion", "Static")
     rate = speed / 22.0
-    if motion == "Float":
-        cx += math.sin(t * 1.35 * rate) * 3.0
-        cy += math.cos(t * 1.05 * rate) * 2.0
-    elif motion == "Bounce":
-        cy += abs(math.sin(t * 2.5 * rate)) * -4.0 + 2.0
 
-    if settings.get("wave"):
-        cy += math.sin(t * 3.8 * rate) * 2.0
+    motion = st.get("motion", "Static")
+    if motion == "Float":
+        cx += math.sin(t * 1.35 * rate) * 2.0
+        cy += math.cos(t * 1.05 * rate) * 1.5
+    elif motion == "Bounce":
+        cy += -abs(math.sin(t * 2.5 * rate)) * 3.0 + 1.5
 
     if audio_mode == "Subtle":
-        cy += math.sin(t * 5.0) * bass * 1.4
+        target_h += bass * 1.5
         if beat:
             cy -= 1
     elif audio_mode == "Reactive":
-        cy += math.sin(t * 6.0) * bass * 3.0
-        cx += math.sin(t * 3.1) * mids * 2.0
+        target_h += bass * 3.5
+        cx += math.sin(t * 3.1) * mids * 1.5
         if beat:
             cy -= 2
 
-    pulse = 1.0
-    if settings.get("beat_pulse") and beat:
-        pulse = 1.25
+    pulse = .18 if settings.get("beat_pulse") and beat else 0.0
     if audio_mode == "Reactive":
-        pulse = max(pulse, 1.0 + bass * .18)
-
-    base = parse_color(settings.get("color", "#ffffff"))
-    mode = settings.get("color_mode", "Rainbow")
-    if mode == "Rainbow":
-        base = hsv_color(t * 70 + bass * 40, .95, min(1.0, .82 + .18 * pulse))
-    elif mode == "Audio":
-        base = hsv_color(210 + mids * 150, .9, .60 + .40 * max(bass, mids, highs))
-    elif pulse > 1.0:
-        base = tuple(min(255, int(c * pulse)) for c in base)
-
-    if settings.get("backplate"):
-        pad = 2
-        left = int(cx - w * scale / 2) - pad
-        top = int(cy - h * scale / 2) - pad
-        for py in range(max(0, top), min(display.height, top + h * scale + pad * 2)):
-            for px in range(max(0, left), min(display.width, left + w * scale + pad * 2)):
-                r,g,b = display.get_pixel(px, py)
-                display.set_pixel(px, py, (int(r*.28), int(g*.28), int(b*.28)))
+        pulse = max(pulse, bass * .16)
 
     _draw_sprite(
-        display, name, cx, cy, scale, base,
+        display, name, cx, cy, target_h,
         glow=bool(settings.get("glow")),
         glitch=bool(settings.get("glitch")),
+        pulse=pulse,
         seed=int(seed + t * 18),
     )
-
-    if settings.get("beat_pulse") and beat:
-        renderer._beat_flash(display, .10 + bass * .16)
 
 
 _base_original_render = performance_extras._original_render
@@ -183,15 +141,25 @@ _base_static_auto = performance_extras._draw_static_auto
 
 
 def _overlay_render(renderer, display, settings, t, signals=None, seed=0, clear_background=True):
-    if _overlay[_side(seed)].get("type") == "Icon":
-        return _render_icon(renderer, display, settings, t, signals, seed, clear_background)
-    return _base_original_render(renderer, display, settings, t, signals, seed, clear_background)
+    side = _side(seed)
+    st = _overlay[side]
+    adjusted = dict(settings)
+    if st.get("icon_enabled") and str(adjusted.get("message", "") or "").strip():
+        # Give combined layouts more breathing room. The icon is allowed to shrink
+        # first; text remains legible and centered/scrolling as before.
+        adjusted["scale"] = min(1, int(adjusted.get("scale", 1)))
+    _base_original_render(renderer, display, adjusted, t, signals, seed, clear_background)
+    _render_icon_layer(renderer, display, adjusted, t, signals, seed)
 
 
 def _overlay_static(renderer, display, settings, t, signals, seed, clear_background):
-    if _overlay[_side(seed)].get("type") == "Icon":
-        return _render_icon(renderer, display, settings, t, signals, seed, clear_background)
-    return _base_static_auto(renderer, display, settings, t, signals, seed, clear_background)
+    side = _side(seed)
+    st = _overlay[side]
+    adjusted = dict(settings)
+    if st.get("icon_enabled") and str(adjusted.get("message", "") or "").strip():
+        adjusted["scale"] = 1
+    _base_static_auto(renderer, display, adjusted, t, signals, seed, clear_background)
+    _render_icon_layer(renderer, display, adjusted, t, signals, seed)
 
 
 performance_extras._original_render = _overlay_render
@@ -208,21 +176,22 @@ def _get_commands(self):
             continue
         if data.get("command") == "set_target" and data.get("value") in ("front", "back", "both"):
             target = data.get("value")
-        if data.get("command") in ("text_settings", "text_show", "text_refresh"):
-            value = data.get("value")
-            if not isinstance(value, dict):
-                continue
-            sides = ("front", "back") if target == "both" else (target,)
-            overlay_type = value.get("overlay_type")
-            icon = value.get("overlay_icon")
-            motion = value.get("overlay_motion")
-            for side in sides:
-                if overlay_type in ("Text", "Icon"):
-                    _overlay[side]["type"] = overlay_type
-                if icon in OVERLAY_ICONS:
-                    _overlay[side]["icon"] = icon
-                if motion in ("Static", "Float", "Bounce"):
-                    _overlay[side]["motion"] = motion
+        if data.get("command") not in ("text_settings", "text_show", "text_refresh"):
+            continue
+        value = data.get("value")
+        if not isinstance(value, dict):
+            continue
+        sides = ("front", "back") if target == "both" else (target,)
+        icon = value.get("overlay_icon")
+        enabled = value.get("overlay_icon_enabled")
+        motion = value.get("overlay_motion")
+        for side in sides:
+            if isinstance(enabled, bool):
+                _overlay[side]["icon_enabled"] = enabled
+            if icon in OVERLAY_ICONS:
+                _overlay[side]["icon"] = icon
+            if motion in ("Static", "Float", "Bounce"):
+                _overlay[side]["motion"] = motion
     return commands
 
 
@@ -238,7 +207,7 @@ def _update_state(self, state):
         for side in ("front", "back"):
             panel = dict(panels.get(side) or {})
             text = dict(panel.get("text") or {})
-            text["overlay_type"] = _overlay[side]["type"]
+            text["overlay_icon_enabled"] = bool(_overlay[side]["icon_enabled"])
             text["overlay_icon"] = _overlay[side]["icon"]
             text["overlay_motion"] = _overlay[side]["motion"]
             panel["text"] = text
@@ -247,7 +216,7 @@ def _update_state(self, state):
         ref = state.get("reference_side", "front")
         if isinstance(state.get("text"), dict):
             t = dict(state["text"])
-            t["overlay_type"] = _overlay[ref]["type"]
+            t["overlay_icon_enabled"] = bool(_overlay[ref]["icon_enabled"])
             t["overlay_icon"] = _overlay[ref]["icon"]
             t["overlay_motion"] = _overlay[ref]["motion"]
             state["text"] = t
