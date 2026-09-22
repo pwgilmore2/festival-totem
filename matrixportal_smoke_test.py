@@ -1,13 +1,12 @@
-"""First physical-hardware smoke test for the festival totem.
+"""First physical-hardware smoke test for the Festival Totem MatrixPortal S3.
 
-Copy this repository's hardware modules plus a generated ``manifest.json`` and
-``media/`` folder to CIRCUITPY, rename this file to ``code.py`` temporarily, and
-watch the serial console.
+Copy the hardware modules plus a generated ``manifest.json`` and ``media/``
+folder to CIRCUITPY, rename this file to ``code.py`` temporarily, and watch the
+serial console.
 
-This intentionally does not start Wi-Fi or the phone controller. It answers the
-first two hardware questions in isolation:
-1. Do both chained logical 64x32 panels map correctly?
-2. Can two independent gifio streams run at a steady cadence within RAM?
+The loop is intentionally cooperative/non-blocking: GIF decode, render/present,
+state reporting, and future HTTP/audio work each get independent timers. No
+``sleep()`` is used for frame pacing.
 """
 
 import gc
@@ -19,8 +18,9 @@ from runtime_io import HardwareDisplayBackend
 
 WIDTH = 64
 HEIGHT = 32
-BIT_DEPTH = 2
-TARGET_FPS = 24
+BIT_DEPTH = 4
+TARGET_FPS = 30
+REPORT_SECONDS = 5.0
 
 # Change BACK_ROTATION to 180 if the rear-facing physical panel is mounted
 # upside-down relative to the front panel.
@@ -34,7 +34,7 @@ def memory_free():
 
 
 def main():
-    print("Festival Totem MatrixPortal smoke test")
+    print("Festival Totem MatrixPortal S3 smoke test")
     print("Free RAM before display:", memory_free())
 
     backend = HardwareDisplayBackend(
@@ -53,7 +53,12 @@ def main():
     displays["back"].fill((0, 0, 255))
     backend.present()
     print("Panel mapping test: FRONT=red BACK=blue")
-    time.sleep(2.0)
+
+    mapping_until = time.monotonic() + 2.0
+    while time.monotonic() < mapping_until:
+        # Intentionally no sleep: this mirrors the final cooperative loop where
+        # Wi-Fi/server/audio polling will have work to do between display frames.
+        pass
 
     library = MatrixPortalAssetLibrary("/manifest.json")
     print("Prepared assets:", len(library))
@@ -66,37 +71,44 @@ def main():
     print("Free RAM after two GIF decoders:", memory_free())
 
     frame_interval = 1.0 / TARGET_FPS
-    next_frame = time.monotonic()
+    now = time.monotonic()
+    next_present_at = now
+    next_report_at = now + REPORT_SECONDS
     frames = 0
-    report_started = next_frame
+    report_started = now
 
     try:
         while True:
             now = time.monotonic()
-            remaining = next_frame - now
-            if remaining > 0:
-                time.sleep(remaining)
-                now = time.monotonic()
 
-            # Schedule from the current time if a frame ran late rather than
-            # spinning to catch up and starving the GIF decoder or Wi-Fi later.
-            next_frame = now + frame_interval
-
+            # Independent front/back file pointers. At most one synchronous
+            # gifio decode is allowed per loop iteration to avoid a double-I/O
+            # spike when both GIF deadlines line up.
             media.advance(now)
-            media.render(displays)
-            backend.present()
-            frames += 1
 
-            elapsed = now - report_started
-            if elapsed >= 5.0:
+            # Rendering/presenting has its own cadence and never blocks waiting
+            # for the next deadline. If work ran late, drop timing debt rather
+            # than trying to catch up with multiple presents.
+            if now >= next_present_at:
+                media.render(displays)
+                backend.present()
+                frames += 1
+                next_present_at = now + frame_interval
+
+            if now >= next_report_at:
+                elapsed = max(0.001, now - report_started)
+                front_player = media.players.players["front"]
+                back_player = media.players.players["back"]
                 print(
-                    "FPS:",
-                    round(frames / elapsed, 1),
-                    "free RAM:",
-                    memory_free(),
+                    "FPS:", round(frames / elapsed, 1),
+                    "free RAM:", memory_free(),
+                    "GIF frames F/B:",
+                    front_player.frames_advanced,
+                    back_player.frames_advanced,
                 )
                 frames = 0
                 report_started = now
+                next_report_at = now + REPORT_SECONDS
                 gc.collect()
     finally:
         media.close()
