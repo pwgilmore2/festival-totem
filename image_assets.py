@@ -1,18 +1,22 @@
 import json
 from pathlib import Path
-from PIL import Image, ImageEnhance, ImageFilter
+from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 
 IMAGE_EXTENSIONS={'.png','.jpg','.jpeg','.webp','.gif'}
+PROCESSING_PROFILES=['Raw','Clean','Detailed','Pixel-Dither']
 
 class ImageSettings:
-    def __init__(self,mode='optimize',crop_x=0.5,crop_y=0.5,zoom=1.0,contrast=1.25,saturation=1.35,sharpen=True,gamma=1.0,dither=False):
+    def __init__(self,mode='optimize',crop_x=0.5,crop_y=0.5,zoom=1.0,contrast=1.25,saturation=1.35,sharpen=True,gamma=1.0,dither=False,processing_profile='Clean'):
         self.mode=mode;self.crop_x=crop_x;self.crop_y=crop_y;self.zoom=zoom
         self.contrast=contrast;self.saturation=saturation;self.sharpen=sharpen;self.gamma=gamma;self.dither=dither
+        self.processing_profile=processing_profile if processing_profile in PROCESSING_PROFILES else 'Clean'
     def reset(self):
         self.mode='optimize';self.crop_x=0.5;self.crop_y=0.5;self.zoom=1.0
-        self.contrast=1.25;self.saturation=1.35;self.sharpen=True;self.gamma=1.0;self.dither=False
+        self.contrast=1.25;self.saturation=1.35;self.sharpen=True;self.gamma=1.0;self.dither=False;self.processing_profile='Clean'
+    def reset_processing(self):
+        self.contrast=1.25;self.saturation=1.35;self.sharpen=True;self.gamma=1.0;self.dither=False;self.processing_profile='Clean'
     def to_dict(self):
-        return {'mode':self.mode,'crop_x':self.crop_x,'crop_y':self.crop_y,'zoom':self.zoom,'contrast':self.contrast,'saturation':self.saturation,'sharpen':self.sharpen,'gamma':self.gamma,'dither':self.dither}
+        return {'mode':self.mode,'crop_x':self.crop_x,'crop_y':self.crop_y,'zoom':self.zoom,'contrast':self.contrast,'saturation':self.saturation,'sharpen':self.sharpen,'gamma':self.gamma,'dither':self.dither,'processing_profile':self.processing_profile}
     @classmethod
     def from_dict(cls,data):
         if not isinstance(data,dict):return cls()
@@ -21,11 +25,15 @@ class ImageSettings:
         for key in ('crop_x','crop_y','zoom','contrast','saturation','gamma'):
             try:setattr(s,key,float(data.get(key,getattr(s,key))))
             except (TypeError,ValueError):pass
-        s.sharpen=bool(data.get('sharpen',s.sharpen));s.dither=bool(data.get('dither',s.dither));s.clamp();return s
+        s.sharpen=bool(data.get('sharpen',s.sharpen));s.dither=bool(data.get('dither',s.dither))
+        p=str(data.get('processing_profile',s.processing_profile))
+        if p in PROCESSING_PROFILES:s.processing_profile=p
+        s.clamp();return s
     def clamp(self):
         self.crop_x=max(0.0,min(1.0,self.crop_x));self.crop_y=max(0.0,min(1.0,self.crop_y))
         self.zoom=max(0.55,min(5.0,self.zoom))
         self.contrast=max(0.25,min(3.0,self.contrast));self.saturation=max(0.0,min(3.0,self.saturation));self.gamma=max(0.25,min(3.0,self.gamma))
+        if self.processing_profile not in PROCESSING_PROFILES:self.processing_profile='Clean'
 
 class ImageAsset:
     def __init__(self,path,width=64,height=32,settings=None):
@@ -69,24 +77,47 @@ class ImageAsset:
         for value in range(256):
             corrected=int((value/255.0)**gamma*255+0.5);table.append(max(0,min(255,corrected)))
         return image.point(table*3)
-    def apply_dither(self,image):
-        return image.convert('RGB').quantize(colors=64,method=Image.Quantize.MEDIANCUT,dither=Image.Dither.FLOYDSTEINBERG).convert('RGB')
-    def optimize_image(self,image,settings):
-        image=self.crop_image(image,settings)
-        image=ImageEnhance.Contrast(image).enhance(settings.contrast);image=ImageEnhance.Color(image).enhance(settings.saturation)
-        if settings.sharpen:image=image.filter(ImageFilter.UnsharpMask(radius=1,percent=120,threshold=2))
+    def apply_dither(self,image,colors=64):
+        return image.convert('RGB').quantize(colors=colors,method=Image.Quantize.MEDIANCUT,dither=Image.Dither.FLOYDSTEINBERG).convert('RGB')
+    def quantize_clean(self,image,colors=56):
+        return image.convert('RGB').quantize(colors=colors,method=Image.Quantize.MEDIANCUT,dither=Image.Dither.NONE).convert('RGB')
+    def _base_frame(self,image,settings):
+        if settings.mode=='pixel':return self.pixel_image(image,settings)
+        if settings.mode=='fit':return self.fit_image(image)
+        return self.crop_image(image,settings)
+    def _fine_tune(self,image,settings,sharpen_percent=120,sharpen_radius=1.0):
+        image=ImageEnhance.Contrast(image).enhance(settings.contrast)
+        image=ImageEnhance.Color(image).enhance(settings.saturation)
         image=self.apply_gamma(image,settings.gamma)
+        if settings.sharpen:image=image.filter(ImageFilter.UnsharpMask(radius=sharpen_radius,percent=sharpen_percent,threshold=2))
         if settings.dither:image=self.apply_dither(image)
         return image
+    def profile_image(self,image,settings):
+        profile=settings.processing_profile
+        if profile=='Raw':
+            return self._base_frame(image,settings)
+        if profile=='Pixel-Dither':
+            base=self.pixel_image(image,settings)
+            base=ImageEnhance.Contrast(base).enhance(max(1.0,settings.contrast))
+            base=ImageEnhance.Color(base).enhance(max(1.0,settings.saturation))
+            base=self.apply_gamma(base,settings.gamma)
+            return self.apply_dither(base,colors=32)
+        if profile=='Detailed':
+            # Reduce tiny source texture before the final LED-scale resize, then
+            # restore meaningful edges and collapse near-duplicate colors.
+            softened=image.filter(ImageFilter.GaussianBlur(radius=.45))
+            base=self._base_frame(softened,settings)
+            base=self._fine_tune(base,settings,sharpen_percent=165,sharpen_radius=.8)
+            base=self.quantize_clean(base,colors=48)
+            # A tiny autocontrast cut helps separate silhouettes without blowing highlights.
+            return ImageOps.autocontrast(base,cutoff=.7)
+        base=self._base_frame(image,settings)
+        return self._fine_tune(base,settings,sharpen_percent=120,sharpen_radius=1.0)
+    def optimize_image(self,image,settings):
+        return self.profile_image(image,settings)
     def prepare_frame(self,frame,settings):
         frame=frame.convert('RGB')
-        if settings.mode=='fit':return self.fit_image(frame)
-        if settings.mode=='pixel':return self.pixel_image(frame,settings)
-        if settings.mode=='optimize':return self.optimize_image(frame,settings)
-        if settings.mode=='dither':
-            image=self.optimize_image(frame,settings)
-            return image if settings.dither else self.apply_dither(image)
-        return self.crop_image(frame,settings)
+        return self.profile_image(frame,settings)
     def frame_index_for_time(self,t):
         if not self.frames or len(self.frames)==1:return 0
         total=sum(self.durations)
@@ -99,7 +130,7 @@ class ImageAsset:
     def render(self,display,time,settings=None):
         if not self.frames:return
         settings=settings or self.settings;settings.clamp();fi=self.frame_index_for_time(time)
-        key=(fi,settings.mode,round(settings.crop_x,4),round(settings.crop_y,4),round(settings.zoom,4),round(settings.contrast,3),round(settings.saturation,3),settings.sharpen,round(settings.gamma,3),settings.dither)
+        key=(fi,settings.mode,settings.processing_profile,round(settings.crop_x,4),round(settings.crop_y,4),round(settings.zoom,4),round(settings.contrast,3),round(settings.saturation,3),settings.sharpen,round(settings.gamma,3),settings.dither)
         if key not in self.cache:self.cache[key]=list(self.prepare_frame(self.frames[fi],settings).getdata())
         pixels=self.cache[key];i=0
         for y in range(self.height):
