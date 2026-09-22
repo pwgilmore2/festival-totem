@@ -7,8 +7,8 @@ from overlay_sprite_assets import OVERLAY_ICONS, SPRITES
 from text_engine import TextRenderer, clamp01
 
 _overlay = {
-    "front": {"icon_enabled": False, "icon": "Heart", "motion": "Static"},
-    "back": {"icon_enabled": False, "icon": "Heart", "motion": "Static"},
+    "front": {"icon_enabled": False, "icon": "Heart", "motion": "Static", "text_visible": False},
+    "back": {"icon_enabled": False, "icon": "Heart", "motion": "Static", "text_visible": False},
 }
 
 
@@ -33,9 +33,13 @@ def _put(display, x, y, color):
 def _tint(color, amount):
     if amount <= 0:
         return color
-    r, g, b = color
     boost = 1.0 + amount
-    return (min(255, int(r * boost)), min(255, int(g * boost)), min(255, int(b * boost)))
+    return tuple(min(255, int(c * boost)) for c in color)
+
+
+def _palette_index(ch):
+    # Full-detail masters use printable ASCII starting at '!'.
+    return ord(ch) - 33
 
 
 def _draw_sprite(display, name, cx, cy, target_h, glow=False, glitch=False, pulse=0.0, seed=0):
@@ -43,14 +47,12 @@ def _draw_sprite(display, name, cx, cy, target_h, glow=False, glitch=False, puls
     rows = data["rows"]
     palette = data["palette"]
     sw, sh = _dims(name)
-    target_h = max(5, int(round(target_h)))
-    target_w = max(5, int(round(sw * target_h / max(1, sh))))
+    target_h = max(6, min(display.height, int(round(target_h))))
+    target_w = max(6, int(round(sw * target_h / max(1, sh))))
     x0 = int(round(cx - target_w / 2))
     y0 = int(round(cy - target_h / 2))
     rng = random.Random(seed)
 
-    # At 64x32 this is only a few hundred pixels. Build the final colored points
-    # once per frame, then optionally add a 1px glow around them.
     pixels = []
     for ty in range(target_h):
         sy = min(sh - 1, int(ty * sh / target_h))
@@ -62,33 +64,34 @@ def _draw_sprite(display, name, cx, cy, target_h, glow=False, glitch=False, puls
             ch = row[sx]
             if ch == ".":
                 continue
+            idx = _palette_index(ch)
+            if idx < 0 or idx >= len(palette):
+                continue
             px = x0 + tx
             py = y0 + ty
-            if glitch and rng.random() < .08:
+            if glitch and rng.random() < .06:
                 px += rng.choice((-2, -1, 1, 2))
-            color = _tint(palette[int(ch)], pulse)
-            pixels.append((px, py, color))
+            pixels.append((px, py, _tint(palette[idx], pulse)))
 
     if glow:
         for px, py, color in pixels:
-            g = tuple(max(10, int(c * .30)) for c in color)
+            g = tuple(max(8, int(c * .26)) for c in color)
             for ox, oy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
                 _put(display, px + ox, py + oy, g)
     for px, py, color in pixels:
         _put(display, px, py, color)
 
 
-def _icon_layout(renderer, settings, name):
-    message = str(settings.get("message", "") or "").strip()
-    motion = str(settings.get("motion", "Static"))
+def _icon_layout(renderer, settings, name, text_visible):
+    message = str(settings.get("message", "") or "").strip() if text_visible else ""
     if not message:
-        return renderer.width / 2, renderer.height / 2, 27
+        # Deliberately large: use almost the full 32px panel height.
+        return renderer.width / 2, renderer.height / 2, 30
 
-    # Text + icon: protect text readability first. Short static messages put the
-    # icon above; scrolling or longer text pins a compact icon to the left.
+    motion = str(settings.get("motion", "Static"))
     if motion == "Static" and len(message) <= 10:
-        return renderer.width / 2, 6.5, 11
-    return 7.0, renderer.height / 2, 12
+        return renderer.width / 2, 7.0, 13
+    return 8.0, renderer.height / 2, 14
 
 
 def _render_icon_layer(renderer, display, settings, t, signals=None, seed=0):
@@ -99,7 +102,7 @@ def _render_icon_layer(renderer, display, settings, t, signals=None, seed=0):
         return
 
     name = st.get("icon", "Heart")
-    cx, cy, target_h = _icon_layout(renderer, settings, name)
+    cx, cy, target_h = _icon_layout(renderer, settings, name, st.get("text_visible", False))
     bass = clamp01(signals.get("bass", 0.0))
     mids = clamp01(signals.get("mids", 0.0))
     beat = bool(signals.get("beat", False))
@@ -115,18 +118,18 @@ def _render_icon_layer(renderer, display, settings, t, signals=None, seed=0):
         cy += -abs(math.sin(t * 2.5 * rate)) * 3.0 + 1.5
 
     if audio_mode == "Subtle":
-        target_h += bass * 1.5
+        target_h += bass * 1.0
         if beat:
             cy -= 1
     elif audio_mode == "Reactive":
-        target_h += bass * 3.5
+        target_h += bass * 2.0
         cx += math.sin(t * 3.1) * mids * 1.5
         if beat:
             cy -= 2
 
-    pulse = .18 if settings.get("beat_pulse") and beat else 0.0
+    pulse = .14 if settings.get("beat_pulse") and beat else 0.0
     if audio_mode == "Reactive":
-        pulse = max(pulse, bass * .16)
+        pulse = max(pulse, bass * .12)
 
     _draw_sprite(
         display, name, cx, cy, target_h,
@@ -137,10 +140,7 @@ def _render_icon_layer(renderer, display, settings, t, signals=None, seed=0):
     )
 
 
-# IMPORTANT: wrap the final TextRenderer entry point, not performance_extras'
-# internal fallback helpers. The previous implementation wrapped
-# performance_extras._original_render, which static text can call internally;
-# that created a recursive render loop as soon as an icon was enabled.
+# Compose at the final TextRenderer entry point exactly once.
 _base_text_render = TextRenderer.render
 
 
@@ -148,9 +148,12 @@ def _render_with_overlay(self, display, settings, t, signals=None, seed=0, clear
     side = _side(seed)
     st = _overlay[side]
     adjusted = dict(settings)
-    if st.get("icon_enabled") and str(adjusted.get("message", "") or "").strip():
-        adjusted["scale"] = 1
-    _base_text_render(self, display, adjusted, t, signals, seed, clear_background)
+
+    if st.get("text_visible"):
+        if st.get("icon_enabled") and str(adjusted.get("message", "") or "").strip():
+            adjusted["scale"] = 1
+        _base_text_render(self, display, adjusted, t, signals, seed, clear_background)
+    # When text is hidden we intentionally leave the already-rendered GIF alone.
     _render_icon_layer(self, display, adjusted, t, signals, seed)
 
 
@@ -176,6 +179,7 @@ def _get_commands(self):
         icon = value.get("overlay_icon")
         enabled = value.get("overlay_icon_enabled")
         motion = value.get("overlay_motion")
+        text_visible = value.get("overlay_text_visible")
         for side in sides:
             if isinstance(enabled, bool):
                 _overlay[side]["icon_enabled"] = enabled
@@ -183,6 +187,8 @@ def _get_commands(self):
                 _overlay[side]["icon"] = icon
             if motion in ("Static", "Float", "Bounce"):
                 _overlay[side]["motion"] = motion
+            if isinstance(text_visible, bool):
+                _overlay[side]["text_visible"] = text_visible
     return commands
 
 
@@ -201,6 +207,7 @@ def _update_state(self, state):
             text["overlay_icon_enabled"] = bool(_overlay[side]["icon_enabled"])
             text["overlay_icon"] = _overlay[side]["icon"]
             text["overlay_motion"] = _overlay[side]["motion"]
+            text["overlay_text_visible"] = bool(_overlay[side]["text_visible"])
             panel["text"] = text
             panels[side] = panel
         state["panels"] = panels
@@ -210,6 +217,7 @@ def _update_state(self, state):
             t["overlay_icon_enabled"] = bool(_overlay[ref]["icon_enabled"])
             t["overlay_icon"] = _overlay[ref]["icon"]
             t["overlay_motion"] = _overlay[ref]["motion"]
+            t["overlay_text_visible"] = bool(_overlay[ref]["text_visible"])
             state["text"] = t
         state["overlay_icons"] = list(OVERLAY_ICONS)
     return _base_update_state(self, state)
