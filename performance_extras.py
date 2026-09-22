@@ -12,6 +12,7 @@ _chaos_mode = None
 _chaos_started = 0.0
 _chaos_releasing = 0.0
 _chaos_release_duration = 0.0
+_guest_release_token = 0
 _xy = {"x": .5, "y": .5, "velocity": 0.0}
 _delayed_commands = []
 _text_transitions = {
@@ -72,12 +73,13 @@ def _smooth01(v):
 def _effect_envelope(mode):
     now = time.monotonic()
     if mode == "xyintent":
-        ramp = .18
+        env = _smooth01((now - _chaos_started) / .18)
     elif mode in _CHILL_MODES:
-        ramp = 2.4
+        # Chill effects should feel alive immediately, then ease into full strength.
+        # Starting around 58% keeps the old punch without bringing back the snap.
+        env = .58 + .42 * _smooth01((now - _chaos_started) / .75)
     else:
-        ramp = .12
-    env = _smooth01((now - _chaos_started) / max(.01, ramp))
+        env = _smooth01((now - _chaos_started) / .12)
     if _chaos_releasing:
         release = (now - _chaos_releasing) / max(.01, _chaos_release_duration)
         env *= 1.0 - _smooth01(release)
@@ -233,16 +235,16 @@ _original_guest_burst = VisualLayerEngine.guest_burst
 
 def _row_wave(engine, display, amount, frame, tint=None, speed=.035, frequency=.34):
     src = copy_pixels(display)
-    amp = max(1, int(1 + amount * 4))
+    amp = max(1, int(1 + amount * 5))
     for y in range(display.height):
         shift = int(math.sin(y * frequency + frame * speed) * amp)
         for x in range(display.width):
             sx = max(0, min(display.width - 1, x - shift))
             r, g, b = src[y][sx]
             if tint == "teal":
-                r = int(r * .48)
-                g = min(255, int(g * 1.02 + b * .12))
-                b = min(255, int(b * 1.08 + g * .04))
+                r = int(r * .44)
+                g = min(255, int(g * 1.04 + b * .15))
+                b = min(255, int(b * 1.10 + g * .05))
             display.set_pixel(x, y, (r, g, b))
 
 
@@ -291,8 +293,8 @@ def _guest_burst(self, display, kind, amount, frame_number=0):
     if mode in ("glitch", "chaos"):
         return _original_guest_burst(self, display, mode, amount, frame_number)
     if mode == "rainbow":
-        self._hue(display, math.sin(frame_number * .016) * 95 * amount)
-        self._brighten(display, amount * .06)
+        self._hue(display, math.sin(frame_number * .022) * 150 * amount)
+        self._brighten(display, amount * .10)
         return
     if mode == "pixelmelt":
         _pixel_melt(display, amount, frame_number); return
@@ -307,33 +309,33 @@ def _guest_burst(self, display, kind, amount, frame_number=0):
         if hit: self._zoom(display, power * .16)
         return
     if mode == "trance":
-        wave = .5 + .5 * math.sin(frame_number * .025)
-        self._zoom(display, (.025 + wave * .055) * amount)
-        _row_wave(self, display, (.14 + wave * .20) * amount, frame_number, "teal", speed=.025)
-        self._rgb_split(display, (.025 + wave * .065) * amount)
+        wave = .5 + .5 * math.sin(frame_number * .035)
+        self._zoom(display, (.05 + wave * .10) * amount)
+        _row_wave(self, display, (.30 + wave * .38) * amount, frame_number, "teal", speed=.032)
+        self._rgb_split(display, (.05 + wave * .13) * amount)
         return
     if mode == "liquid":
-        wave = .5 + .5 * math.sin(frame_number * .022)
-        _row_wave(self, display, (.16 + wave * .24) * amount, frame_number, speed=.022, frequency=.30)
-        self._hue(display, math.sin(frame_number * .018) * 46 * amount)
+        wave = .5 + .5 * math.sin(frame_number * .030)
+        _row_wave(self, display, (.28 + wave * .38) * amount, frame_number, speed=.028, frequency=.31)
+        self._hue(display, math.sin(frame_number * .024) * 72 * amount)
         return
     if mode == "warp":
-        wave = .5 + .5 * math.sin(frame_number * .022)
-        self._zoom(display, (.025 + wave * .07) * amount)
-        self._shift(display, int(math.sin(frame_number * .03) * amount * 2), int(math.cos(frame_number * .024) * amount))
-        self._hue(display, math.sin(frame_number * .014) * 62 * amount)
+        wave = .5 + .5 * math.sin(frame_number * .030)
+        self._zoom(display, (.065 + wave * .17) * amount)
+        self._shift(display, int(math.sin(frame_number * .045) * amount * 3), int(math.cos(frame_number * .036) * amount * 2))
+        self._hue(display, math.sin(frame_number * .020) * 95 * amount)
         return
     if mode == "prism":
-        wave = .5 + .5 * math.sin(frame_number * .024)
-        self._rgb_split(display, (.055 + wave * .19) * amount)
-        self._hue(display, math.sin(frame_number * .016) * 50 * amount)
-        self._sparkles(display, amount * .08, frame_number * 7)
+        wave = .5 + .5 * math.sin(frame_number * .032)
+        self._rgb_split(display, (.14 + wave * .46) * amount)
+        self._hue(display, math.sin(frame_number * .022) * 80 * amount)
+        self._sparkles(display, amount * .16, frame_number * 9)
         return
     if mode == "tunnel":
-        wave = .5 + .5 * math.sin(frame_number * .028)
-        self._zoom(display, (.035 + .11 * wave) * amount)
-        self._rgb_split(display, (.025 + .075 * (1-wave)) * amount)
-        self._hue(display, math.sin(frame_number * .014) * 70 * amount)
+        wave = .5 + .5 * math.sin(frame_number * .035)
+        self._zoom(display, (.075 + .23 * wave) * amount)
+        self._rgb_split(display, (.055 + .18 * (1-wave)) * amount)
+        self._hue(display, math.sin(frame_number * .020) * 100 * amount)
         return
     if mode == "xyintent":
         x = max(0.0, min(1.0, float(_xy.get("x", .5))))
@@ -361,7 +363,7 @@ VisualLayerEngine.guest_burst = _guest_burst
 
 class PhoneControlServer(ui_cleanup_server.PhoneControlServer):
     def get_commands(self):
-        global _target, _audio, _chaos_mode, _chaos_started, _chaos_releasing, _chaos_release_duration, _xy
+        global _target, _audio, _chaos_mode, _chaos_started, _chaos_releasing, _chaos_release_duration, _guest_release_token, _xy
         commands = list(super().get_commands())
         now = time.monotonic()
 
@@ -399,6 +401,7 @@ class PhoneControlServer(ui_cleanup_server.PhoneControlServer):
                 kind = str(v.get("kind", "")).lower()
                 mapped = {"pixelmelt", "jumble", "bassjostle", "trance", "liquid", "tunnel", "warp", "prism", "rainbow"}
                 if kind in mapped:
+                    _guest_release_token += 1
                     _chaos_mode = kind
                     _chaos_started = now
                     _chaos_releasing = 0.0
@@ -406,6 +409,7 @@ class PhoneControlServer(ui_cleanup_server.PhoneControlServer):
                     nv = dict(v); nv["kind"] = "chaos"
                     data = dict(data); data["value"] = nv
                 else:
+                    _guest_release_token += 1
                     _chaos_mode = None
                     _chaos_started = now
                     _chaos_releasing = 0.0
@@ -415,6 +419,7 @@ class PhoneControlServer(ui_cleanup_server.PhoneControlServer):
                 except Exception:
                     _xy = {"x": .5, "y": .5, "velocity": 0.0}
                 if _chaos_mode != "xyintent":
+                    _guest_release_token += 1
                     _chaos_started = now
                 _chaos_mode = "xyintent"
                 _chaos_releasing = 0.0
@@ -422,25 +427,34 @@ class PhoneControlServer(ui_cleanup_server.PhoneControlServer):
                 data = {"command": "guest_action", "value": nv}
             elif c == "guest_stop":
                 if data.get("_guest_release_complete"):
-                    _chaos_mode = None
-                    _chaos_releasing = 0.0
-                    _chaos_release_duration = 0.0
-                    data = {k: val for k, val in data.items() if k != "_guest_release_complete"}
+                    token = data.get("_guest_release_token")
+                    if token == _guest_release_token:
+                        _chaos_mode = None
+                        _chaos_releasing = 0.0
+                        _chaos_release_duration = 0.0
+                    data = {k: val for k, val in data.items() if k not in ("_guest_release_complete", "_guest_release_token")}
                 elif _chaos_mode in _CHILL_MODES:
+                    _guest_release_token += 1
+                    token = _guest_release_token
                     _chaos_releasing = now
-                    _chaos_release_duration = .95
+                    _chaos_release_duration = .85
                     delayed = dict(data)
                     delayed["_guest_release_complete"] = True
+                    delayed["_guest_release_token"] = token
                     _delayed_commands.append((now + _chaos_release_duration, delayed))
                     continue
                 elif _chaos_mode == "xyintent":
+                    _guest_release_token += 1
+                    token = _guest_release_token
                     _chaos_releasing = now
-                    _chaos_release_duration = .32
+                    _chaos_release_duration = .30
                     delayed = dict(data)
                     delayed["_guest_release_complete"] = True
+                    delayed["_guest_release_token"] = token
                     _delayed_commands.append((now + _chaos_release_duration, delayed))
                     continue
                 else:
+                    _guest_release_token += 1
                     _chaos_mode = None
                     _chaos_releasing = 0.0
             out.append(data)
