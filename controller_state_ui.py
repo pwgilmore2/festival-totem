@@ -81,9 +81,11 @@ function syncTextUI(){
 function syncTabStatus(){
   let a=state.audio||{},t=runtimeText(),g=state.guest||{};
   let ta=document.getElementById('tabAudio'),tt=document.getElementById('tabText'),tg=document.getElementById('tabGuest');
-  if(ta){ta.classList.toggle('runtimeOn',!!a.fresh);ta.classList.toggle('beatHit',!!(a.fresh&&a.beat));ta.textContent=a.fresh?'Audio ●':'Audio';ta.title=a.fresh?'Phone audio active':'Phone audio off'}
-  if(tt){tt.classList.toggle('runtimeOn',!!t.enabled);tt.textContent=t.enabled?'Text ●':'Text';tt.title=t.enabled?('Text active: '+normalizedMessage(t.message)):'Text off'}
-  if(tg){tg.classList.toggle('runtimeChaos',!!g.active);tg.textContent=g.active?'Chaos Pad ●':'Chaos Pad';tg.title=g.active?('Active: '+String(g.kind||'Chaos')):'Chaos idle'}
+  // Status poller owns classes/tooltips only. Visible tab labels are owned by
+  // the final performance navigation patch so older UI code cannot flicker them.
+  if(ta){ta.classList.toggle('runtimeOn',!!a.fresh);ta.classList.toggle('beatHit',!!(a.fresh&&a.beat));ta.title=a.fresh?'Phone audio active':'Phone audio off'}
+  if(tt){tt.classList.toggle('runtimeOn',!!t.enabled);tt.title=t.enabled?('Text active: '+normalizedMessage(t.message)):'Text off'}
+  if(tg){tg.classList.toggle('runtimeChaos',!!g.active);tg.title=g.active?('Active: '+String(g.kind||'Chaos')):'Chaos idle'}
 }
 setInterval(syncTabStatus,120);
 </script>
