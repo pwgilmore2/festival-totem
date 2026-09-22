@@ -44,9 +44,6 @@ def _static_auto(renderer, display, settings, t, signals, seed, clear_background
         display.clear()
 
     scale = requested_scale
-    while scale > 1 and renderer.text_width(text, scale, font) > renderer.width - 4:
-        scale -= 1
-
     pulse = 1.35 if settings.get("beat_pulse") and beat else 1.0
     if audio_mode == "Subtle":
         pulse = max(pulse, 1.0 + bass * .08)
@@ -94,19 +91,29 @@ def _static_auto(renderer, display, settings, t, signals, seed, clear_background
         y = (renderer.height - 7 * scale) // 2 + vertical
         draw_line(text, x, y, scale)
     else:
-        lines = performance_extras._split_two_lines(renderer, text, font)
+        lines = None
+        words = text.split()
+        if len(words) >= 2 and (7 * scale * 2 + max(2, scale)) <= renderer.height - 2:
+            best = None
+            for i in range(1, len(words)):
+                a = " ".join(words[:i]); b = " ".join(words[i:])
+                wa = renderer.text_width(a, scale, font); wb = renderer.text_width(b, scale, font)
+                if wa <= renderer.width - 4 and wb <= renderer.width - 4:
+                    score = abs(wa - wb)
+                    if best is None or score < best[0]: best = (score, a, b)
+            if best: lines = (best[1], best[2])
         if lines:
             a, b = lines
-            gap = 3
-            total_h = 7 + gap + 7
+            gap = max(2, scale)
+            total_h = 14 * scale + gap
             y1 = (renderer.height - total_h) // 2 + vertical
-            y2 = y1 + 7 + gap
-            draw_line(a, (renderer.width - renderer.text_width(a, 1, font)) // 2, y1, 1)
-            draw_line(b, (renderer.width - renderer.text_width(b, 1, font)) // 2, y2, 1)
+            y2 = y1 + 7 * scale + gap
+            draw_line(a, (renderer.width - renderer.text_width(a, scale, font)) // 2, y1, scale)
+            draw_line(b, (renderer.width - renderer.text_width(b, scale, font)) // 2, y2, scale)
         else:
             fallback = dict(settings)
             fallback["motion"] = "Scroll Left"
-            fallback["scale"] = 1
+            fallback["scale"] = scale
             fallback["speed"] = 34.0
             performance_extras._original_render(renderer, display, fallback, t, signals, seed, clear_background=False)
             return
@@ -218,9 +225,6 @@ let textWaveLocal=false;
   }
   const duration=document.getElementById('duration');
   if(duration&&durationPending==null){duration.value='10';dv.textContent='10s'}
-
-  // Keep legacy elements alive for older polling code, but remove the choices
-  // from the performance UI. Layout and scroll speed are automatic now.
   const motion=document.getElementById('textMotion');
   if(motion){motion.value='Static';const box=motion.parentElement;if(box)box.style.display='none'}
   const fast=document.getElementById('textSpeedFast');
@@ -233,7 +237,15 @@ function syncTextMotionExtras(){
 }
 styleFlags=function(){let s=textStyle.value;return {glow:s==='Glow'||s==='Rave',glitch:s==='Glitch',beat_pulse:s==='Beat Pulse'||s==='Rave'}};
 styleFromState=function(t){if(t.glitch)return'Glitch';if(t.glow&&t.beat_pulse)return'Rave';if(t.glow)return'Glow';if(t.beat_pulse)return'Beat Pulse';return'Clean'};
-textPayload=function(){return {message:textMessage.value,font:textFont.value,motion:'Static',color_mode:textColorMode.value,color:textColor.value,scale:textScaleLocal,speed:34,wave:textWaveLocal,audio_reactivity:(document.getElementById('textAudioMode')?.value||'Off'),background:'Dimmed GIF',background_brightness:.30,backplate:true,...styleFlags()}};
+textPayload=function(){
+  const scaleEl=document.getElementById('textScale');
+  const scale=Math.max(1,Math.min(3,parseInt(scaleEl?.value||textScaleLocal||1)));
+  return {message:textMessage.value,font:textFont.value,motion:'Static',color_mode:textColorMode.value,color:textColor.value,scale,speed:34,wave:textWaveLocal,audio_reactivity:(document.getElementById('textAudioMode')?.value||'Off'),background:'Dimmed GIF',background_brightness:.30,backplate:true,...styleFlags()}
+};
+textChanged=function(){
+  clearTimeout(textTimer);
+  textTimer=setTimeout(()=>cmd('text_settings',textPayload()),25)
+};
 const _textPolishSync=syncTextUI;
 syncTextUI=function(){
   _textPolishSync();
@@ -243,6 +255,8 @@ syncTextUI=function(){
   if(a&&document.activeElement!==a)a.value=t.audio_reactivity||'Off';
   const m=document.getElementById('textMotion');if(m)m.value='Static';
   textSpeedLocal='Fast';
+  const scaleEl=document.getElementById('textScale');
+  if(scaleEl&&document.activeElement!==scaleEl&&t.scale!=null){scaleEl.value=t.scale;const v=document.getElementById('textScaleValue');if(v)v.textContent=t.scale+'x'}
   syncTextMotionExtras();
 };
 </script>
