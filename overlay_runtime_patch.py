@@ -28,6 +28,16 @@ def _target_sides(target):
     return ("front", "back") if target == "both" else (target,)
 
 
+def _normalize_selected_icons():
+    names = ICON_LIBRARY.names()
+    fallback = names[0] if names else None
+    for side in ("front", "back"):
+        if _overlay[side]["icon"] not in names:
+            _overlay[side]["icon"] = fallback
+            if fallback is None:
+                _overlay[side]["icon_enabled"] = False
+
+
 def _set_icon(target, name=None, enabled=None):
     names = ICON_LIBRARY.names()
     for side in _target_sides(target):
@@ -70,6 +80,11 @@ def _get_commands(self):
         value = data.get("value")
         if command == "set_target" and value in ("front", "back", "both"):
             target = value
+            out.append(data)
+            continue
+        if command == "reload_library":
+            ICON_LIBRARY.reload()
+            _normalize_selected_icons()
             out.append(data)
             continue
         if command == "icon_toggle":
