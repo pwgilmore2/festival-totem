@@ -213,13 +213,17 @@ class VisualLayerEngine:
         tilt_y = max(-1.0, min(1.0, float(signals.get("tilt_y", 0.0))))
         shake = clamp01(signals.get("shake", 0.0))
 
-        self._zoom(display, bass * layers.get("bass_zoom", 0))
-        self._shift(display,
-                    int((bass * layers.get("bass_shake", 0) * math.sin(frame_number * 1.7) + tilt_x * .15) * 8),
-                    int((bass * layers.get("bass_shake", 0) * math.cos(frame_number * 1.3) + tilt_y * .15) * 5))
-        self._hue(display, mids * layers.get("mids_hue", 0) * 150)
-        self._rgb_split(display, highs * layers.get("high_rgb_split", 0))
-        self._brighten(display, volume * layers.get("volume_brightness", 0))
+        zoom_amount = bass * layers.get("bass_zoom", 0)
+        dx = int((bass * layers.get("bass_shake", 0) * math.sin(frame_number * 1.7) + tilt_x * .15) * 8)
+        dy = int((bass * layers.get("bass_shake", 0) * math.cos(frame_number * 1.3) + tilt_y * .15) * 5)
+        self._spatial(display, zoom_amount, dx, dy)
+
+        self._color_pipeline(
+            display,
+            mids * layers.get("mids_hue", 0) * 150,
+            highs * layers.get("high_rgb_split", 0),
+            volume * layers.get("volume_brightness", 0),
+        )
         self._sparkles(display, highs * layers.get("high_sparkle", 0), frame_number + side_seed)
         if beat:
             self._flash(display, layers.get("beat_flash", 0) * strength)
@@ -245,58 +249,113 @@ class VisualLayerEngine:
             self._hue(display, frame_number * 11)
             self._sparkles(display, amount, frame_number * 31)
 
-    def _zoom(self, display, amount):
-        if amount <= .001:
+    def _spatial(self, display, zoom_amount, dx, dy):
+        """Apply the normal zoom-then-shift chain with one source snapshot."""
+        zoom_amount = max(0.0, float(zoom_amount))
+        if zoom_amount <= .001 and dx == 0 and dy == 0:
             return
         src = copy_pixels(display)
-        zoom = 1.0 + amount
+        zoom = 1.0 + zoom_amount
         cx = (self.width - 1) / 2
         cy = (self.height - 1) / 2
         for y in range(self.height):
+            ty = max(0, min(self.height - 1, y - dy))
             for x in range(self.width):
-                sx = int(round(cx + (x - cx) / zoom))
-                sy = int(round(cy + (y - cy) / zoom))
-                sx = max(0, min(self.width - 1, sx))
-                sy = max(0, min(self.height - 1, sy))
+                tx = max(0, min(self.width - 1, x - dx))
+                if zoom_amount > .001:
+                    sx = int(round(cx + (tx - cx) / zoom))
+                    sy = int(round(cy + (ty - cy) / zoom))
+                    sx = max(0, min(self.width - 1, sx))
+                    sy = max(0, min(self.height - 1, sy))
+                else:
+                    sx, sy = tx, ty
                 display.set_pixel(x, y, src[sy][sx])
+
+    def _color_pipeline(self, display, degrees, split_amount, brighten_amount):
+        """Fuse hue -> RGB split -> brightness into one full-frame pass."""
+        hue_active = abs(degrees) >= .5
+        split_active = split_amount > .02
+        brighten_active = brighten_amount > .001
+        if not (hue_active or split_active or brighten_active):
+            return
+
+        mult = 1.0 + max(0.0, float(brighten_amount))
+        if not hue_active and not split_active:
+            for y in range(self.height):
+                for x in range(self.width):
+                    r, g, b = display.get_pixel(x, y)
+                    display.set_pixel(x, y, (min(255, int(r * mult)), min(255, int(g * mult)), min(255, int(b * mult))))
+            return
+
+        src = copy_pixels(display)
+        offset = max(1, int(round(split_amount * 5))) if split_active else 0
+        phase = (degrees % 360) / 120.0 if hue_active else 0.0
+        t = phase if phase < 1 else phase - 1 if phase < 2 else phase - 2
+
+        for y in range(self.height):
+            for x in range(self.width):
+                rx = max(0, min(self.width - 1, x + offset)) if split_active else x
+                bx = max(0, min(self.width - 1, x - offset)) if split_active else x
+
+                if hue_active:
+                    if split_active:
+                        rr, rg, rb = src[y][rx]
+                        gr, gg, gb = src[y][x]
+                        br, bg, bb = src[y][bx]
+                        if phase < 1:
+                            r = int(rr * (1-t) + rg * t)
+                            g = int(gg * (1-t) + gb * t)
+                            b = int(bb * (1-t) + br * t)
+                        elif phase < 2:
+                            r = int(rg * (1-t) + rb * t)
+                            g = int(gb * (1-t) + gr * t)
+                            b = int(br * (1-t) + bg * t)
+                        else:
+                            r = int(rb * (1-t) + rr * t)
+                            g = int(gr * (1-t) + gg * t)
+                            b = int(bg * (1-t) + bb * t)
+                    else:
+                        sr, sg, sb = src[y][x]
+                        if phase < 1:
+                            r = int(sr * (1-t) + sg * t)
+                            g = int(sg * (1-t) + sb * t)
+                            b = int(sb * (1-t) + sr * t)
+                        elif phase < 2:
+                            r = int(sg * (1-t) + sb * t)
+                            g = int(sb * (1-t) + sr * t)
+                            b = int(sr * (1-t) + sg * t)
+                        else:
+                            r = int(sb * (1-t) + sr * t)
+                            g = int(sr * (1-t) + sg * t)
+                            b = int(sg * (1-t) + sb * t)
+                elif split_active:
+                    r = src[y][rx][0]
+                    g = src[y][x][1]
+                    b = src[y][bx][2]
+                else:
+                    r, g, b = src[y][x]
+
+                if brighten_active:
+                    r = min(255, int(r * mult))
+                    g = min(255, int(g * mult))
+                    b = min(255, int(b * mult))
+                display.set_pixel(x, y, (r, g, b))
+
+    def _zoom(self, display, amount):
+        if amount <= .001:
+            return
+        self._spatial(display, amount, 0, 0)
 
     def _shift(self, display, dx, dy):
         if dx == 0 and dy == 0:
             return
-        src = copy_pixels(display)
-        for y in range(self.height):
-            for x in range(self.width):
-                sx = max(0, min(self.width - 1, x - dx))
-                sy = max(0, min(self.height - 1, y - dy))
-                display.set_pixel(x, y, src[sy][sx])
+        self._spatial(display, 0.0, dx, dy)
 
     def _hue(self, display, degrees):
-        if abs(degrees) < .5:
-            return
-        phase = (degrees % 360) / 120.0
-        src = copy_pixels(display)
-        for y in range(self.height):
-            for x in range(self.width):
-                r, g, b = src[y][x]
-                if phase < 1:
-                    t = phase
-                    c = (int(r * (1-t) + g*t), int(g * (1-t) + b*t), int(b * (1-t) + r*t))
-                elif phase < 2:
-                    t = phase - 1
-                    c = (int(g * (1-t) + b*t), int(b * (1-t) + r*t), int(r * (1-t) + g*t))
-                else:
-                    t = phase - 2
-                    c = (int(b * (1-t) + r*t), int(r * (1-t) + g*t), int(g * (1-t) + b*t))
-                display.set_pixel(x, y, c)
+        self._color_pipeline(display, degrees, 0.0, 0.0)
 
     def _brighten(self, display, amount):
-        if amount <= .001:
-            return
-        mult = 1.0 + amount
-        for y in range(self.height):
-            for x in range(self.width):
-                r, g, b = display.get_pixel(x, y)
-                display.set_pixel(x, y, (min(255, int(r * mult)), min(255, int(g * mult)), min(255, int(b * mult))))
+        self._color_pipeline(display, 0.0, 0.0, amount)
 
     def _flash(self, display, amount):
         amount = clamp01(amount)
@@ -319,15 +378,4 @@ class VisualLayerEngine:
             display.set_pixel(x, y, (v, v, v))
 
     def _rgb_split(self, display, amount):
-        if amount <= .02:
-            return
-        src = copy_pixels(display)
-        offset = max(1, int(round(amount * 5)))
-        for y in range(self.height):
-            for x in range(self.width):
-                rx = max(0, min(self.width - 1, x + offset))
-                bx = max(0, min(self.width - 1, x - offset))
-                r = src[y][rx][0]
-                g = src[y][x][1]
-                b = src[y][bx][2]
-                display.set_pixel(x, y, (r, g, b))
+        self._color_pipeline(display, 0.0, amount, 0.0)
