@@ -6,8 +6,6 @@ import phone_server
 import controller_state_ui
 import chaos_layout_patch  # noqa: F401
 import text_ui_patch  # noqa: F401
-import overlay_runtime_patch  # noqa: F401
-import sprite_polish_patch  # noqa: F401
 import overlay_ui_patch  # noqa: F401
 import image_processing_ui
 import safe_controls_patch  # noqa: F401
