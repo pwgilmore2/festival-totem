@@ -75,9 +75,9 @@ def _effect_envelope(mode):
     if mode == "xyintent":
         env = _smooth01((now - _chaos_started) / .18)
     elif mode in _CHILL_MODES:
-        # Chill effects should feel alive immediately, then ease into full strength.
-        # Starting around 58% keeps the old punch without bringing back the snap.
         env = .58 + .42 * _smooth01((now - _chaos_started) / .75)
+    elif mode == "meltdown":
+        env = .72 + .28 * _smooth01((now - _chaos_started) / .45)
     else:
         env = _smooth01((now - _chaos_started) / .12)
     if _chaos_releasing:
@@ -298,6 +298,10 @@ def _guest_burst(self, display, kind, amount, frame_number=0):
         return
     if mode == "pixelmelt":
         _pixel_melt(display, amount, frame_number); return
+    if mode == "meltdown":
+        _pixel_melt(display, amount * .88, frame_number)
+        self._hue(display, math.sin(frame_number * .030) * 42 * amount)
+        return
     if mode == "jumble":
         _jumble(display, amount, frame_number); return
     if mode == "bassjostle":
@@ -399,7 +403,7 @@ class PhoneControlServer(ui_cleanup_server.PhoneControlServer):
                     continue
             elif c == "guest_action" and isinstance(v, dict):
                 kind = str(v.get("kind", "")).lower()
-                mapped = {"pixelmelt", "jumble", "bassjostle", "trance", "liquid", "tunnel", "warp", "prism", "rainbow"}
+                mapped = {"pixelmelt", "meltdown", "jumble", "bassjostle", "trance", "liquid", "tunnel", "warp", "prism", "rainbow"}
                 if kind in mapped:
                     _guest_release_token += 1
                     _chaos_mode = kind
@@ -438,6 +442,16 @@ class PhoneControlServer(ui_cleanup_server.PhoneControlServer):
                     token = _guest_release_token
                     _chaos_releasing = now
                     _chaos_release_duration = .85
+                    delayed = dict(data)
+                    delayed["_guest_release_complete"] = True
+                    delayed["_guest_release_token"] = token
+                    _delayed_commands.append((now + _chaos_release_duration, delayed))
+                    continue
+                elif _chaos_mode == "meltdown":
+                    _guest_release_token += 1
+                    token = _guest_release_token
+                    _chaos_releasing = now
+                    _chaos_release_duration = .65
                     delayed = dict(data)
                     delayed["_guest_release_complete"] = True
                     delayed["_guest_release_token"] = token
