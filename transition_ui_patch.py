@@ -8,11 +8,6 @@ _CSS = r'''
 .transitionScopeNote strong{display:block;font-size:12px;letter-spacing:.06em;margin-bottom:2px}
 .transitionScopeNote.background{box-shadow:inset 3px 0 #39a8ff}
 .transitionScopeNote.scene{box-shadow:inset 3px 0 #ff4f9a}
-/* controller_state_ui still updates the legacy text label every 120ms. Keep
-   its runtime class/status behavior, but make the visible label stable. */
-#tabText{font-size:0!important}
-#tabText:after{content:'Overlay';font-size:14px}
-#tabText.runtimeOn:after{content:'Overlay ●'}
 </style>
 '''
 phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('</head>', _CSS + '</head>', 1)
@@ -24,7 +19,7 @@ phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace(
 )
 phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace(
     '<div class="transitionGrid">',
-    '<div class="transitionScopeNote background"><strong>BACKGROUND ONLY</strong>Changes the GIF/image underneath. Overlay icons and text stay steady.</div><div class="transitionGrid">',
+    '<div class="transitionScopeNote background"><strong>BACKGROUND ONLY</strong>Changes the GIF/image underneath. Icons and text stay steady.</div><div class="transitionGrid">',
     1,
 )
 phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace(
@@ -41,7 +36,7 @@ phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace(
 )
 phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace(
     'deliberate hold • both panels • one-shot transition',
-    'deliberate hold • both panels • image + overlay',
+    'deliberate hold • both panels • image + icon + text',
 )
 
 # Make the Chaos one-shot melt unambiguous too.
