@@ -4,15 +4,19 @@ from effects import EFFECTS
 from controller import TotemController
 from particles import ParticleSystem
 from image_assets import ImageLibrary
+from icon_assets import ICON_LIBRARY
 from runtime_io import SignalStore, VirtualDisplayBackend
 from secure_phone_server import PhoneControlServer
 from visual_engine import TransitionManager, VisualLayerEngine, TRANSITIONS, LAYER_KEYS
 from text_engine import TextRenderer, TEXT_FONTS, TEXT_MOTIONS, TEXT_COLORS, TEXT_EFFECTS, TEXT_BACKGROUNDS
 from overlay_engine import OverlayRenderer
-from overlay_runtime_patch import get_overlay_state
 
 W,H,S,GAP,UI = 64,32,8,24,185
 PW,PH = W*S,H*S
+SIDES=("front","back")
+ICON_MOTIONS=("Bounce","Orbit")
+ICON_TRANSITION_DURATION=.55
+PHONE_STATE_INTERVAL=.10
 pygame.init()
 screen=pygame.display.set_mode((PW*2+GAP,PH+UI))
 pygame.display.set_caption("Festival Totem Simulator")
@@ -23,8 +27,8 @@ displays=display_backend.displays
 signal_store=SignalStore()
 audio=signal_store.audio
 motion=signal_store.motion
-particles={s:ParticleSystem(W,H,count=60) for s in ("front","back")}
-transitions={s:TransitionManager(W,H) for s in ("front","back")}
+particles={s:ParticleSystem(W,H,count=60) for s in SIDES}
+transitions={s:TransitionManager(W,H) for s in SIDES}
 layer_engine=VisualLayerEngine(W,H)
 text_engine=TextRenderer(W,H)
 overlay_engine=OverlayRenderer(W,H)
@@ -39,26 +43,48 @@ SCENES={
 active_target="both"
 current_scene="Custom"
 guest={"kind":None,"strength":0.0,"until":0.0,"locked":False,"x":.5,"y":.5,"velocity":0.0}
+_library_state_cache=None
 
 def slideshow_state():
     ids=list(range(len(library)));random.shuffle(ids)
-    return {"active":bool(ids),"indices":ids,"position":0,"duration":5.0,"elapsed":0.0,"shuffle":True,"label":"All","beat_sync":True}
+    return {"active":bool(ids),"indices":ids,"position":0,"duration":10.0,"elapsed":0.0,"shuffle":True,"label":"All","beat_sync":True}
 def reactive_state(): return {"enabled":False,"strength":0.65,"preset":"Pulse","layers":layer_engine.preset("Pulse")}
 def transition_state(): return {"kind":"Fade","duration":0.8,"random":True}
 def text_state():
     st=text_engine.defaults()
-    st.update(enabled=False,background="Dimmed GIF",background_brightness=.30,backplate=True,speed=12.0)
+    st.update(enabled=False,background="Dimmed GIF",background_brightness=.30,backplate=True,speed=34.0,motion="Static",audio_reactivity="Off",glow=False,wave=False,glitch=False,beat_pulse=False)
+    if st.get("color_mode")=="Audio":st["color_mode"]="Rainbow"
     return st
-panels={s:{"image_index":0,"slideshow":slideshow_state(),"reactive":reactive_state(),"transition":transition_state(),"text":text_state()} for s in ("front","back")}
+def icon_state():
+    names=ICON_LIBRARY.names()
+    return {"icon_enabled":False,"icon":names[0] if names else None,"motion":"Bounce","transition_entering":True,"transition_started":0.0,"transition_active":False,"transition_duration":ICON_TRANSITION_DURATION}
+
+panels={s:{"image_index":0,"slideshow":slideshow_state(),"reactive":reactive_state(),"transition":transition_state(),"text":text_state(),"icon":icon_state()} for s in SIDES}
+if len(library)>1:
+    f=panels["front"]["slideshow"]["indices"];b=panels["back"]["slideshow"]["indices"]
+    if f and b and f[0]==b[0]:b[0],b[1]=b[1],b[0]
 
 def metadata(a): return library.metadata_entry(a.path.name) if a else {"tags":[],"favorite":False}
 def asset(side): return library.get(panels[side]["image_index"]) if len(library) else None
-def target_sides(): return ["front","back"] if active_target=="both" else [active_target]
+def target_sides(): return list(SIDES) if active_target=="both" else [active_target]
 def reference_side(): return "back" if active_target=="back" else "front"
 def reference_asset(): return asset(reference_side())
 def save_asset(a):
     if not a:return
     a.settings.clamp();a.clear_cache();library.save_asset(a)
+
+def invalidate_library_state():
+    global _library_state_cache
+    _library_state_cache=None
+
+def library_state():
+    global _library_state_cache
+    if _library_state_cache is None:
+        out=[]
+        for i,a in enumerate(library.assets):
+            m=metadata(a);out.append({"index":i,"name":a.path.name,"tags":list(m.get("tags",[])),"favorite":bool(m.get("favorite",False))})
+        _library_state_cache=out
+    return _library_state_cache
 
 def clamp01(v): return max(0.0,min(1.0,float(v)))
 def audio_fresh(): return signal_store.audio_fresh()
@@ -70,8 +96,8 @@ def image_fx(side,display,t):
     if a:a.render(display,t,a.settings)
     else:display.clear()
 def make_effects(side): return {**EFFECTS,"Party":lambda d,t,s=side:party_fx(s,d,t),"Image":lambda d,t,s=side:image_fx(s,d,t)}
-controllers={s:TotemController(make_effects(s)) for s in ("front","back")}
-for s in ("front","back"):
+controllers={s:TotemController(make_effects(s)) for s in SIDES}
+for s in SIDES:
     sh=panels[s]["slideshow"]
     if sh["indices"]:panels[s]["image_index"]=sh["indices"][0]
     controllers[s].set_effect("Image")
@@ -150,8 +176,10 @@ def start_show(value):
     if shuffle:random.shuffle(order)
     for side in target_sides():
         beat_sync=panels[side]["slideshow"].get("beat_sync",True)
-        panels[side]["slideshow"].update(active=True,indices=list(order),position=0,duration=duration,elapsed=0.0,shuffle=shuffle,label=label,beat_sync=beat_sync)
-        select_for_side(side,order[0],stop=False)
+        side_order=list(order)
+        if shuffle and len(target_sides())==1:random.shuffle(side_order)
+        panels[side]["slideshow"].update(active=True,indices=side_order,position=0,duration=duration,elapsed=0.0,shuffle=shuffle,label=label,beat_sync=beat_sync)
+        select_for_side(side,side_order[0],stop=False)
     current_scene="Custom"
 
 def advance_show(side):
@@ -161,7 +189,7 @@ def advance_show(side):
     select_for_side(side,sh["indices"][sh["position"]],stop=False)
 
 def update_shows(dt):
-    for side in ("front","back"):
+    for side in SIDES:
         sh=panels[side]["slideshow"]
         if controllers[side].paused or not sh["active"] or not sh["indices"]:continue
         sh["elapsed"]+=dt
@@ -197,13 +225,64 @@ def toggle_pause():
     pause=not all(controllers[s].paused for s in target_sides())
     for s in target_sides():controllers[s].paused=pause
 
+def normalize_icons():
+    names=ICON_LIBRARY.names();fallback=names[0] if names else None
+    for side in SIDES:
+        st=panels[side]["icon"]
+        if st.get("icon") not in names:
+            st["icon"]=fallback
+            if fallback is None:st.update(icon_enabled=False,transition_active=False)
+
 def reload_library():
-    old={s:(asset(s).path.name if asset(s) else None) for s in ("front","back")};library.load()
-    for s in ("front","back"):
+    old={s:(asset(s).path.name if asset(s) else None) for s in SIDES};library.load();ICON_LIBRARY.reload();normalize_icons();invalidate_library_state()
+    for s in SIDES:
         panels[s]["image_index"]=0;stop_show(s)
         if old[s]:
             for i,a in enumerate(library.assets):
                 if a.path.name==old[s]:panels[s]["image_index"]=i;break
+
+def begin_icon_transition(st,entering):
+    st["transition_entering"]=bool(entering);st["transition_started"]=time.monotonic();st["transition_active"]=True;st["transition_duration"]=ICON_TRANSITION_DURATION
+
+def set_icon_enabled(side,enabled,animate=True):
+    st=panels[side]["icon"]
+    if enabled:
+        if not st["icon_enabled"]:
+            st["icon_enabled"]=True
+            if animate:begin_icon_transition(st,True)
+    elif st["icon_enabled"]:
+        if animate:begin_icon_transition(st,False)
+        else:st.update(icon_enabled=False,transition_active=False)
+
+def toggle_icon(name):
+    names=ICON_LIBRARY.names()
+    if name not in names:return
+    enabled_any=False
+    for side in target_sides():
+        st=panels[side]["icon"]
+        if st["icon_enabled"] and st.get("icon")==name:
+            set_icon_enabled(side,False,True)
+        else:
+            changing=st.get("icon")!=name
+            st["icon"]=name;st["icon_enabled"]=True
+            if changing or not st.get("transition_active"):begin_icon_transition(st,True)
+            enabled_any=True
+    if enabled_any:hide_text()
+
+def clear_icon():
+    for side in target_sides():set_icon_enabled(side,False,True)
+def set_icon_motion(value):
+    if value not in ICON_MOTIONS:return
+    for side in target_sides():panels[side]["icon"]["motion"]=value
+
+def update_icon_transitions():
+    now=time.monotonic()
+    for side in SIDES:
+        st=panels[side]["icon"]
+        if not st.get("transition_active"):continue
+        if now-float(st.get("transition_started",now))<float(st.get("transition_duration",ICON_TRANSITION_DURATION)):continue
+        st["transition_active"]=False
+        if not st.get("transition_entering",True):st["icon_enabled"]=False
 
 def update_audio(value): signal_store.update_audio(value)
 def update_motion(value): signal_store.update_motion(value)
@@ -259,22 +338,22 @@ def set_text_settings(value):
         st=panels[s]["text"]
         if "message" in value:st["message"]=str(value["message"])[:120]
         if value.get("font") in TEXT_FONTS:st["font"]=value["font"]
-        if value.get("motion") in TEXT_MOTIONS:st["motion"]=value["motion"]
-        if value.get("color_mode") in TEXT_COLORS:st["color_mode"]=value["color_mode"]
+        color_mode=value.get("color_mode",st.get("color_mode","Rainbow"))
+        st["color_mode"]=color_mode if color_mode in TEXT_COLORS and color_mode!="Audio" else "Rainbow"
         if "color" in value:st["color"]=str(value["color"])[:16]
         if "scale" in value:
             try:st["scale"]=max(1,min(3,int(value["scale"])))
             except (TypeError,ValueError):pass
-        if "speed" in value:
-            try:st["speed"]=max(1.0,min(40.0,float(value["speed"])))
-            except (TypeError,ValueError):pass
-        for k in ("glow","wave","glitch","beat_pulse"):
-            if k in value:st[k]=bool(value[k])
-        st["background"]="Dimmed GIF";st["background_brightness"]=.30;st["backplate"]=True
+        mode=str(value.get("audio_reactivity",st.get("audio_reactivity","Off")))
+        if mode=="Intense":mode="Reactive"
+        if mode not in ("Off","Subtle","Reactive"):mode="Off"
+        st.update(motion="Static",speed=34.0,glow=False,wave=False,glitch=False,beat_pulse=False,audio_reactivity=mode,background="Dimmed GIF",background_brightness=.30,backplate=True)
 
 def show_text(value=None):
     if isinstance(value,dict):set_text_settings(value)
-    for s in target_sides():panels[s]["text"]["enabled"]=True
+    for s in target_sides():
+        set_icon_enabled(s,False,False)
+        panels[s]["text"]["enabled"]=True
 
 def hide_text():
     for s in target_sides():panels[s]["text"]["enabled"]=False
@@ -344,6 +423,10 @@ def command(data):
     if c=="text_show":show_text(v);return
     if c=="text_hide":hide_text();return
     if c=="text_refresh":refresh_text(v);return
+    if c=="icon_toggle":toggle_icon(str(v));return
+    if c=="icon_clear":clear_icon();return
+    if c=="icon_motion":set_icon_motion(str(v));return
+    if c in ("icon_position","icon_center","icon_transition_settings"):return
     if c=="brightness":master("brightness",v,.1,1);return
     if c=="speed":master("speed",v,.1,5);return
     if c=="toggle_pause":toggle_pause();return
@@ -368,15 +451,15 @@ def command(data):
         return
     a=reference_asset()
     if c=="toggle_favorite":
-        if a:library.set_favorite(a,not bool(metadata(a).get("favorite",False)))
+        if a:library.set_favorite(a,not bool(metadata(a).get("favorite",False)));invalidate_library_state()
         return
     if c=="set_favorite_index" and isinstance(v,dict):
         try:t=library.get(int(v.get("index")))
         except Exception:t=None
-        if t:library.set_favorite(t,bool(v.get("favorite",False)))
+        if t:library.set_favorite(t,bool(v.get("favorite",False)));invalidate_library_state()
         return
     if c=="set_tags":
-        if a and isinstance(v,list):library.set_tags(a,list(dict.fromkeys(str(x).strip() for x in v if str(x).strip())))
+        if a and isinstance(v,list):library.set_tags(a,list(dict.fromkeys(str(x).strip() for x in v if str(x).strip())));invalidate_library_state()
         return
     if not a:return
     st=a.settings;changed=False
@@ -390,17 +473,14 @@ def command(data):
 
 def phone_panel(side):
     ctl=controllers[side];a=asset(side);sh=panels[side]["slideshow"];r=panels[side]["reactive"];tr=panels[side]["transition"]
-    out={"effect":ctl.effect_name,"speed":ctl.speed,"brightness":ctl.brightness,"paused":ctl.paused,"image_index_zero":panels[side]["image_index"],"image_index":0,"image_name":None,"image_mode":None,"image_settings":None,"image_tags":[],"image_favorite":False,"slideshow":{"active":sh["active"],"duration":sh["duration"],"shuffle":sh["shuffle"],"label":sh["label"],"count":len(sh["indices"]),"beat_sync":sh.get("beat_sync",False)},"reactive":{"enabled":r["enabled"],"strength":r["strength"],"preset":r["preset"],"layers":dict(r["layers"])},"transition":dict(tr),"text":dict(panels[side]["text"])}
+    out={"effect":ctl.effect_name,"speed":ctl.speed,"brightness":ctl.brightness,"paused":ctl.paused,"image_index_zero":panels[side]["image_index"],"image_index":0,"image_name":None,"image_mode":None,"image_settings":None,"image_tags":[],"image_favorite":False,"slideshow":{"active":sh["active"],"duration":sh["duration"],"shuffle":sh["shuffle"],"label":sh["label"],"count":len(sh["indices"]),"beat_sync":sh.get("beat_sync",False)},"reactive":{"enabled":r["enabled"],"strength":r["strength"],"preset":r["preset"],"layers":dict(r["layers"])},"transition":dict(tr),"text":dict(panels[side]["text"]),"icon":dict(panels[side]["icon"])}
     if a:
         m=metadata(a);out.update(image_index=panels[side]["image_index"]+1,image_name=a.path.name,image_mode=a.settings.mode,image_settings=a.settings.to_dict(),image_tags=m.get("tags",[]),image_favorite=bool(m.get("favorite",False)))
     return out
 
 def update_phone():
-    lib=[]
-    for i,a in enumerate(library.assets):
-        m=metadata(a);lib.append({"index":i,"name":a.path.name,"tags":m.get("tags",[]),"favorite":bool(m.get("favorite",False))})
     ref=phone_panel(reference_side())
-    server.update_state({"target":active_target,"reference_side":reference_side(),"image_count":len(library),"library":lib,"effects":list(controllers["front"].effects),"panels":{"front":phone_panel("front"),"back":phone_panel("back")},"audio":{"volume":audio["volume"],"bass":audio["bass"],"mids":audio["mids"],"highs":audio["highs"],"beat":audio["beat"],"fresh":audio_fresh()},"motion":dict(motion),"reactive_presets":REACTIVE_PRESETS,"layer_keys":LAYER_KEYS,"transitions":TRANSITIONS,"performance_scenes":list(SCENES),"current_scene":current_scene,"text_fonts":TEXT_FONTS,"text_motions":TEXT_MOTIONS,"text_color_modes":TEXT_COLORS,"text_effects":TEXT_EFFECTS,"text_backgrounds":TEXT_BACKGROUNDS,"guest":{"locked":guest["locked"]},**ref})
+    server.update_state({"target":active_target,"reference_side":reference_side(),"image_count":len(library),"library":library_state(),"effects":list(controllers["front"].effects),"panels":{"front":phone_panel("front"),"back":phone_panel("back")},"audio":{"volume":audio["volume"],"bass":audio["bass"],"mids":audio["mids"],"highs":audio["highs"],"beat":audio["beat"],"fresh":audio_fresh()},"motion":dict(motion),"reactive_presets":REACTIVE_PRESETS,"layer_keys":LAYER_KEYS,"transitions":TRANSITIONS,"performance_scenes":list(SCENES),"current_scene":current_scene,"text_fonts":TEXT_FONTS,"text_motions":TEXT_MOTIONS,"text_color_modes":TEXT_COLORS,"text_effects":TEXT_EFFECTS,"text_backgrounds":TEXT_BACKGROUNDS,"overlay_icons":ICON_LIBRARY.names(),"icon_library_errors":list(ICON_LIBRARY.errors),"icon_motions":list(ICON_MOTIONS),"guest":{"locked":guest["locked"]},**ref})
 
 def draw_panel(side,x):
     d,ctl=displays[side],controllers[side]
@@ -423,37 +503,39 @@ def keys(key):
     elif key==pygame.K_SPACE:toggle_pause()
     return True
 
-update_phone();running=True;frame_number=0
+update_phone();running=True;frame_number=0;last_phone_update=time.monotonic()
 while running:
     dt=clock.tick(60)/1000;frame_number+=1
     for e in pygame.event.get():
         if e.type==pygame.QUIT:running=False
         elif e.type==pygame.KEYDOWN:running=keys(e.key)
     for data in server.get_commands():command(data)
-    for s in ("front","back"):
+    for s in SIDES:
         controllers[s].update(dt)
         if not controllers[s].paused:particles[s].update(dt)
         transitions[s].update(dt)
-    update_shows(dt)
+    update_shows(dt);update_icon_transitions()
     if guest["kind"] and time.monotonic()>guest["until"]:stop_guest()
     sig=signals()
-    for s in ("front","back"):
+    for s in SIDES:
         controllers[s].effect(displays[s],controllers[s].time)
         transitions[s].apply(displays[s])
         r=panels[s]["reactive"]
         if r["enabled"]:layer_engine.apply(displays[s],sig,r["layers"],r["strength"],frame_number,1000 if s=="back" else 0)
 
-        # Native overlay compositor: content/transition/reactivity are complete
-        # before overlays are added. Text is drawn low on the panel, then the
-        # icon is drawn last so its approved sprite art wins any overlap.
         st=panels[s]["text"]
-        overlay=get_overlay_state(s)
+        icon=panels[s]["icon"]
         text_enabled=bool(st.get("enabled",False))
         if text_enabled:
-            overlay_engine.draw_text(displays[s],st,controllers[s].time,sig,1000 if s=="back" else 0,bottom=bool(overlay.get("icon_enabled")))
-        overlay_engine.draw_icon(displays[s],overlay,st,controllers[s].time,sig,1000 if s=="back" else 0,text_enabled=text_enabled)
+            overlay_engine.draw_text(displays[s],st,controllers[s].time,sig,1000 if s=="back" else 0,bottom=bool(icon.get("icon_enabled")))
+        icon_settings=dict(st);icon_settings["audio_reactivity"]="Off"
+        overlay_engine.draw_icon(displays[s],icon,icon_settings,controllers[s].time,sig,1000 if s=="back" else 0,text_enabled=text_enabled)
 
         apply_guest_effect(displays[s],frame_number+(1000 if s=="back" else 0))
     signal_store.end_frame()
-    screen.fill((15,15,18));draw_panel("front",0);draw_panel("back",PW+GAP);draw_ui();update_phone();pygame.display.flip()
+    screen.fill((15,15,18));draw_panel("front",0);draw_panel("back",PW+GAP);draw_ui()
+    now=time.monotonic()
+    if now-last_phone_update>=PHONE_STATE_INTERVAL:
+        update_phone();last_phone_update=now
+    pygame.display.flip()
 server.stop();pygame.quit()
