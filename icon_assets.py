@@ -1,7 +1,7 @@
 """File-backed 32x32 icon assets.
 
-Drop transparent PNGs into assets/icons.  Files are loaded losslessly and
-rendered 1:1.  The embedded authored masters remain a fallback so the simulator
+Drop transparent PNGs into assets/icons. Files are loaded losslessly and
+rendered 1:1. The embedded authored masters remain a fallback so the simulator
 still works before the folder is populated.
 """
 
@@ -10,7 +10,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from overlay_exact_assets import ICONS as EMBEDDED_ICONS, sprite_rgba
+from overlay_exact_assets import EXACT_SPRITES, sprite_rgba
 
 ICON_SIZE = 32
 DEFAULT_ICON_DIR = Path("assets/icons")
@@ -32,11 +32,12 @@ class IconAsset:
             im = im.convert("RGBA")
             if im.size != (ICON_SIZE, ICON_SIZE):
                 raise ValueError(f"{path.name} must be exactly 32x32; got {im.size[0]}x{im.size[1]}")
-            rows = []
             px = im.load()
-            for y in range(ICON_SIZE):
-                rows.append(tuple(tuple(px[x, y]) for x in range(ICON_SIZE)))
-        return cls(_display_name(path), tuple(rows), path)
+            rows = tuple(
+                tuple(tuple(px[x, y]) for x in range(ICON_SIZE))
+                for y in range(ICON_SIZE)
+            )
+        return cls(_display_name(path), rows, path)
 
 
 class IconLibrary:
@@ -51,6 +52,7 @@ class IconLibrary:
         self.assets = []
         self.by_name = {}
         self.errors = []
+
         if self.directory.exists():
             for path in sorted(self.directory.glob("*.png")):
                 try:
@@ -64,7 +66,7 @@ class IconLibrary:
         # Empty folder / fresh checkout: keep the authored embedded masters as
         # a zero-config fallback. Once PNGs exist, the folder is authoritative.
         if not self.assets:
-            for name in EMBEDDED_ICONS:
+            for name in EXACT_SPRITES:
                 rows = tuple(tuple(tuple(px) for px in row) for row in sprite_rgba(name))
                 asset = IconAsset(name, rows, None)
                 self.assets.append(asset)
