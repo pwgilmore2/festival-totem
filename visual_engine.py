@@ -152,14 +152,14 @@ class TransitionManager:
     def _zoom_transition(self, display, target, p):
         cx = (self.width - 1) / 2.0
         cy = (self.height - 1) / 2.0
-        old_zoom = 1.0 + p * 1.5
-        new_zoom = 1.85 - p * 0.85
+        max_r = math.hypot(cx, cy)
+        radius = p * (max_r + 8)
         for y in range(self.height):
             for x in range(self.width):
-                osx = int(round(cx + (x - cx) / old_zoom))
-                osy = int(round(cy + (y - cy) / old_zoom))
-                nsx = int(round(cx + (x - cx) / new_zoom))
-                nsy = int(round(cy + (y - cy) / new_zoom))
+                osx = int(round(cx + (x - cx) / (1.0 + p * 1.5)))
+                osy = int(round(cy + (y - cy) / (1.0 + p * 1.5)))
+                nsx = int(round(cx + (x - cx) / (1.85 - p * 0.85)))
+                nsy = int(round(cy + (y - cy) / (1.85 - p * 0.85)))
                 osx = max(0, min(self.width - 1, osx)); osy = max(0, min(self.height - 1, osy))
                 nsx = max(0, min(self.width - 1, nsx)); nsy = max(0, min(self.height - 1, nsy))
                 display.set_pixel(x, y, blend_color(self.source[osy][osx], target[nsy][nsx], p))
@@ -185,21 +185,56 @@ class VisualLayerEngine:
 
     def default_layers(self):
         return {
-            "bass_zoom": 0.25,
-            "beat_flash": 0.30,
+            "bass_zoom": 0.20,
+            "beat_flash": 0.24,
             "mids_hue": 0.0,
-            "high_sparkle": 0.15,
-            "volume_brightness": 0.12,
+            "high_sparkle": 0.10,
+            "volume_brightness": 0.08,
             "bass_shake": 0.0,
             "high_rgb_split": 0.0,
         }
 
     def preset(self, name):
+        # The signal names remain stable for controller/backward compatibility,
+        # but now represent musical controls: bass=Low novelty, mids=Body novelty,
+        # highs=Bright novelty, volume=Energy and beat=Pulse.
         presets = {
-            "Pulse": {"bass_zoom": .32, "beat_flash": .34, "mids_hue": 0, "high_sparkle": .05, "volume_brightness": .18, "bass_shake": 0, "high_rgb_split": 0},
-            "Neon": {"bass_zoom": .08, "beat_flash": .18, "mids_hue": .65, "high_sparkle": .08, "volume_brightness": .12, "bass_shake": 0, "high_rgb_split": .22},
-            "Spark": {"bass_zoom": .05, "beat_flash": .15, "mids_hue": .08, "high_sparkle": .85, "volume_brightness": .08, "bass_shake": 0, "high_rgb_split": .12},
-            "Chaos": {"bass_zoom": .34, "beat_flash": .48, "mids_hue": .70, "high_sparkle": .70, "volume_brightness": .24, "bass_shake": .45, "high_rgb_split": .55},
+            "Pulse": {
+                "bass_zoom": .28,
+                "beat_flash": .28,
+                "mids_hue": 0,
+                "high_sparkle": .02,
+                "volume_brightness": .10,
+                "bass_shake": .08,
+                "high_rgb_split": 0,
+            },
+            "Neon": {
+                "bass_zoom": .05,
+                "beat_flash": .08,
+                "mids_hue": .30,
+                "high_sparkle": .05,
+                "volume_brightness": .08,
+                "bass_shake": 0,
+                "high_rgb_split": .18,
+            },
+            "Spark": {
+                "bass_zoom": .03,
+                "beat_flash": .08,
+                "mids_hue": .04,
+                "high_sparkle": .55,
+                "volume_brightness": .05,
+                "bass_shake": 0,
+                "high_rgb_split": .10,
+            },
+            "Chaos": {
+                "bass_zoom": .26,
+                "beat_flash": .35,
+                "mids_hue": .32,
+                "high_sparkle": .38,
+                "volume_brightness": .15,
+                "bass_shake": .25,
+                "high_rgb_split": .32,
+            },
         }
         return dict(presets.get(name, self.default_layers()))
 
