@@ -1,11 +1,4 @@
-"""Text controller presentation only.
-
-Text behavior and audio-reactivity state now live in simulator.py. This module
-only shapes the phone controls; importing it no longer patches renderers or
-server command/state methods.
-"""
-
-import phone_server
+"""Presentation transform for the simplified Text controller."""
 
 _CSS = r'''
 <style>
@@ -17,7 +10,6 @@ _CSS = r'''
 @media(max-width:520px){.textAudioButtons{grid-template-columns:repeat(3,1fr)}}
 </style>
 '''
-phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('</head>', _CSS + '</head>', 1)
 
 _JS = r'''
 <script>
@@ -87,4 +79,9 @@ syncTextUI=function(){
 window.addEventListener('load',syncTextAudioButtons);
 </script>
 '''
-phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('</body>', _JS + '</body>', 1)
+
+
+def apply(html):
+    html = html.replace('</head>', _CSS + '</head>', 1)
+    html = html.replace('</body>', _JS + '</body>', 1)
+    return html
