@@ -2,7 +2,6 @@ import math
 import random
 import time
 
-from icon_assets import ICON_LIBRARY
 from text_engine import TextRenderer, clamp01, hsv_color, parse_color
 
 
@@ -13,11 +12,15 @@ class OverlayRenderer:
     static one-line, static two-line, then fast scroll. Text visuals are clean
     when audio reactivity is Off and derive their motion/pulse from the live
     music signal when Subtle or Reactive is selected.
+
+    The icon source is dependency-injected so this module stays PIL-free and can
+    run unchanged on both desktop and MatrixPortal.
     """
 
-    def __init__(self, width, height):
+    def __init__(self, width, height, icon_library):
         self.width = width
         self.height = height
+        self.icon_library = icon_library
         self.text = TextRenderer(width, height)
         self._text_clock = {
             "front": {"signature": None, "started": time.monotonic()},
@@ -55,7 +58,7 @@ class OverlayRenderer:
         if text_enabled:
             return
 
-        asset = ICON_LIBRARY.get(state.get("icon"))
+        asset = self.icon_library.get(state.get("icon"))
         if asset is None:
             return
 
@@ -78,7 +81,6 @@ class OverlayRenderer:
             if beat:
                 y0 -= 1
 
-        rng = random.Random(seed + int(t * 18))
         pixels = []
         for sy, row in enumerate(rgba):
             for sx, (r, g, b, a) in enumerate(row):
