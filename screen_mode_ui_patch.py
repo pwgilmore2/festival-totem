@@ -57,7 +57,7 @@ _JS = r'''
 
 def apply(html):
     html = html.replace('</head>', _CSS + '</head>', 1)
-    anchor = '<button class="vibeStart" onclick="startVibeRandom()">▶ RANDOM GIFS · BOTH SCREENS</button>'
+    anchor = '<button class="vibeStart" onclick="startVibeRandom()">Shuffle</button>'
     controls = anchor + r'''
 <div class="vibeScreenMode"><button id="screenModeIndependent" onclick="setVibeScreenMode(false)">Independent</button><button id="screenModeLinked" onclick="setVibeScreenMode(true)">Linked</button></div>
 <div id="vibeScreenHint" class="vibeScreenHint">Independent: each panel gets its own shuffled GIF sequence.</div>
