@@ -24,7 +24,7 @@ font = pygame.font.SysFont(None, 22)
 
 media = DesktopMediaAdapter("assets/images", W, H)
 display_backend = VirtualDisplayBackend(W, H)
-overlay_renderer = OverlayRenderer(W, H)
+overlay_renderer = OverlayRenderer(W, H, ICON_LIBRARY)
 runtime = TotemRuntime(
     W,
     H,
@@ -148,8 +148,8 @@ while running:
         elif event.type == pygame.KEYDOWN:
             running = handle_key(event.key)
 
-    for command in server.get_commands():
-        runtime.handle_command(command)
+    for data in server.get_commands():
+        runtime.handle_command(data)
 
     runtime.step(dt, frame_number)
 
