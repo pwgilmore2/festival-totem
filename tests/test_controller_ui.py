@@ -67,8 +67,10 @@ class ControllerUICompositionTests(unittest.TestCase):
             self.assert_once(marker)
 
     def test_controller_keeps_current_performance_language(self):
-        self.assertIn("?'Vibe ●':'Vibe'", self.html)
-        self.assertIn("?'Chaos ●':'Chaos'", self.html)
+        self.assertIn("audio.textContent='Vibe'", self.html)
+        self.assertIn("guest.textContent='Chaos'", self.html)
+        self.assertIn('.tabs button.runtimeOn:after', self.html)
+        self.assertNotIn("'Vibe ●'", self.html)
         self.assertIn('Full Scene → Next', self.html)
         self.assertIn('BACKGROUND MELT → NEXT', self.html)
         self.assertIn('Chill / Flow', self.html)
@@ -89,6 +91,20 @@ class ControllerUICompositionTests(unittest.TestCase):
             self.assertIn(marker, self.html)
         self.assertIn('Silent — gate closed', self.html)
         self.assertIn('Reactive signals — fixed 0–100% scale', self.html)
+
+    def test_vibe_presets_are_editable_without_sample_hits(self):
+        for marker in (
+            'id="myVibeButtons"',
+            'id="vibePresetName"',
+            'onclick="saveCurrentVibe()"',
+            'onclick="addCurrentVibe()"',
+            'onclick="removeMyVibe()"',
+            'festivalTotem.vibePresets.v2',
+            '>Shuffle</button>',
+        ):
+            self.assertIn(marker, self.html)
+        self.assertNotIn('previewVibe(', self.html)
+        self.assertNotIn('id="presetButtons"', self.html)
 
     def test_text_controls_are_simplified(self):
         self.assertIn('id="textAudioOff"', self.html)

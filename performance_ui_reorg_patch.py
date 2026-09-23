@@ -2,10 +2,12 @@
 
 _CSS = r'''
 <style>
-.tabs{gap:7px!important}.tabs .performancePrimary{min-width:88px!important}.tabs .managementTab{margin-left:auto;background:#2b2b35!important;color:#ddd!important}.tabs .managementTab.active{background:#7063d7!important;color:white!important}
+.tabs{gap:7px!important}.tabs .performancePrimary{min-width:88px!important}.tabs .managementTab{margin-left:auto;background:#2b2b35!important;color:#ddd!important}
+.tabs button{position:relative}.tabs button.active,.tabs button.runtimeOn,.tabs button.runtimeChaos,.tabs button.beatHit{background:#343442!important;box-shadow:none!important;filter:none!important}.tabs button.active{border-bottom:2px solid #8b7cff!important}.tabs .managementTab.active{background:#2b2b35!important;color:white!important}
+.tabs button.runtimeOn:after,.tabs button.runtimeChaos:after{content:'';display:inline-block;width:7px;height:7px;margin-left:5px;border-radius:50%;vertical-align:middle;background:#5bebb0;box-shadow:0 0 7px #5bebb088}.tabs button.runtimeChaos:after{background:#ff77bd;box-shadow:0 0 7px #ff77bd88}.tabs button.beatHit:after{background:#fff;box-shadow:0 0 7px #fff}
 #tabLive,#tabLibrary,#tabEdit,#tabSetup{display:none!important}
 .vibeLaunch{background:radial-gradient(circle at 10% 0%,#00e5ff2c,transparent 34%),radial-gradient(circle at 95% 0%,#8b5cff30,transparent 38%),#ffffff12}.vibeLaunch h2{font-size:22px!important;margin-bottom:4px!important}.vibeLaunch .vibeSub{font-size:12px;opacity:.68;line-height:1.4;margin-bottom:12px}.vibeStart{width:100%;min-height:66px;font-size:18px;background:linear-gradient(135deg,#6c4cff,#00b8ff);box-shadow:0 8px 24px #0006}.vibeTransport{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.vibeTransport button{min-height:48px}
-.vibePresetBox{margin:12px 0;padding:12px;border-radius:14px;background:#ffffff0b;border:1px solid #ffffff14}.vibePresetHead{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}.vibePresetHead strong{font-size:14px}.vibePresetGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin-bottom:9px}.vibePresetGrid button{min-height:46px}.vibePresetSave{display:grid;grid-template-columns:1fr auto;gap:8px}.vibePresetSave input{width:100%;background:#202029;color:#fff;border:1px solid #444456;border-radius:10px;padding:10px;font-size:16px}.vibePresetDelete{font-size:11px;opacity:.7;margin-top:7px}
+.vibePresetBox{margin:12px 0;padding:12px;border-radius:14px;background:#ffffff0b;border:1px solid #ffffff14}.vibePresetHead{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}.vibePresetHead strong{font-size:14px}.vibePresetGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin-bottom:9px}.vibePresetGrid button{min-height:46px}.vibePresetGrid button.active{background:#7063d7}.vibePresetSave input{width:100%;background:#202029;color:#fff;border:1px solid #444456;border-radius:10px;padding:10px;font-size:16px}.vibePresetActions{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:8px}.vibePresetActions button{min-height:46px}.vibePresetStatus{font-size:12px;opacity:.75;min-height:18px;margin-top:8px}.vibePresetHelp{font-size:11px;opacity:.68;line-height:1.4;margin:7px 0}
 .manageSwitcher{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin:2px 0 12px;position:sticky;top:62px;z-index:16;padding:7px;background:#101016ed;backdrop-filter:blur(10px);border-radius:13px}.manageSwitcher button{min-height:42px;font-size:13px}.manageSwitcher button.active{background:#7063d7}.manageHint{font-size:11px;opacity:.62;margin:-4px 0 8px;text-align:center}
 .batchTagBar{display:grid;grid-template-columns:auto 1fr auto;gap:7px;align-items:center;margin:4px 0 10px;padding:9px;background:#ffffff0b;border:1px solid #ffffff12;border-radius:12px}.batchTagBar input{min-width:0;background:#202029;color:#fff;border:1px solid #444456;border-radius:9px;padding:9px;font-size:15px}.batchTagBar button{min-height:40px;padding:7px 10px}.tile.batchSelected{border-color:#53e6a8!important;box-shadow:0 0 0 2px #53e6a855 inset}.batchCount{font-size:11px;opacity:.7;grid-column:1/-1}
 body.manageMode #targetCard{display:none!important}body.manageMode .manageSwitcher{display:grid}body:not(.manageMode) .manageSwitcher{display:none}
@@ -17,19 +19,20 @@ _VIBE_CARD = r'''
 <div id="vibeLaunchCard" class="card vibeLaunch">
 <h2>Vibe</h2>
 <div class="vibeSub">Start random GIFs on both screens, then bring the phone mic in and shape the music response below.</div>
-<button class="vibeStart" onclick="startVibeRandom()">▶ RANDOM GIFS · BOTH SCREENS</button>
+<button class="vibeStart" onclick="startVibeRandom()">Shuffle</button>
 <div class="vibeTransport"><button onclick="vibePrevious()">◀ Previous</button><button onclick="vibeNext()">Next ▶</button></div>
 </div>
 '''
 
 _VIBE_PRESETS = r'''
 <div class="vibePresetBox">
-<div class="vibePresetHead"><strong>My Vibes</strong><span class="tiny">audio response only</span></div>
+<div class="vibePresetHead"><strong>Vibe Presets</strong><span class="tiny">tap to play · edit below</span></div>
 <div id="myVibeButtons" class="vibePresetGrid"></div>
-<div class="vibePresetSave"><input id="vibePresetName" maxlength="32" placeholder="Name this vibe"><button onclick="saveCurrentVibe()">Save</button></div>
-<div class="vibePresetDelete">Tap a saved vibe to apply it. Hold its button to remove it.</div>
+<div class="vibePresetHelp">Adjust intensity and any mapping slider below, then save. Starting presets can also be renamed or deleted. Presets are saved in this browser.</div>
+<div class="vibePresetSave"><input id="vibePresetName" maxlength="32" placeholder="Preset name" aria-label="Preset name"></div>
+<div class="vibePresetActions"><button onclick="saveCurrentVibe()">Save Changes</button><button onclick="addCurrentVibe()">Add New</button><button class="warn" onclick="removeMyVibe()">Delete</button></div>
+<div id="vibePresetStatus" class="vibePresetStatus" role="status" aria-live="polite"></div>
 </div>
-<div class="sectionHint" style="margin-top:8px">Built-in starting points</div>
 '''
 
 _MANAGE_SWITCH = r'''
@@ -54,7 +57,15 @@ _JS = r'''
 <script>
 (function(){
  let _performanceBaseView=view,currentManage='library';
- const VIBE_KEY='festivalTotem.vibePresets.v1';
+ const OLD_VIBE_KEY='festivalTotem.vibePresets.v1',VIBE_KEY='festivalTotem.vibePresets.v2';
+ const VIBE_LAYERS=['bass_zoom','beat_flash','mids_hue','high_sparkle','volume_brightness','bass_shake','high_rgb_split'];
+ const STARTING_VIBES=[
+   {id:'starter:pulse',name:'Pulse',strength:1,layers:{bass_zoom:.28,beat_flash:.28,mids_hue:0,high_sparkle:.02,volume_brightness:.10,bass_shake:.08,high_rgb_split:0}},
+   {id:'starter:spark',name:'Spark',strength:1,layers:{bass_zoom:.03,beat_flash:.08,mids_hue:.04,high_sparkle:.55,volume_brightness:.05,bass_shake:0,high_rgb_split:.10}},
+   {id:'starter:neon',name:'Neon',strength:1,layers:{bass_zoom:.05,beat_flash:.08,mids_hue:.30,high_sparkle:.05,volume_brightness:.08,bass_shake:0,high_rgb_split:.18}},
+   {id:'starter:chaos',name:'Chaos',strength:1,layers:{bass_zoom:.26,beat_flash:.35,mids_hue:.32,high_sparkle:.38,volume_brightness:.15,bass_shake:.25,high_rgb_split:.32}}
+ ];
+ let vibePresets=null,selectedVibeId=null,pendingVibe={},vibeDirty=false,renderedVibes='',renderedSelection=null,applyToken=0,applyingVibe=false;
  let batchMode=false,batchSelected=new Set();
  function tab(id){return document.getElementById(id)}
  function section(id){return document.getElementById(id)}
@@ -62,6 +73,7 @@ _JS = r'''
  function ensurePerformanceNav(){
    const root=tabsRoot();if(!root)return;
    const audio=tab('tabAudio'),guest=tab('tabGuest'),icons=tab('tabIcons'),text=tab('tabText');
+   if(audio)audio.textContent='Vibe';if(guest)guest.textContent='Chaos';if(icons)icons.textContent='Icons';if(text)text.textContent='Text';
    [audio,guest,icons,text].filter(Boolean).forEach(el=>{el.classList.add('performancePrimary');root.appendChild(el)});
    let manage=tab('tabManage');if(!manage){manage=document.createElement('button');manage.id='tabManage';manage.className='managementTab';manage.textContent='Manage';manage.onclick=()=>openManage(currentManage||'library')}root.appendChild(manage)
  }
@@ -76,20 +88,101 @@ _JS = r'''
  window.vibeNext=function(){const items=allIds();if(items.length){cmd('set_target','both');cmd('filtered_step',{indices:items,delta:1})}}
  window.vibePrevious=function(){const items=allIds();if(items.length){cmd('set_target','both');cmd('filtered_step',{indices:items,delta:-1})}}
 
- function loadVibes(){try{const v=JSON.parse(localStorage.getItem(VIBE_KEY)||'[]');return Array.isArray(v)?v:[]}catch(_){return[]}}
- function storeVibes(v){localStorage.setItem(VIBE_KEY,JSON.stringify(v));renderMyVibes()}
- function currentVibeSnapshot(name){const r=state.reactive||{};return {name,strength:Number(r.strength??0),layers:{...(r.layers||{})}}}
- window.saveCurrentVibe=function(){const input=document.getElementById('vibePresetName'),name=(input?.value||'').trim();if(!name)return;let vibes=loadVibes(),snap=currentVibeSnapshot(name),i=vibes.findIndex(v=>v.name.toLowerCase()===name.toLowerCase());if(i>=0)vibes[i]=snap;else vibes.push(snap);vibes=vibes.slice(-16);if(input)input.value='';storeVibes(vibes)}
- window.applyMyVibe=function(i){const v=loadVibes()[i];if(!v)return;cmd('reactive_enabled',true);cmd('reactive_strength',Number(v.strength??0));Object.entries(v.layers||{}).forEach(([name,value])=>cmd('reactive_layer',{name,value:Number(value)}))}
- window.removeMyVibe=function(i){let v=loadVibes();v.splice(i,1);storeVibes(v)}
- window.renderMyVibes=function(){const box=document.getElementById('myVibeButtons');if(!box)return;const vibes=loadVibes();box.innerHTML='';vibes.forEach((v,i)=>{let b=document.createElement('button');b.textContent=v.name;b.onclick=()=>applyMyVibe(i);let timer=null;b.onpointerdown=()=>{timer=setTimeout(()=>{removeMyVibe(i);timer=null},700)};['pointerup','pointercancel','pointerleave'].forEach(ev=>b.addEventListener(ev,()=>{if(timer){clearTimeout(timer);timer=null}}));box.appendChild(b)});if(!vibes.length)box.innerHTML='<div class="muted" style="grid-column:1/-1">Tune the sliders below, name it, and save your first vibe.</div>'}
+ function safeValue(value,fallback=0){const n=Number(value);return Number.isFinite(n)?Math.max(0,Math.min(1.5,n)):fallback}
+ function cleanVibe(source,id){
+   const layers={};for(const key of VIBE_LAYERS)layers[key]=safeValue(source?.layers?.[key]);
+   return {id,name:String(source?.name||'Untitled').trim().slice(0,32)||'Untitled',strength:safeValue(source?.strength,1),layers}
+ }
+ function vibeStatus(message){const el=tab('vibePresetStatus');if(el)el.textContent=message}
+ function saveVibes(){
+   try{localStorage.setItem(VIBE_KEY,JSON.stringify({version:2,presets:vibePresets}))}catch(_){vibeStatus('Storage unavailable: changes last until this page closes.')}
+   renderedVibes='';renderMyVibes()
+ }
+ function loadVibes(){
+   if(vibePresets)return vibePresets;
+   try{
+     const saved=JSON.parse(localStorage.getItem(VIBE_KEY)||'null');
+     if(saved&&saved.version===2&&Array.isArray(saved.presets)){
+       vibePresets=saved.presets.map((v,i)=>cleanVibe(v,String(v.id||'saved:'+i)));
+       return vibePresets
+     }
+   }catch(_){ }
+   vibePresets=STARTING_VIBES.map(v=>cleanVibe(v,v.id));
+   try{
+     const old=JSON.parse(localStorage.getItem(OLD_VIBE_KEY)||'[]');
+     if(Array.isArray(old))old.forEach((v,i)=>{
+       if(!v||!String(v.name||'').trim())return;
+       const match=vibePresets.findIndex(p=>p.name.toLowerCase()===String(v.name).trim().toLowerCase());
+       if(match>=0)vibePresets[match]=cleanVibe(v,vibePresets[match].id);
+       else vibePresets.push(cleanVibe(v,'imported:'+i))
+     })
+   }catch(_){ }
+   saveVibes();return vibePresets
+ }
+ function selectedVibe(){return loadVibes().find(p=>p.id===selectedVibeId)}
+ function duplicateVibeName(name,exceptId){return loadVibes().some(p=>p.id!==exceptId&&p.name.toLowerCase()===name.toLowerCase())}
+ function editedVibe(base,name){
+   const r=state.reactive||{},fallback=base||{strength:r.strength??1,layers:r.layers||{}};
+   const layers={};for(const key of VIBE_LAYERS)layers[key]=safeValue(pendingVibe[key]??fallback.layers?.[key]);
+   return {id:base?.id||('user:'+Date.now()+':'+Math.random().toString(36).slice(2)),name,strength:safeValue(pendingVibe.strength??fallback.strength,1),layers}
+ }
+ window.markVibeDirty=function(key,value){
+   if(key!=='strength'&&!VIBE_LAYERS.includes(key))return;
+   pendingVibe[key]=safeValue(value);vibeDirty=true;
+   vibeStatus(selectedVibe()?'Unsaved changes to '+selectedVibe().name:'Enter a name and tap Add New to save these settings.')
+ }
+ window.vibeLayerValue=function(key,value){return pendingVibe[key]??(applyingVibe?selectedVibe()?.layers?.[key]:undefined)??value}
+ window.vibeStrengthValue=function(value){return pendingVibe.strength??(applyingVibe?selectedVibe()?.strength:undefined)??value}
+ window.saveCurrentVibe=function(){
+   const original=selectedVibe(),name=String(tab('vibePresetName')?.value||'').trim();
+   if(!original){vibeStatus('Choose a preset first, or use Add New.');return}
+   if(!name){vibeStatus('Enter a preset name.');return}
+   if(duplicateVibeName(name,original.id)){vibeStatus('That name is already in use.');return}
+   vibePresets[vibePresets.findIndex(p=>p.id===original.id)]=editedVibe(original,name);
+   pendingVibe={};vibeDirty=false;saveVibes();vibeStatus('Saved '+name+'.')
+ }
+ window.addCurrentVibe=function(){
+   const name=String(tab('vibePresetName')?.value||'').trim();
+   if(!name){vibeStatus('Enter a name for the new preset.');return}
+   if(duplicateVibeName(name,null)){vibeStatus('That name is already in use.');return}
+   if(loadVibes().length>=64){vibeStatus('Preset limit reached (64).');return}
+   const added=editedVibe(selectedVibe(),name);added.id='user:'+Date.now()+':'+Math.random().toString(36).slice(2);vibePresets.push(added);
+   selectedVibeId=added.id;pendingVibe={};vibeDirty=false;saveVibes();vibeStatus('Added '+name+'.')
+ }
+ window.removeMyVibe=function(){
+   const current=selectedVibe();if(!current){vibeStatus('Choose a preset to delete.');return}
+   if(!window.confirm('Delete '+current.name+'?'))return;
+   vibePresets=vibePresets.filter(p=>p.id!==current.id);
+   selectedVibeId=null;pendingVibe={};vibeDirty=false;applyToken++;applyingVibe=false;
+   saveVibes();vibeStatus('Deleted '+current.name+'. Current display settings remain until you choose another preset.')
+ }
+ window.applyMyVibe=async function(id){
+   const v=loadVibes().find(p=>p.id===id);if(!v)return;
+   selectedVibeId=id;pendingVibe={};vibeDirty=false;applyingVibe=true;
+   const token=++applyToken;renderedSelection=null;renderMyVibes();vibeStatus('Loading '+v.name+'…');
+   await cmd('reactive_enabled',true);
+   if(token!==applyToken)return;
+   await cmd('reactive_strength',v.strength);
+   for(const name of VIBE_LAYERS){if(token!==applyToken)return;await cmd('reactive_layer',{name,value:v.layers[name]})}
+   if(token===applyToken){applyingVibe=false;vibeStatus('Editing '+v.name+'. Change sliders, then Save Changes.')}
+ }
+ window.renderMyVibes=function(){
+   const box=tab('myVibeButtons');if(!box)return;
+   const presets=loadVibes(),signature=JSON.stringify(presets.map(p=>[p.id,p.name,selectedVibeId]));
+   if(signature!==renderedVibes){
+     renderedVibes=signature;box.innerHTML='';
+     presets.forEach(p=>{const b=document.createElement('button');b.textContent=p.name;b.classList.toggle('active',p.id===selectedVibeId);b.onclick=()=>applyMyVibe(p.id);box.appendChild(b)});
+     if(!presets.length)box.innerHTML='<div class="muted" style="grid-column:1/-1">No presets. Name the current settings and tap Add New.</div>'
+   }
+   if(renderedSelection!==selectedVibeId){renderedSelection=selectedVibeId;const input=tab('vibePresetName');if(input)input.value=selectedVibe()?.name||''}
+ }
 
  function syncBatchUI(){const b=document.getElementById('batchModeButton'),c=document.getElementById('batchCount');if(b){b.classList.toggle('active',batchMode);b.textContent=batchMode?'Done':'Batch Tag'}if(c)c.textContent=batchMode?(batchSelected.size+' selected · tap GIFs to add/remove'):'Batch mode off';document.querySelectorAll('.tile[data-index]').forEach(t=>t.classList.toggle('batchSelected',batchSelected.has(parseInt(t.dataset.index))))}
  window.toggleBatchMode=function(){batchMode=!batchMode;if(!batchMode)batchSelected.clear();syncBatchUI()}
  window.applyBatchTag=async function(){const input=document.getElementById('batchTagInput'),tag=(input?.value||'').trim();if(!tag||!batchSelected.size)return;await cmd('batch_add_tag',{indices:[...batchSelected],tag});batchSelected.clear();if(input)input.value='';syncBatchUI()}
  function installBatchCapture(){const g=document.getElementById('gallery');if(!g||g.dataset.batchCapture==='1')return;g.dataset.batchCapture='1';g.addEventListener('click',e=>{if(!batchMode)return;const tile=e.target.closest('.tile[data-index]');if(!tile)return;e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();const i=parseInt(tile.dataset.index);if(batchSelected.has(i))batchSelected.delete(i);else batchSelected.add(i);syncBatchUI()},true)}
 
- function performanceNavTick(){ensurePerformanceNav();const text=tab('tabText');if(text)text.textContent=(state.text&&state.text.enabled)?'Text ●':'Text';const audio=tab('tabAudio');if(audio)audio.textContent=(state.audio&&state.audio.fresh)?'Vibe ●':'Vibe';const guest=tab('tabGuest');if(guest)guest.textContent=(state.guest&&state.guest.active)?'Chaos ●':'Chaos';const icons=tab('tabIcons');if(icons)icons.textContent=(state.icon&&state.icon.icon_enabled)?'Icons ●':'Icons';markManage(currentManage);installBatchCapture();syncBatchUI()}
+ function performanceNavTick(){ensurePerformanceNav();renderMyVibes();markManage(currentManage);installBatchCapture();syncBatchUI()}
  setInterval(performanceNavTick,250);
  window.addEventListener('load',()=>{ensurePerformanceNav();renderMyVibes();installBatchCapture();setTimeout(()=>{if(section('audio'))view('audio')},100)})
 })();
@@ -117,7 +210,7 @@ def apply(html):
 
     preset_anchor = '<div id="presetButtons" class="presetGrid"></div>'
     if preset_anchor in html:
-        html = html.replace(preset_anchor, _VIBE_PRESETS + preset_anchor, 1)
+        html = html.replace(preset_anchor, _VIBE_PRESETS, 1)
 
     for section_id in ('live', 'edit'):
         html = _insert_after_section_start(html, section_id, _MANAGE_SWITCH)
