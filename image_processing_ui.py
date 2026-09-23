@@ -1,6 +1,10 @@
+"""Desktop controller presentation for per-GIF processing profiles.
+
+Processing commands are handled by DesktopMediaAdapter through TotemRuntime.
+This module only shapes the phone UI.
+"""
+
 import phone_server
-import controller_state_ui
-import image_assets
 
 _CSS = r'''
 <style>
@@ -33,29 +37,3 @@ update=async function(){await _processingUpdate();syncProcessingProfile()};
 </script>
 '''
 phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('</body>', _JS + '</body>', 1)
-
-
-class PhoneControlServer(controller_state_ui.PhoneControlServer):
-    def __init__(self,*args,**kwargs):
-        super().__init__(*args,**kwargs)
-        self._reference_image_name=None
-
-    def update_state(self,state):
-        if isinstance(state,dict):
-            self._reference_image_name=state.get('image_name')
-        return super().update_state(state)
-
-    def get_commands(self):
-        out=[]
-        for data in super().get_commands():
-            if not isinstance(data,dict):
-                out.append(data);continue
-            command=data.get('command');value=data.get('value')
-            if command=='set_processing_profile':
-                image_assets.set_processing_profile(self._reference_image_name,str(value))
-                continue
-            if command=='reset_processing':
-                image_assets.reset_processing(self._reference_image_name)
-                continue
-            out.append(data)
-        return out
