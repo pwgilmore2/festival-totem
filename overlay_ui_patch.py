@@ -1,7 +1,9 @@
+"""Presentation transform for Text/Icons split controls."""
+
 import base64
 import io
+import json
 
-import phone_server
 from PIL import Image
 from icon_assets import ICON_LIBRARY
 
@@ -14,16 +16,23 @@ _CSS = r'''
 @media(max-width:520px){.iconGrid{grid-template-columns:repeat(2,1fr)}.iconTile{min-height:116px}.fontButtons{grid-template-columns:repeat(3,1fr)}}
 </style>
 '''
-phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('</head>', _CSS + '</head>', 1)
 
-phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('id="tabText" onclick="view(\'text\')">Overlay</button>', 'id="tabText" onclick="view(\'text\')">Text</button>')
-phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('id="tabText" onclick="view(\'text\')">Text</button>', 'id="tabText" onclick="view(\'text\')">Text</button><button id="tabIcons" onclick="view(\'icons\')">Icons</button>', 1)
-phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('<div class="card textCard"><h2>Overlay</h2>', '<div class="card textCard"><h2>Text</h2>')
+_FONT = '<div><div class="sh"><span>Font</span></div><select id="textFont" class="selectDark" onchange="textChanged()"></select></div>'
+_FONT_NEW = r'''<div><div class="sh"><span>Font</span></div><select id="textFont" class="selectDark" style="display:none" onchange="textChanged()"></select><div class="fontButtons"><button id="fontPixel" onclick="setOverlayFont('Pixel')">Pixel</button><button id="fontQuest" onclick="setOverlayFont('Quest')">Quest</button><button id="fontBlock" onclick="setOverlayFont('Block')">Block</button></div></div>'''
 
-_font = '<div><div class="sh"><span>Font</span></div><select id="textFont" class="selectDark" onchange="textChanged()"></select></div>'
-_font_new = r'''<div><div class="sh"><span>Font</span></div><select id="textFont" class="selectDark" style="display:none" onchange="textChanged()"></select><div class="fontButtons"><button id="fontPixel" onclick="setOverlayFont('Pixel')">Pixel</button><button id="fontQuest" onclick="setOverlayFont('Quest')">Quest</button><button id="fontBlock" onclick="setOverlayFont('Block')">Block</button></div></div>'''
-phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace(_font, _font_new, 1)
-phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('Quick text — tap once to fire it immediately', 'Quick text — tap once to show it')
+_ICONS_SECTION = r'''
+<section id="icons" class="view"><div class="card iconCard"><h2>Icons</h2>
+<div class="iconHint">32×32 PNG assets render 1:1. Tap an icon to show it; tap the active icon again to clear it.</div>
+<div id="overlayIconGrid" class="iconGrid"></div>
+<div class="iconControls">
+<div class="sh"><span>Motion</span><span class="tiny">whole-pixel movement only</span></div>
+<div id="iconMotionGrid" class="iconMotionGrid"></div>
+<div class="iconFadeNote">Icons automatically dissolve + fade in when shown and dissolve + fade out when cleared.</div>
+<div class="iconActions"><button onclick="cmd('icon_clear')">CLEAR ICON</button></div>
+</div>
+<div class="modeNotice">Full-size icons and text are currently exclusive: selecting an icon hides text, and showing text hides the icon.</div>
+</div></section>
+'''
 
 
 def _icon_preview_data():
@@ -40,28 +49,9 @@ def _icon_preview_data():
     return out
 
 
-_ICON_PREVIEWS = _icon_preview_data()
-_ICONS_SECTION = r'''
-<section id="icons" class="view"><div class="card iconCard"><h2>Icons</h2>
-<div class="iconHint">32×32 PNG assets render 1:1. Tap an icon to show it; tap the active icon again to clear it.</div>
-<div id="overlayIconGrid" class="iconGrid"></div>
-<div class="iconControls">
-<div class="sh"><span>Motion</span><span class="tiny">whole-pixel movement only</span></div>
-<div id="iconMotionGrid" class="iconMotionGrid"></div>
-<div class="iconFadeNote">Icons automatically dissolve + fade in when shown and dissolve + fade out when cleared.</div>
-<div class="iconActions"><button onclick="cmd('icon_clear')">CLEAR ICON</button></div>
-</div>
-<div class="modeNotice">Full-size icons and text are currently exclusive: selecting an icon hides text, and showing text hides the icon.</div>
-</div></section>
-'''
-if '<section id="edit" class="view">' in phone_server.PHONE_HTML:
-    phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('<section id="edit" class="view">', _ICONS_SECTION + '<section id="edit" class="view">', 1)
-else:
-    phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('</body>', _ICONS_SECTION + '</body>', 1)
-
-import json
-_PREVIEWS_JSON = json.dumps(_ICON_PREVIEWS, separators=(',', ':'))
-_JS = r'''
+def _script():
+    previews_json = json.dumps(_icon_preview_data(), separators=(',', ':'))
+    return r'''
 <script>
 let overlayIconLocal='',overlayIconEnabledLocal=false;
 const iconPreviews=__PREVIEWS__;
@@ -91,5 +81,19 @@ syncTextUI=function(){_splitSyncBase();let t=state.text||{},i=state.icon||{};ove
 setInterval(syncSplitTabs,150);setInterval(syncIconControls,220);
 window.addEventListener('load',()=>{syncSplitUI()});
 </script>
-'''.replace('__PREVIEWS__', _PREVIEWS_JSON)
-phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('</body>', _JS + '</body>', 1)
+'''.replace('__PREVIEWS__', previews_json)
+
+
+def apply(html):
+    html = html.replace('</head>', _CSS + '</head>', 1)
+    html = html.replace('id="tabText" onclick="view(\'text\')">Overlay</button>', 'id="tabText" onclick="view(\'text\')">Text</button>')
+    html = html.replace('id="tabText" onclick="view(\'text\')">Text</button>', 'id="tabText" onclick="view(\'text\')">Text</button><button id="tabIcons" onclick="view(\'icons\')">Icons</button>', 1)
+    html = html.replace('<div class="card textCard"><h2>Overlay</h2>', '<div class="card textCard"><h2>Text</h2>')
+    html = html.replace(_FONT, _FONT_NEW, 1)
+    html = html.replace('Quick text — tap once to fire it immediately', 'Quick text — tap once to show it')
+    if '<section id="edit" class="view">' in html:
+        html = html.replace('<section id="edit" class="view">', _ICONS_SECTION + '<section id="edit" class="view">', 1)
+    else:
+        html = html.replace('</body>', _ICONS_SECTION + '</body>', 1)
+    html = html.replace('</body>', _script() + '</body>', 1)
+    return html
