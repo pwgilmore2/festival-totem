@@ -23,6 +23,25 @@ from screen_mode_ui_patch import apply as apply_screen_mode
 
 BASE_CONTROLLER_HTML = phone_server.PHONE_HTML
 
+
+def normalize_vibe_language(html):
+    """Present the stable legacy layer keys using the new musical signal names."""
+    replacements = (
+        ("Bass → Zoom", "Low → Zoom"),
+        ("Beat → Flash", "Pulse → Flash"),
+        ("Mids → Hue", "Body → Hue"),
+        ("Highs → Sparkles", "Bright → Sparkles"),
+        ("Volume → Brightness", "Energy → Brightness"),
+        ("Bass → Shake", "Low → Shake"),
+        ("Highs → RGB Split", "Bright → RGB Split"),
+        ("Audio Style presets above; fine-tune individual sound mappings below.",
+         "Vibe presets above; fine-tune the musical signal mappings below."),
+    )
+    for old, new in replacements:
+        html = html.replace(old, new)
+    return html
+
+
 CONTROLLER_TRANSFORMS = (
     apply_audio,
     apply_performance_foundation,
@@ -37,6 +56,7 @@ CONTROLLER_TRANSFORMS = (
     apply_transition_labels,
     apply_performance_layout,
     apply_screen_mode,
+    normalize_vibe_language,
 )
 
 
