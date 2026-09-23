@@ -3,16 +3,7 @@ import ssl
 import sys
 
 import phone_server
-import controller_state_ui
-import chaos_layout_patch  # noqa: F401
-import text_ui_patch  # noqa: F401
-import overlay_ui_patch  # noqa: F401
-import image_processing_ui  # noqa: F401
-import safe_controls_patch  # noqa: F401
-import intense_transition_ui  # noqa: F401
-import transition_ui_patch  # noqa: F401
-import performance_ui_reorg_patch  # noqa: F401
-import screen_mode_ui_patch  # noqa: F401
+import controller_ui
 
 if Path(sys.argv[0]).name == "simulator.py":
     import simulator_display_patch  # noqa: F401
@@ -41,7 +32,7 @@ class SecureThreadingHTTPServer(_BASE_HTTP_SERVER):
 phone_server.ThreadingHTTPServer = SecureThreadingHTTPServer
 
 
-class PhoneControlServer(controller_state_ui.PhoneControlServer):
+class PhoneControlServer(controller_ui.PhoneControlServer):
     def start(self):
         url = super().start()
         if CERT_FILE.exists() and KEY_FILE.exists():
