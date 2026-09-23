@@ -15,6 +15,16 @@ class ControllerUICompositionTests(unittest.TestCase):
             "expected exactly one %r in composed controller" % marker,
         )
 
+    def test_default_build_is_repeatable(self):
+        first = controller_ui.build_controller_html()
+        second = controller_ui.build_controller_html()
+        self.assertEqual(first, second)
+        self.assertEqual(first, controller_ui.PHONE_HTML)
+
+    def test_runtime_state_layer_is_applied_once(self):
+        self.assert_once("function runtimeText(){")
+        self.assert_once("function activeQuickMessage(){")
+
     def test_primary_performance_surfaces_exist_once(self):
         for marker in (
             'id="tabAudio"',
@@ -49,6 +59,10 @@ class ControllerUICompositionTests(unittest.TestCase):
     def test_compiled_document_is_complete(self):
         self.assertTrue(self.html.startswith('<!doctype html>'))
         self.assertTrue(self.html.rstrip().endswith('</html>'))
+        self.assertEqual(self.html.lower().count('<!doctype html>'), 1)
+        self.assertEqual(self.html.lower().count('</html>'), 1)
+        self.assertIn('/api/state', self.html)
+        self.assertIn('/api/command', self.html)
         self.assertGreater(len(self.html), 10000)
 
 
