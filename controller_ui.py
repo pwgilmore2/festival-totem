@@ -1,13 +1,14 @@
 """Compose the desktop controller UI in one declared order.
 
-The controller still builds on the older base server/UI foundation, but all
-newer performance-facing presentation layers are pure transforms applied here.
-Import order is no longer behavior for this stack.
+Performance-facing UI modules are pure transforms. Import order no longer
+changes the controller document; this module is the single place that defines
+how the finished controller is assembled.
 """
 
 import phone_server
 import controller_state_ui
 
+from controller_state_ui import apply as apply_controller_state
 from chaos_layout_patch import apply as apply_chaos_layout
 from text_ui_patch import apply as apply_text_ui
 from overlay_ui_patch import apply as apply_overlay_ui
@@ -22,6 +23,7 @@ from screen_mode_ui_patch import apply as apply_screen_mode
 def build_controller_html(base_html=None):
     html = phone_server.PHONE_HTML if base_html is None else base_html
     transforms = (
+        apply_controller_state,
         apply_chaos_layout,
         apply_text_ui,
         apply_overlay_ui,
