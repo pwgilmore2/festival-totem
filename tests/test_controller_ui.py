@@ -29,8 +29,8 @@ class ControllerUICompositionTests(unittest.TestCase):
             self.assert_once(marker)
 
     def test_controller_keeps_current_performance_language(self):
-        self.assertIn('>Vibe</button>', self.html)
-        self.assertIn('>Chaos</button>', self.html)
+        self.assertIn("?'Vibe ●':'Vibe'", self.html)
+        self.assertIn("?'Chaos ●':'Chaos'", self.html)
         self.assertIn('Full Scene → Next', self.html)
         self.assertIn('BACKGROUND MELT → NEXT', self.html)
         self.assertIn('Chill / Flow', self.html)
