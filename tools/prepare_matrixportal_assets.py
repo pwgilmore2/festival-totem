@@ -3,8 +3,8 @@
 
 Run this on the Mac, not on CircuitPython. It applies the same crop, framing and
 processing settings used by the simulator, writes every asset as a native-size
-GIF for ``gifio.OnDiskGif``, and pre-generates JPEG thumbnails for the hardware
-controller UI.
+GIF for ``gifio.OnDiskGif``, pre-generates JPEG thumbnails, and compiles the
+phone controller to static HTML for the S3 web server.
 """
 
 import argparse
@@ -17,12 +17,13 @@ from PIL import Image
 
 # Running ``python tools/prepare_matrixportal_assets.py`` makes ``tools`` the
 # first import directory. Add the project root explicitly so this script can use
-# the simulator's canonical ImageLibrary without requiring PYTHONPATH setup.
+# the simulator's canonical desktop adapters without requiring PYTHONPATH setup.
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from image_assets import ImageLibrary
+from tools.build_controller_asset import build as build_controller_asset
 
 
 def safe_name(index, name):
@@ -64,7 +65,8 @@ def build(args):
     source = Path(args.source)
     output = Path(args.output)
     media_dir = output / "media"
-    thumbs_dir = output / "www" / "thumbs"
+    www_dir = output / "www"
+    thumbs_dir = www_dir / "thumbs"
 
     if args.clean and output.exists():
         shutil.rmtree(output)
@@ -108,9 +110,12 @@ def build(args):
     with open(output / "manifest.json", "w", encoding="utf-8") as handle:
         json.dump(manifest, handle, indent=2)
 
+    build_controller_asset(www_dir / "index.html")
+
     print()
     print("MatrixPortal build ready:", output)
     print("Assets:", len(manifest["assets"]))
+    print("Controller: www/index.html")
     print("Copy the build contents to CIRCUITPY after the hardware runtime is installed.")
 
 
