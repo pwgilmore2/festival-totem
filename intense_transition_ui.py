@@ -1,14 +1,4 @@
-"""Phone controls for deliberate full-scene transitions.
-
-The runtime handles ``intense_transition_next`` directly. This module only adds
-the Chaos-tab controls and sends the command; importing it does not rewrite the
-server command stream.
-"""
-
-import phone_server
-from transition_engine import INTENSE_TRANSITIONS
-
-INTENSE = list(INTENSE_TRANSITIONS)
+"""Presentation transform for deliberate full-scene transitions."""
 
 _CSS = r'''
 <style>
@@ -18,15 +8,6 @@ _CSS = r'''
 .intenseGrid button.pressed{transform:scale(.97);filter:brightness(1.3)}
 </style>
 '''
-phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('</head>', _CSS + '</head>', 1)
-
-# Keep the performance instrument ordered by usage: impact first, chill/flow
-# second, then one-shot transition tricks.
-_anchor = '<div class="xyWrap">'
-if _anchor in phone_server.PHONE_HTML and 'id="intenseTransitionGrid"' not in phone_server.PHONE_HTML:
-    block = r'''<div class="chaosGroup"><div class="chaosGroupLabel">Intense → Next <span class="chaosGroupHint">one-shot transition to the next GIF</span></div><div id="intenseTransitionGrid" class="intenseGrid"></div></div>
-'''
-    phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace(_anchor, block + _anchor, 1)
 
 _JS = r'''
 <script>
@@ -68,4 +49,14 @@ function intenseHoldEnd(e){
 }
 </script>
 '''
-phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('</body>', _JS + '</body>', 1)
+
+
+def apply(html):
+    html = html.replace('</head>', _CSS + '</head>', 1)
+    anchor = '<div class="xyWrap">'
+    if anchor in html and 'id="intenseTransitionGrid"' not in html:
+        block = r'''<div class="chaosGroup"><div class="chaosGroupLabel">Intense → Next <span class="chaosGroupHint">one-shot transition to the next GIF</span></div><div id="intenseTransitionGrid" class="intenseGrid"></div></div>
+'''
+        html = html.replace(anchor, block + anchor, 1)
+    html = html.replace('</body>', _JS + '</body>', 1)
+    return html
