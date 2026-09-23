@@ -7,7 +7,7 @@ import controller_state_ui
 import chaos_layout_patch  # noqa: F401
 import text_ui_patch  # noqa: F401
 import overlay_ui_patch  # noqa: F401
-import image_processing_ui
+import image_processing_ui  # noqa: F401
 import safe_controls_patch  # noqa: F401
 import intense_transition_ui  # noqa: F401
 import transition_ui_patch  # noqa: F401
@@ -25,23 +25,27 @@ _BASE_HTTP_SERVER = phone_server.ThreadingHTTPServer
 # Keep the polling/audio connection alive instead of repeatedly handshaking TLS.
 phone_server.BaseHTTPRequestHandler.protocol_version = "HTTP/1.1"
 
+
 class SecureThreadingHTTPServer(_BASE_HTTP_SERVER):
     daemon_threads = True
-    def __init__(self,*args,**kwargs):
-        super().__init__(*args,**kwargs)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         if CERT_FILE.exists() and KEY_FILE.exists():
-            context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-            context.minimum_version=ssl.TLSVersion.TLSv1_2
-            context.load_cert_chain(certfile=str(CERT_FILE),keyfile=str(KEY_FILE))
-            self.socket=context.wrap_socket(self.socket,server_side=True)
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            context.minimum_version = ssl.TLSVersion.TLSv1_2
+            context.load_cert_chain(certfile=str(CERT_FILE), keyfile=str(KEY_FILE))
+            self.socket = context.wrap_socket(self.socket, server_side=True)
 
-phone_server.ThreadingHTTPServer=SecureThreadingHTTPServer
 
-class PhoneControlServer(image_processing_ui.PhoneControlServer):
+phone_server.ThreadingHTTPServer = SecureThreadingHTTPServer
+
+
+class PhoneControlServer(controller_state_ui.PhoneControlServer):
     def start(self):
-        url=super().start()
+        url = super().start()
         if CERT_FILE.exists() and KEY_FILE.exists():
-            secure_url=url.replace("http://","https://",1)
+            secure_url = url.replace("http://", "https://", 1)
             print("HTTPS enabled (performance controller)")
             print(f"Secure phone URL: {secure_url}")
             return secure_url
