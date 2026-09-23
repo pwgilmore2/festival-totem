@@ -70,7 +70,7 @@ function syncIconControls(){renderIconMotion()}
 const _iconsBaseView=view;
 view=function(n){if(n==='icons'){document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.querySelectorAll('.tabs button').forEach(b=>b.classList.remove('active'));const panel=document.getElementById('icons'),tab=document.getElementById('tabIcons');if(panel)panel.classList.add('active');if(tab)tab.classList.add('active');const tc=document.getElementById('targetCard');if(tc)tc.style.display='';renderOverlayIcons();syncIconControls();return}_iconsBaseView(n);const panel=document.getElementById('icons'),tab=document.getElementById('tabIcons');if(panel)panel.classList.remove('active');if(tab)tab.classList.remove('active')}
 
-function syncSplitTabs(){const tt=document.getElementById('tabText'),ti=document.getElementById('tabIcons');if(tt){tt.textContent=textEnabledLocal?'Text ●':'Text';tt.classList.toggle('runtimeOn',!!textEnabledLocal)}if(ti){ti.textContent=overlayIconEnabledLocal?'Icons ●':'Icons';ti.classList.toggle('runtimeOn',!!overlayIconEnabledLocal)}const card=document.querySelector('.textCard h2');if(card)card.textContent='Text'}
+function syncSplitTabs(){const tt=document.getElementById('tabText'),ti=document.getElementById('tabIcons');if(tt){tt.textContent='Text';tt.classList.toggle('runtimeOn',!!textEnabledLocal)}if(ti){ti.textContent='Icons';ti.classList.toggle('runtimeOn',!!overlayIconEnabledLocal)}const card=document.querySelector('.textCard h2');if(card)card.textContent='Text'}
 function syncSplitUI(){renderOverlayIcons();syncIconControls();['Pixel','Quest','Block'].forEach(n=>{let b=document.getElementById('font'+n);if(b)b.classList.toggle('active',textFont.value===n)});syncTextMaster();syncSplitTabs();const wave=document.getElementById('textWaveToggle');if(wave)wave.style.display='none'}
 
 syncTextMaster=function(){let b=document.getElementById('textMaster');if(!b)return;b.textContent='TEXT: '+(textEnabledLocal?'ON':'OFF');b.classList.toggle('active',textEnabledLocal)};
@@ -97,3 +97,4 @@ def apply(html):
         html = html.replace('</body>', _ICONS_SECTION + '</body>', 1)
     html = html.replace('</body>', _script() + '</body>', 1)
     return html
+
