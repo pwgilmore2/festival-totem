@@ -1,6 +1,4 @@
-"""Make transition scope obvious in the phone controller."""
-
-import phone_server
+"""Presentation transform that makes transition scope obvious."""
 
 _CSS = r'''
 <style>
@@ -10,36 +8,30 @@ _CSS = r'''
 .transitionScopeNote.scene{box-shadow:inset 3px 0 #ff4f9a}
 </style>
 '''
-phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('</head>', _CSS + '</head>', 1)
 
-# Normal slideshow transitions are background/content only.
-phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace(
-    '<h2>Slideshow + Transitions</h2>',
-    '<h2>Slideshow + Background Transitions</h2>',
-)
-phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace(
-    '<div class="transitionGrid">',
-    '<div class="transitionScopeNote background"><strong>BACKGROUND ONLY</strong>Changes the GIF/image underneath. Icons and text stay steady.</div><div class="transitionGrid">',
-    1,
-)
-phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace(
-    '<span>Transition</span>', '<span>Background transition</span>', 1
-)
 
-# Deliberate intense transitions are full-scene by definition.
-phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace(
-    'Intense → Next', 'Full Scene → Next'
-)
-phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace(
-    'one-shot transition to the next GIF',
-    'image + icon + text move together',
-)
-phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace(
-    'deliberate hold • both panels • one-shot transition',
-    'deliberate hold • both panels • image + icon + text',
-)
-
-# Make the Chaos one-shot melt unambiguous too.
-phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace(
-    'PIXEL MELT → NEXT', 'BACKGROUND MELT → NEXT'
-)
+def apply(html):
+    html = html.replace('</head>', _CSS + '</head>', 1)
+    html = html.replace(
+        '<h2>Slideshow + Transitions</h2>',
+        '<h2>Slideshow + Background Transitions</h2>',
+    )
+    html = html.replace(
+        '<div class="transitionGrid">',
+        '<div class="transitionScopeNote background"><strong>BACKGROUND ONLY</strong>Changes the GIF/image underneath. Icons and text stay steady.</div><div class="transitionGrid">',
+        1,
+    )
+    html = html.replace(
+        '<span>Transition</span>', '<span>Background transition</span>', 1
+    )
+    html = html.replace('Intense → Next', 'Full Scene → Next')
+    html = html.replace(
+        'one-shot transition to the next GIF',
+        'image + icon + text move together',
+    )
+    html = html.replace(
+        'deliberate hold • both panels • one-shot transition',
+        'deliberate hold • both panels • image + icon + text',
+    )
+    html = html.replace('PIXEL MELT → NEXT', 'BACKGROUND MELT → NEXT')
+    return html
