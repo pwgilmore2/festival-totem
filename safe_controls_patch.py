@@ -1,4 +1,4 @@
-import phone_server
+"""Presentation transform for safer phone slider controls and quick-text defaults."""
 
 _CSS = r'''
 <style>
@@ -8,7 +8,6 @@ _CSS = r'''
 .safeRangeStep:active{transform:scale(.96);filter:brightness(1.25)}
 </style>
 '''
-phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('</head>', _CSS + '</head>', 1)
 
 _JS = r'''
 <script>
@@ -54,4 +53,9 @@ _JS = r'''
 })();
 </script>
 '''
-phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('</body>', _JS + '</body>', 1)
+
+
+def apply(html):
+    html = html.replace('</head>', _CSS + '</head>', 1)
+    html = html.replace('</body>', _JS + '</body>', 1)
+    return html
