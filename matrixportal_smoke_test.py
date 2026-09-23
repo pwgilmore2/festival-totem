@@ -1,12 +1,12 @@
-"""First physical-hardware smoke test for the Festival Totem MatrixPortal S3.
+"""Physical-hardware performance smoke test for the Festival Totem S3.
 
 Copy the hardware modules plus a generated ``manifest.json`` and ``media/``
 folder to CIRCUITPY, rename this file to ``code.py`` temporarily, and watch the
 serial console.
 
-The loop is intentionally cooperative/non-blocking: GIF decode, render/present,
-state reporting, and future HTTP/audio work each get independent timers. No
-``sleep()`` is used for frame pacing.
+The loop is cooperative/non-blocking: GIF decode and display present have their
+own deadlines and no ``sleep()`` is used for frame pacing. Measurements here are
+intentionally device-side; desktop timings are not treated as S3 predictions.
 """
 
 import gc
@@ -33,8 +33,37 @@ def memory_free():
     return value() if value else -1
 
 
+def human_bytes(value):
+    value = int(value or 0)
+    if value < 1024:
+        return "%d B" % value
+    if value < 1024 * 1024:
+        return "%0.1f KiB" % (value / 1024.0)
+    return "%0.2f MiB" % (value / (1024.0 * 1024.0))
+
+
+class TimingStats:
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.samples = 0
+        self.total_ms = 0.0
+        self.max_ms = 0.0
+
+    def add(self, seconds):
+        ms = max(0.0, float(seconds) * 1000.0)
+        self.samples += 1
+        self.total_ms += ms
+        if ms > self.max_ms:
+            self.max_ms = ms
+
+    def average_ms(self):
+        return self.total_ms / self.samples if self.samples else 0.0
+
+
 def main():
-    print("Festival Totem MatrixPortal S3 smoke test")
+    print("Festival Totem MatrixPortal S3 performance test")
     print("Free RAM before display:", memory_free())
 
     backend = HardwareDisplayBackend(
@@ -56,12 +85,15 @@ def main():
 
     mapping_until = time.monotonic() + 2.0
     while time.monotonic() < mapping_until:
-        # Intentionally no sleep: this mirrors the final cooperative loop where
-        # Wi-Fi/server/audio polling will have work to do between display frames.
         pass
 
     library = MatrixPortalAssetLibrary("/manifest.json")
     print("Prepared assets:", len(library))
+    print("Baked media:", library.baked_media)
+    if library.media_bytes():
+        print("GIF media on flash:", human_bytes(library.media_bytes()))
+    if library.storage_bytes():
+        print("Prepared deployment payload:", human_bytes(library.storage_bytes()))
     if not len(library):
         raise RuntimeError("manifest.json contains no prepared assets")
 
@@ -75,40 +107,64 @@ def main():
     next_present_at = now
     next_report_at = now + REPORT_SECONDS
     frames = 0
+    loop_iterations = 0
     report_started = now
+    decode_timing = TimingStats()
+    present_timing = TimingStats()
+    loop_timing = TimingStats()
 
     try:
         while True:
-            now = time.monotonic()
+            loop_started = time.monotonic()
+            now = loop_started
 
             # Independent front/back file pointers. At most one synchronous
-            # gifio decode is allowed per loop iteration to avoid a double-I/O
-            # spike when both GIF deadlines line up.
-            media.advance(now)
+            # gifio decode is allowed per loop iteration to avoid double-I/O
+            # spikes when both GIF deadlines line up.
+            decode_started = time.monotonic()
+            decoded = media.advance(now)
+            decode_elapsed = time.monotonic() - decode_started
+            if decoded:
+                decode_timing.add(decode_elapsed)
 
-            # Rendering/presenting has its own cadence and never blocks waiting
-            # for the next deadline. If work ran late, drop timing debt rather
-            # than trying to catch up with multiple presents.
+            # Rendering/presenting has its own cadence. If work ran late, timing
+            # debt is dropped rather than trying to burst several frames.
+            now = time.monotonic()
             if now >= next_present_at:
+                present_started = now
                 media.render(displays)
                 backend.present()
+                present_timing.add(time.monotonic() - present_started)
                 frames += 1
                 next_present_at = now + frame_interval
 
+            loop_iterations += 1
+            loop_timing.add(time.monotonic() - loop_started)
+
+            now = time.monotonic()
             if now >= next_report_at:
                 elapsed = max(0.001, now - report_started)
                 front_player = media.players.players["front"]
                 back_player = media.players.players["back"]
                 print(
-                    "FPS:", round(frames / elapsed, 1),
-                    "free RAM:", memory_free(),
-                    "GIF frames F/B:",
-                    front_player.frames_advanced,
-                    back_player.frames_advanced,
+                    "FPS", round(frames / elapsed, 1),
+                    "loops/s", round(loop_iterations / elapsed, 0),
+                    "RAM", memory_free(),
+                    "decode avg/max ms", round(decode_timing.average_ms(), 2),
+                    "/", round(decode_timing.max_ms, 2),
+                    "present avg/max ms", round(present_timing.average_ms(), 2),
+                    "/", round(present_timing.max_ms, 2),
+                    "loop max ms", round(loop_timing.max_ms, 2),
+                    "GIF frames F/B", front_player.frames_advanced,
+                    "/", back_player.frames_advanced,
                 )
                 frames = 0
+                loop_iterations = 0
                 report_started = now
                 next_report_at = now + REPORT_SECONDS
+                decode_timing.reset()
+                present_timing.reset()
+                loop_timing.reset()
                 gc.collect()
     finally:
         media.close()
