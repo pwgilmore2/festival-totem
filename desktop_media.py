@@ -168,6 +168,34 @@ class DesktopMediaAdapter:
                 self.invalidate_state()
             return True
 
+        if command == "batch_add_tag":
+            if isinstance(value, dict):
+                tag = str(value.get("tag", "")).strip()
+                indices = value.get("indices", [])
+                changed = False
+                if tag and isinstance(indices, list):
+                    seen = set()
+                    for raw_index in indices:
+                        try:
+                            index = int(raw_index)
+                        except (TypeError, ValueError):
+                            continue
+                        if index in seen or not 0 <= index < len(self):
+                            continue
+                        seen.add(index)
+                        target = self.get(index)
+                        if not target:
+                            continue
+                        metadata = self._metadata(target)
+                        tags = list(metadata.get("tags", []))
+                        if tag not in tags:
+                            tags.append(tag)
+                            self.library.set_tags(target, tags)
+                            changed = True
+                if changed:
+                    self.invalidate_state()
+            return True
+
         if command == "set_processing_profile":
             if asset:
                 profile = str(value)
