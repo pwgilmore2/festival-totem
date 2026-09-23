@@ -211,7 +211,6 @@ class MatrixPortalDisplayBackend:
                 self.framebuffer,
                 self.total_width,
                 self.width,
-                self.width,
                 self.height,
                 rotation=back_rotation,
             ),
