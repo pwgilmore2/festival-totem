@@ -1,13 +1,13 @@
 # Festival totem hardware architecture (working build)
 
-## Confirm the display size before cutting the enclosure
+## Display size and orientation
 
-The simulator and the current MatrixPortal backend target **two 64×32 HUB75 panels**.
-Earlier parts notes also mention two **32×32** panels already on hand. The 32×32
-pair is useful for a bench test, but the current 64×32 software and baked GIFs
-must be changed to 32×32 before using them as the final displays. Check the
-panel labels, scan type, connector orientation, actual dimensions and power
-ratings before mounting or ordering a replacement pair.
+The build uses **two 32×64 HUB75 panels**, oriented landscape as 64 pixels
+wide by 32 pixels tall. The simulator, baked GIFs and MatrixPortal backend
+therefore use a 64×32 coordinate system for each face. Before mounting, check
+the actual panel labels, scan type, IN/OUT connector orientation, physical
+dimensions and power rating; set the rear rotation during the mapping test
+if its installed orientation needs it.
 
 The intended final assembly has front and back panels facing opposite
 directions. A MatrixPortal S3 drives one 128×32 logical row: its first 64×32
