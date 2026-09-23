@@ -98,5 +98,9 @@ def enhanced_html(source):
     html=html.replace('async function update(){',AUDIO_JS+'\nasync function update(){',1)
     return html
 
-phone_server.PHONE_HTML=enhanced_html(phone_server.PHONE_HTML)
+
+def apply(html):
+    return enhanced_html(html)
+
+
 PhoneControlServer=phone_server.PhoneControlServer
