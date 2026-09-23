@@ -1,8 +1,13 @@
-import phone_server
+"""State-driven controller status presentation.
+
+This module is intentionally side-effect free: ``apply()`` transforms a supplied
+controller document and the server class simply continues the normal server
+chain. Controller build order is owned by ``controller_ui.py``.
+"""
+
 import ui_cleanup_server
 
-# State-driven controller UI: text tiles and tab indicators reflect the runtime,
-# not browser-local guesses about what should be active.
+
 _STATE_CSS = r'''
 <style>
 .textTop{display:none!important}
@@ -13,7 +18,6 @@ _STATE_CSS = r'''
 .tabs button.beatHit{box-shadow:0 0 0 2px #ffffff88 inset,0 0 20px #ffffff77;filter:brightness(1.25)}
 </style>
 '''
-phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('</head>', _STATE_CSS + '</head>', 1)
 
 _STATE_JS = r'''
 <script>
@@ -81,8 +85,6 @@ function syncTextUI(){
 function syncTabStatus(){
   let a=state.audio||{},t=runtimeText(),g=state.guest||{};
   let ta=document.getElementById('tabAudio'),tt=document.getElementById('tabText'),tg=document.getElementById('tabGuest');
-  // Status poller owns classes/tooltips only. Visible tab labels are owned by
-  // the final performance navigation patch so older UI code cannot flicker them.
   if(ta){ta.classList.toggle('runtimeOn',!!a.fresh);ta.classList.toggle('beatHit',!!(a.fresh&&a.beat));ta.title=a.fresh?'Phone audio active':'Phone audio off'}
   if(tt){tt.classList.toggle('runtimeOn',!!t.enabled);tt.title=t.enabled?('Text active: '+normalizedMessage(t.message)):'Text off'}
   if(tg){tg.classList.toggle('runtimeChaos',!!g.active);tg.title=g.active?('Active: '+String(g.kind||'Chaos')):'Chaos idle'}
@@ -90,13 +92,12 @@ function syncTabStatus(){
 setInterval(syncTabStatus,120);
 </script>
 '''
-phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('</body>', _STATE_JS + '</body>', 1)
 
 
-class PhoneControlServer(ui_cleanup_server.PhoneControlServer):
-    """Controller state UI over the normal server chain.
+def apply(html):
+    html = html.replace('</head>', _STATE_CSS + '</head>', 1)
+    html = html.replace('</body>', _STATE_JS + '</body>', 1)
+    return html
 
-    Runtime features such as Chaos own their state in simulator.py; this class
-    no longer intercepts commands or synthesizes runtime status.
-    """
-    pass
+
+PhoneControlServer = ui_cleanup_server.PhoneControlServer
