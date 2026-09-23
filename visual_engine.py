@@ -152,14 +152,14 @@ class TransitionManager:
     def _zoom_transition(self, display, target, p):
         cx = (self.width - 1) / 2.0
         cy = (self.height - 1) / 2.0
-        max_r = math.hypot(cx, cy)
-        radius = p * (max_r + 8)
+        old_zoom = 1.0 + p * 1.5
+        new_zoom = 1.85 - p * 0.85
         for y in range(self.height):
             for x in range(self.width):
-                osx = int(round(cx + (x - cx) / (1.0 + p * 1.5)))
-                osy = int(round(cy + (y - cy) / (1.0 + p * 1.5)))
-                nsx = int(round(cx + (x - cx) / (1.85 - p * 0.85)))
-                nsy = int(round(cy + (y - cy) / (1.85 - p * 0.85)))
+                osx = int(round(cx + (x - cx) / old_zoom))
+                osy = int(round(cy + (y - cy) / old_zoom))
+                nsx = int(round(cx + (x - cx) / new_zoom))
+                nsy = int(round(cy + (y - cy) / new_zoom))
                 osx = max(0, min(self.width - 1, osx)); osy = max(0, min(self.height - 1, osy))
                 nsx = max(0, min(self.width - 1, nsx)); nsy = max(0, min(self.height - 1, nsy))
                 display.set_pixel(x, y, blend_color(self.source[osy][osx], target[nsy][nsx], p))
