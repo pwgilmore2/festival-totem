@@ -1,11 +1,11 @@
 """State-driven controller status presentation.
 
 This module is intentionally side-effect free: ``apply()`` transforms a supplied
-controller document and the server class simply continues the normal server
-chain. Controller build order is owned by ``controller_ui.py``.
+controller document and the server class simply continues the base server.
+Controller build order is owned by ``controller_ui.py``.
 """
 
-import ui_cleanup_server
+import phone_server
 
 
 _STATE_CSS = r'''
@@ -71,7 +71,6 @@ function quickText(message){toggleQuickText(message)}
 function toggleTextMaster(){if(runtimeTextEnabled())cmd('text_hide');else if(normalizedMessage(textMessage.value))cmd('text_show',textPayload())}
 function refreshText(){if(runtimeTextEnabled())cmd('text_settings',textPayload())}
 
-// Active text updates immediately; inactive text settings simply prepare the next tile press.
 function textChanged(){clearTimeout(textTimer);textTimer=setTimeout(()=>cmd('text_settings',textPayload()),100)}
 
 function syncTextUI(){
@@ -100,4 +99,4 @@ def apply(html):
     return html
 
 
-PhoneControlServer = ui_cleanup_server.PhoneControlServer
+PhoneControlServer = phone_server.PhoneControlServer
