@@ -73,6 +73,23 @@ class ControllerUICompositionTests(unittest.TestCase):
         self.assertIn('BACKGROUND MELT → NEXT', self.html)
         self.assertIn('Chill / Flow', self.html)
 
+    def test_vibe_uses_musical_signal_language(self):
+        for marker in (
+            '>Energy<',
+            '>Low<',
+            '>Body<',
+            '>Bright<',
+            'Pulse sensitivity',
+            'Low → Zoom',
+            'Pulse → Flash',
+            'Body → Hue',
+            'Bright → Sparkles',
+            'Energy → Brightness',
+        ):
+            self.assertIn(marker, self.html)
+        self.assertIn('Silent — gate closed', self.html)
+        self.assertIn('Reactive signals — fixed 0–100% scale', self.html)
+
     def test_text_controls_are_simplified(self):
         self.assertIn('id="textAudioOff"', self.html)
         self.assertIn('id="textAudioSubtle"', self.html)
