@@ -1,13 +1,14 @@
-"""Compose the desktop controller UI in one declared order.
+"""Compose the phone controller in one deterministic transform pipeline.
 
-Performance-facing UI modules are pure transforms. Import order no longer
-changes the controller document; this module is the single place that defines
-how the finished controller is assembled.
+Nothing in this stack mutates controller HTML merely by being imported. Desktop
+and MatrixPortal builds both consume the same finished document.
 """
 
 import phone_server
-import controller_state_ui
 
+from audio_phone_server import apply as apply_audio
+from performance_phone_server import apply as apply_performance_foundation
+from controller_cleanup import apply as apply_cleanup
 from controller_state_ui import apply as apply_controller_state
 from chaos_layout_patch import apply as apply_chaos_layout
 from text_ui_patch import apply as apply_text_ui
@@ -20,12 +21,12 @@ from performance_ui_reorg_patch import apply as apply_performance_layout
 from screen_mode_ui_patch import apply as apply_screen_mode
 
 
-# ``controller_state_ui`` imports the older performance/cleanup foundation.
-# Snapshot that once, before applying the newer feature transforms, so repeated
-# builds never start from an already-transformed document.
 BASE_CONTROLLER_HTML = phone_server.PHONE_HTML
 
 CONTROLLER_TRANSFORMS = (
+    apply_audio,
+    apply_performance_foundation,
+    apply_cleanup,
     apply_controller_state,
     apply_chaos_layout,
     apply_text_ui,
@@ -47,6 +48,8 @@ def build_controller_html(base_html=None):
 
 
 PHONE_HTML = build_controller_html()
+# The desktop HTTP server still reads this constant. Assign it once after the
+# deterministic build rather than letting feature imports modify it piecemeal.
 phone_server.PHONE_HTML = PHONE_HTML
 
-PhoneControlServer = controller_state_ui.PhoneControlServer
+PhoneControlServer = phone_server.PhoneControlServer
