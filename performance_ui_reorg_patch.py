@@ -1,11 +1,4 @@
-"""Final controller organization around the live performance workflow.
-
-Runs last so the performance-facing navigation wins over legacy UI patches.
-Runtime behavior stays intact; this module reorganizes the control surface and
-adds browser-local named Vibe presets plus batch tagging helpers.
-"""
-
-import phone_server
+"""Final controller organization around the live performance workflow."""
 
 _CSS = r'''
 <style>
@@ -19,7 +12,6 @@ body.manageMode #targetCard{display:none!important}body.manageMode .manageSwitch
 @media(max-width:520px){.tabs button.performancePrimary{min-width:78px!important}.tabs .managementTab{min-width:72px!important}.manageSwitcher{top:60px}.vibePresetGrid{grid-template-columns:1fr 1fr}.batchTagBar{grid-template-columns:1fr 1fr}.batchTagBar input{grid-column:1/-1}}
 </style>
 '''
-phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('</head>', _CSS + '</head>', 1)
 
 _VIBE_CARD = r'''
 <div id="vibeLaunchCard" class="card vibeLaunch">
@@ -29,9 +21,6 @@ _VIBE_CARD = r'''
 <div class="vibeTransport"><button onclick="vibePrevious()">◀ Previous</button><button onclick="vibeNext()">Next ▶</button></div>
 </div>
 '''
-_audio_anchor = '<section id="audio" class="view">'
-if _audio_anchor in phone_server.PHONE_HTML:
-    phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace(_audio_anchor, _audio_anchor + _VIBE_CARD, 1)
 
 _VIBE_PRESETS = r'''
 <div class="vibePresetBox">
@@ -42,9 +31,6 @@ _VIBE_PRESETS = r'''
 </div>
 <div class="sectionHint" style="margin-top:8px">Built-in starting points</div>
 '''
-_preset_anchor = '<div id="presetButtons" class="presetGrid"></div>'
-if _preset_anchor in phone_server.PHONE_HTML:
-    phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace(_preset_anchor, _VIBE_PRESETS + _preset_anchor, 1)
 
 _MANAGE_SWITCH = r'''
 <div class="manageSwitcher">
@@ -54,13 +40,6 @@ _MANAGE_SWITCH = r'''
 </div>
 <div class="manageHint">Backstage tools — hidden from the main performance flow.</div>
 '''
-for _section in ('live', 'edit'):
-    _needle = f'<section id="{_section}" class="view'
-    _pos = phone_server.PHONE_HTML.find(_needle)
-    if _pos >= 0:
-        _gt = phone_server.PHONE_HTML.find('>', _pos)
-        if _gt >= 0:
-            phone_server.PHONE_HTML = phone_server.PHONE_HTML[:_gt+1] + _MANAGE_SWITCH + phone_server.PHONE_HTML[_gt+1:]
 
 _BATCH_BAR = r'''
 <div class="batchTagBar">
@@ -70,9 +49,6 @@ _BATCH_BAR = r'''
 <div id="batchCount" class="batchCount">Batch mode off</div>
 </div>
 '''
-_gallery_anchor = '<div id="gallery" class="gallery"></div>'
-if _gallery_anchor in phone_server.PHONE_HTML:
-    phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace(_gallery_anchor, _BATCH_BAR + _gallery_anchor, 1)
 
 _JS = r'''
 <script>
@@ -120,4 +96,36 @@ _JS = r'''
 })();
 </script>
 '''
-phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('</body>', _JS + '</body>', 1)
+
+
+def _insert_after_section_start(html, section_id, block):
+    needle = f'<section id="{section_id}" class="view'
+    pos = html.find(needle)
+    if pos < 0:
+        return html
+    gt = html.find('>', pos)
+    if gt < 0:
+        return html
+    return html[:gt + 1] + block + html[gt + 1:]
+
+
+def apply(html):
+    html = html.replace('</head>', _CSS + '</head>', 1)
+
+    audio_anchor = '<section id="audio" class="view">'
+    if audio_anchor in html:
+        html = html.replace(audio_anchor, audio_anchor + _VIBE_CARD, 1)
+
+    preset_anchor = '<div id="presetButtons" class="presetGrid"></div>'
+    if preset_anchor in html:
+        html = html.replace(preset_anchor, _VIBE_PRESETS + preset_anchor, 1)
+
+    for section_id in ('live', 'edit'):
+        html = _insert_after_section_start(html, section_id, _MANAGE_SWITCH)
+
+    gallery_anchor = '<div id="gallery" class="gallery"></div>'
+    if gallery_anchor in html:
+        html = html.replace(gallery_anchor, _BATCH_BAR + gallery_anchor, 1)
+
+    html = html.replace('</body>', _JS + '</body>', 1)
+    return html
