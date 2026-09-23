@@ -9,7 +9,7 @@ import io
 
 from PIL import Image
 
-from image_assets import ImageLibrary
+from image_assets import ImageLibrary, PROCESSING_PROFILES
 
 
 MODES = ("crop", "pixel", "optimize", "dither")
@@ -166,6 +166,20 @@ class DesktopMediaAdapter:
                 )
                 self.library.set_tags(asset, tags)
                 self.invalidate_state()
+            return True
+
+        if command == "set_processing_profile":
+            if asset:
+                profile = str(value)
+                if profile in PROCESSING_PROFILES:
+                    asset.settings.processing_profile = profile
+                    self._save_asset(asset)
+            return True
+
+        if command == "reset_processing":
+            if asset:
+                asset.settings.reset_processing()
+                self._save_asset(asset)
             return True
 
         if command not in (
