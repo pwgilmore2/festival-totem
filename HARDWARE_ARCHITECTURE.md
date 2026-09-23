@@ -28,10 +28,10 @@ UGREEN battery USB-C PD output
   → 5 V distribution
       → front panel power connector
       → back panel power connector
+      → 5 V/5 A rated USB-C power pigtail → MatrixPortal S3 USB-C input
 
-Battery separate USB output → USB-C power input on MatrixPortal S3
 MatrixPortal HUB75 → front IN → front OUT → back IN
-Ground reference: MatrixPortal and panels must share ground.
+All three power branches use the buck's regulated 5 V output and ground.
 ```
 
 Use the distribution block for panel **power in parallel**. Do not use the
@@ -44,23 +44,31 @@ and test, followed by both at a low brightness limit.
 **MatrixPortal S3 detail:** its +5 V and GND mounting terminals are USB-fed
 **outputs**, and Adafruit recommends disconnecting those terminals from a
 panel when that panel is powered externally. Do not feed buck 5 V into the
-MatrixPortal's +5 V mounting terminal or join the buck's 5 V rail to the
-board's USB 5 V rail. The board should be powered through its USB-C input
-from a separate battery output. Arrange a common ground reference for the
-HUB75 signal without tying the two positive rails together. During USB
-programming, check the physical wiring again before attaching a computer.
+MatrixPortal's +5 V mounting terminal. The controller's new planned input is
+a rated USB-C-to-bare-wire power cable on a third distribution branch, with
+positive and ground wired to the buck's regulated 5 V output. The cable is
+ordered but has not yet been bench-tested on this board. Verify its actual
+polarity, connector behavior, regulator output, and stable boot under load;
+its 5 A rating describes capacity, not the controller's draw. The controller
+and panels will then share a ground reference. Avoid connecting a computer's
+USB power at the same time as the externally supplied pigtail; disconnect
+the external feed before USB programming.
 
 A fuse protects the wire and supply path, not a guaranteed maximum operating
 current. Select its rating only after checking the buck's continuous output,
 wire gauge, connector and switch ratings. The planned 8–10 A fuse is a
-candidate, not a validated value for every combination of components.
+candidate, not a validated value for every combination of components. A
+separately fused controller branch sized to its smaller cable is sensible
+because the main fuse sized for both panels may not protect that branch.
 
 Adafruit recommends **5 V at 4 A per 64×32 panel** as a supply planning
 figure, or **8 A for two**. A 5 V/10 A buck has little spare headroom at that
 planning point. Verify its continuous rating and cooling inside the enclosure,
 then measure real current with the intended animations at several brightness
-levels. Avoid a full-white startup frame. Power banks can renegotiate or
-disable an output when using several ports; test both output ports together.
+levels. Avoid a full-white startup frame. The new plan uses a single PD output rather than two battery ports. Confirm
+the TOBSUN converter's permitted input range and the PD trigger's actual
+output before relying on a 20 V setting: the converter's photographed label
+specifies 12 V/24 V input, not an explicit continuous input-voltage range.
 
 ## Runtime and battery check
 
@@ -83,8 +91,9 @@ use. Reduce brightness or content power if the result falls short.
 1. Verify actual panel size and scan compatibility, cable directions and
    enclosure layout; keep the battery and regulator accessible.
 2. Bench test the PD trigger and buck without panels; measure 5 V under load.
-3. Add the panel power branches and USB power for the MatrixPortal; establish
-   common ground without joining the two 5 V positive rails.
+3. Add separate panel branches, then the fused USB-C controller pigtail
+   from the same regulated 5 V distribution. Check polarity and board boot
+   before connecting all three loads and monitoring voltage under load.
 4. Run the red/blue panel mapping smoke test, inspect scan artifacts and
    rotation, then record RAM, FPS and decode/present latency.
 5. Run the complete controller and media build only after the mapping test
