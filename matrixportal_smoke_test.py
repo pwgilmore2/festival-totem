@@ -14,6 +14,7 @@ import time
 
 from matrixportal_library import MatrixPortalAssetLibrary, MatrixPortalMediaDeck
 from runtime_io import HardwareDisplayBackend
+from runtime_metrics import RuntimeMetrics
 
 
 WIDTH = 64
@@ -42,24 +43,9 @@ def human_bytes(value):
     return "%0.2f MiB" % (value / (1024.0 * 1024.0))
 
 
-class TimingStats:
-    def __init__(self):
-        self.reset()
-
-    def reset(self):
-        self.samples = 0
-        self.total_ms = 0.0
-        self.max_ms = 0.0
-
-    def add(self, seconds):
-        ms = max(0.0, float(seconds) * 1000.0)
-        self.samples += 1
-        self.total_ms += ms
-        if ms > self.max_ms:
-            self.max_ms = ms
-
-    def average_ms(self):
-        return self.total_ms / self.samples if self.samples else 0.0
+def timing(report, name):
+    item = report.get("timings", {}).get(name, {})
+    return item.get("avg_ms", 0.0), item.get("max_ms", 0.0)
 
 
 def main():
@@ -105,13 +91,7 @@ def main():
     frame_interval = 1.0 / TARGET_FPS
     now = time.monotonic()
     next_present_at = now
-    next_report_at = now + REPORT_SECONDS
-    frames = 0
-    loop_iterations = 0
-    report_started = now
-    decode_timing = TimingStats()
-    present_timing = TimingStats()
-    loop_timing = TimingStats()
+    metrics = RuntimeMetrics(REPORT_SECONDS)
 
     try:
         while True:
@@ -123,9 +103,8 @@ def main():
             # spikes when both GIF deadlines line up.
             decode_started = time.monotonic()
             decoded = media.advance(now)
-            decode_elapsed = time.monotonic() - decode_started
             if decoded:
-                decode_timing.add(decode_elapsed)
+                metrics.add_timing("decode", time.monotonic() - decode_started)
 
             # Rendering/presenting has its own cadence. If work ran late, timing
             # debt is dropped rather than trying to burst several frames.
@@ -134,37 +113,30 @@ def main():
                 present_started = now
                 media.render(displays)
                 backend.present()
-                present_timing.add(time.monotonic() - present_started)
-                frames += 1
+                metrics.add_timing("present", time.monotonic() - present_started)
+                metrics.frame()
                 next_present_at = now + frame_interval
 
-            loop_iterations += 1
-            loop_timing.add(time.monotonic() - loop_started)
+            metrics.loop()
+            metrics.add_timing("loop", time.monotonic() - loop_started)
 
             now = time.monotonic()
-            if now >= next_report_at:
-                elapsed = max(0.001, now - report_started)
+            if metrics.due(now):
+                report = metrics.take_report(now, free_ram=memory_free())
+                decode_avg, decode_max = timing(report, "decode")
+                present_avg, present_max = timing(report, "present")
+                _, loop_max = timing(report, "loop")
                 front_player = media.players.players["front"]
                 back_player = media.players.players["back"]
                 print(
-                    "FPS", round(frames / elapsed, 1),
-                    "loops/s", round(loop_iterations / elapsed, 0),
-                    "RAM", memory_free(),
-                    "decode avg/max ms", round(decode_timing.average_ms(), 2),
-                    "/", round(decode_timing.max_ms, 2),
-                    "present avg/max ms", round(present_timing.average_ms(), 2),
-                    "/", round(present_timing.max_ms, 2),
-                    "loop max ms", round(loop_timing.max_ms, 2),
-                    "GIF frames F/B", front_player.frames_advanced,
-                    "/", back_player.frames_advanced,
+                    "FPS", round(report["fps"], 1),
+                    "loops/s", round(report["loops_per_second"], 0),
+                    "RAM", report["free_ram"],
+                    "decode avg/max ms", round(decode_avg, 2), "/", round(decode_max, 2),
+                    "present avg/max ms", round(present_avg, 2), "/", round(present_max, 2),
+                    "loop max ms", round(loop_max, 2),
+                    "GIF frames F/B", front_player.frames_advanced, "/", back_player.frames_advanced,
                 )
-                frames = 0
-                loop_iterations = 0
-                report_started = now
-                next_report_at = now + REPORT_SECONDS
-                decode_timing.reset()
-                present_timing.reset()
-                loop_timing.reset()
                 gc.collect()
     finally:
         media.close()
