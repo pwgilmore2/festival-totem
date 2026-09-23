@@ -1,4 +1,8 @@
-"""Read-only MatrixPortal media library and shared-runtime adapter."""
+"""Read-only MatrixPortal media library and shared-runtime adapter.
+
+All visual processing is baked on the desktop. This module only reads the build
+manifest, selects already-prepared GIF files and streams them through gifio.
+"""
 
 import json
 
@@ -11,6 +15,8 @@ class MatrixPortalAssetLibrary:
         self.assets = []
         self.width = 64
         self.height = 32
+        self.baked_media = False
+        self.build_info = {}
         self.load()
 
     def load(self):
@@ -23,6 +29,8 @@ class MatrixPortalAssetLibrary:
             raise ValueError("Invalid MatrixPortal asset list")
         self.width = int(data.get("width", 64))
         self.height = int(data.get("height", 32))
+        self.baked_media = bool(data.get("baked_media", False))
+        self.build_info = dict(data.get("build", {}) or {})
         self.assets = assets
 
     def __len__(self):
@@ -36,6 +44,12 @@ class MatrixPortalAssetLibrary:
     def names(self):
         return [str(asset.get("name", "")) for asset in self.assets]
 
+    def storage_bytes(self):
+        return int(self.build_info.get("payload_bytes", 0) or 0)
+
+    def media_bytes(self):
+        return int(self.build_info.get("media_bytes", 0) or 0)
+
     def controller_state(self):
         """Small JSON-ready library payload matching the phone controller shape."""
         out = []
@@ -46,6 +60,10 @@ class MatrixPortalAssetLibrary:
                     "name": str(asset.get("name", "")),
                     "tags": list(asset.get("tags", [])),
                     "favorite": bool(asset.get("favorite", False)),
+                    "bytes": int(asset.get("bytes", 0) or 0),
+                    "frame_count": int(asset.get("frame_count", 0) or 0),
+                    "duration_ms": int(asset.get("duration_ms", 0) or 0),
+                    "baked": bool(asset.get("baked", self.baked_media)),
                 }
             )
         return out
@@ -90,6 +108,9 @@ class MatrixPortalMediaAdapter:
     done on the Mac and baked into manifest/media files before deployment.
     """
 
+    read_only = True
+    baked_media = True
+
     def __init__(self, manifest_path="/manifest.json"):
         self.library = MatrixPortalAssetLibrary(manifest_path)
         self.deck = MatrixPortalMediaDeck(self.library)
@@ -132,18 +153,31 @@ class MatrixPortalMediaAdapter:
                 "image_settings": None,
                 "image_tags": [],
                 "image_favorite": False,
+                "image_baked": True,
+                "image_bytes": 0,
             }
-        settings = asset.get("settings")
+        # source_settings are provenance from the Mac authoring session. They
+        # are never re-applied on hardware; the selected GIF is already final.
+        settings = asset.get("source_settings", asset.get("settings"))
         return {
             "image_name": str(asset.get("name", "")),
-            "image_mode": settings.get("mode") if isinstance(settings, dict) else None,
+            "image_mode": "Baked",
             "image_settings": settings if isinstance(settings, dict) else None,
             "image_tags": list(asset.get("tags", [])),
             "image_favorite": bool(asset.get("favorite", False)),
+            "image_baked": bool(asset.get("baked", True)),
+            "image_bytes": int(asset.get("bytes", 0) or 0),
         }
 
     def library_state(self):
         return self.library.controller_state()
+
+    def build_state(self):
+        return {
+            "baked_media": bool(self.library.baked_media),
+            "media_read_only": True,
+            "storage": dict(self.library.build_info),
+        }
 
     def reload(self):
         self.library.load()
