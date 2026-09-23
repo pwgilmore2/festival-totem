@@ -1,4 +1,4 @@
-import phone_server
+"""Presentation transform for the live Chaos instrument layout."""
 
 _CSS = r'''
 <style>
@@ -15,13 +15,8 @@ _CSS = r'''
 @media(max-width:520px){.chaosFxGrid button{min-height:88px}}
 </style>
 '''
-phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('</head>', _CSS + '</head>', 1)
 
-start = phone_server.PHONE_HTML.find('<section id="guest" class="view">')
-end = phone_server.PHONE_HTML.find('</section>', start)
-if start >= 0 and end >= 0:
-    end += len('</section>')
-    section = r'''<section id="guest" class="view"><div class="card chaosCard">
+_SECTION = r'''<section id="guest" class="view"><div class="card chaosCard">
 <div class="chaosGroup"><div class="chaosGroupLabel">Heavy / Impact <span class="chaosGroupHint">drops, hits, breakdown carnage</span></div><div class="chaosFxGrid">
 <button class="fxChaos" onpointerdown="safeHoldStart(event,'chaos')" onpointermove="safeHoldMove(event)" onpointerup="safeHoldEnd(event)" onpointercancel="safeHoldEnd(event)">💀<br>CHAOS</button>
 <button class="fxGlitch" onpointerdown="safeHoldStart(event,'glitch')" onpointermove="safeHoldMove(event)" onpointerup="safeHoldEnd(event)" onpointercancel="safeHoldEnd(event)">⚡<br>GLITCH</button>
@@ -40,7 +35,6 @@ if start >= 0 and end >= 0:
 <div class="xyWrap"><div class="sh"><span>TRUE CHAOS PAD</span><span class="tiny">center = calm • push toward an effect</span></div><div id="chaosXY" class="xyPad" onpointerdown="xyStart(event)" onpointermove="xyMove(event)" onpointerup="xyEnd(event)" onpointercancel="xyEnd(event)"><span class="xyLabel xyTop">ZOOM</span><span class="xyLabel xyBottom">SHAKE</span><span class="xyLabel xyLeft">GLITCH</span><span class="xyLabel xyRight">RGB</span><div id="xyDot" class="xyDot"></div></div></div>
 <div class="guestIntensity slider"><div class="sh"><span>Chaos intensity</span><span id="guestIntensityValue">100%</span></div><input id="guestIntensity" type="range" min=".1" max="1" step=".05" value="1" oninput="pct('guestIntensityValue',this.value)"></div>
 </div></section>'''
-    phone_server.PHONE_HTML = phone_server.PHONE_HTML[:start] + section + phone_server.PHONE_HTML[end:]
 
 _JS = r'''
 <script>
@@ -82,4 +76,14 @@ function safeHoldEnd(e){
 }
 </script>
 '''
-phone_server.PHONE_HTML = phone_server.PHONE_HTML.replace('</body>', _JS + '</body>', 1)
+
+
+def apply(html):
+    html = html.replace('</head>', _CSS + '</head>', 1)
+    start = html.find('<section id="guest" class="view">')
+    end = html.find('</section>', start)
+    if start >= 0 and end >= 0:
+        end += len('</section>')
+        html = html[:start] + _SECTION + html[end:]
+    html = html.replace('</body>', _JS + '</body>', 1)
+    return html
