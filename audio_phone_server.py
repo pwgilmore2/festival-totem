@@ -4,9 +4,8 @@ AUDIO_CSS = r"""
 <style>
 .audioStart{width:100%;min-height:66px;font-size:18px;background:linear-gradient(135deg,#635bff,#00b8ff);box-shadow:0 8px 24px #0006}.audioStart.active{background:linear-gradient(135deg,#ff315f,#ff8a24)}
 .audioMeters{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:10px}.audioMeter{background:#1d1d26;border-radius:10px;padding:8px 6px;text-align:center}.audioBar{height:62px;background:#0e0e14;border-radius:7px;overflow:hidden;position:relative}.audioFill{position:absolute;left:0;right:0;bottom:0;height:0;background:linear-gradient(#8b7cff,#56d5ff);transition:height .045s linear}.audioLabel{margin-top:5px;font-size:11px;opacity:.65}
-.vibePreviewGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin:8px 0}.vibePreviewGrid button{min-height:50px;touch-action:manipulation}.vibePreviewGrid button:active{background:#635bff}
 .pulseLamp{margin-top:10px;height:12px;border-radius:999px;background:#22222c;transition:background .06s,box-shadow .06s}.pulseLamp.on{background:#fff;box-shadow:0 0 18px #fff}.audioNotice{margin-top:10px;padding:10px;border-radius:11px;background:#ffffff0c;font-size:12px;line-height:1.4}.presetGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}.simpleAudioGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px}.simpleAudioGrid .slider{margin:6px 0}.calStatus{padding:10px 12px;border-radius:12px;background:#ffffff0b;margin-top:10px;font-size:12px}.calStatus strong{display:block;font-size:14px;margin-bottom:2px}.calStatus.active strong{color:#72ffb2}.calStatus.silent strong{color:#9fa6b8}.advancedAudio{margin-top:12px;border-top:1px solid #ffffff15;padding-top:10px}.advancedAudio summary{cursor:pointer;font-weight:700;padding:7px 0}.analyzerCanvas{display:block;width:100%;height:112px;background:#080811;border:1px solid #ffffff18;border-radius:12px;margin:7px 0 12px}.signalCanvas{height:126px}.signalReadout{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin:8px 0}.signalStat{background:#ffffff0b;border-radius:10px;padding:8px;text-align:center}.signalStat b{display:block;font-size:17px}.signalStat span{font-size:10px;opacity:.6}.analyzerTitle{display:flex;align-items:center;justify-content:space-between;gap:10px}.analyzerTitle .liveDot{font-size:11px;opacity:.65}.bandKey{display:flex;gap:10px;flex-wrap:wrap;font-size:10px;opacity:.72;margin-top:-5px;margin-bottom:8px}.bandKey i{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:3px}
-@media(max-width:520px){.simpleAudioGrid{grid-template-columns:1fr}.presetGrid,.vibePreviewGrid{grid-template-columns:repeat(2,1fr)}.signalReadout{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:520px){.simpleAudioGrid{grid-template-columns:1fr}.signalReadout{grid-template-columns:repeat(2,1fr)}}
 </style>
 """
 
@@ -50,12 +49,8 @@ AUDIO_SECTION = r"""
 
 <div class="card" id="reactiveMappingCard">
 <h2>Sound → Visuals</h2>
-<div class="slider"><div class="sh"><span>Reactive intensity</span><span id="reactiveStrengthValue"></span></div><input id="reactiveStrength" type="range" min="0" max="1.5" step=".05" oninput="num('reactiveStrengthValue',this.value,'x');range('reactive_strength',this.value)"></div>
+<div class="slider"><div class="sh"><span>Reactive intensity</span><span id="reactiveStrengthValue"></span></div><input id="reactiveStrength" type="range" min="0" max="1.5" step=".05" oninput="num('reactiveStrengthValue',this.value,'x');range('reactive_strength',this.value);if(window.markVibeDirty)markVibeDirty('strength',this.value)"></div>
 <div id="presetButtons" class="presetGrid"></div>
-<div id="vibePresetHint" class="audioNotice" aria-live="polite"></div>
-<div class="audioLabel" style="margin-top:12px">Try a signal without the microphone</div>
-<div class="vibePreviewGrid"><button onclick="previewVibe('low')">Low hit</button><button onclick="previewVibe('pulse')">Pulse</button><button onclick="previewVibe('body')">Body</button><button onclick="previewVibe('bright')">Bright</button></div>
-<div class="tiny">Tap while the mic is off. Each button briefly drives the selected Vibe preset on the simulator.</div>
 <div id="reactiveLayerMount"></div>
 </div>
 </section>
@@ -64,8 +59,6 @@ AUDIO_SECTION = r"""
 AUDIO_JS = r"""
 let audioContext=null,analyser=null,micStream=null,audioAnimation=null,lastAudioSend=0,lastBeatTime=0;
 let signalHistory=[],pulseLatch=false;
-let vibePreviewTimer=null,vibePreviewSerial=0,vibePreviewWasEnabled=false;
-const vibePresetDescriptions={Pulse:'Low hits zoom the image; pulse flashes it.',Neon:'Body shifts the colors; bright sounds split the edges.',Spark:'Bright details make sparkles; pulse adds a gentle flash.',Chaos:'Low, body, bright, and pulse all move the image.'};
 let vibeAudio={
   active:false,
   noise:.014,
@@ -84,26 +77,6 @@ function updateMicNotice(){if(micStream){micNotice.textContent="Phone microphone
 function averageBand(data,sampleRate,fftSize,lo,hi){const hz=sampleRate/fftSize,first=Math.max(0,Math.floor(lo/hz)),last=Math.min(data.length-1,Math.ceil(hi/hz));let sum=0,count=0;for(let i=first;i<=last;i++){sum+=data[i];count++}return count?sum/count/255:0}
 function setMeters(energy,low,body,bright,pulse){volumeBar.style.height=(clamp01(energy)*100)+"%";bassBar.style.height=(clamp01(low)*100)+"%";midsBar.style.height=(clamp01(body)*100)+"%";highsBar.style.height=(clamp01(bright)*100)+"%";beatLamp.classList.toggle("on",!!pulse)}
 function setStatus(kind,title,detail){calStatus.classList.toggle('active',kind==='active');calStatus.classList.toggle('silent',kind==='silent');calibrationState.textContent=title;calibrationDetail.textContent=detail}
-async function previewVibe(kind){
-  if(micStream)return;
-  const frames={low:{volume:.65,bass:.95,mids:0,highs:0,beat:false},pulse:{volume:.7,bass:.55,mids:0,highs:0,beat:true},body:{volume:.65,bass:0,mids:.95,highs:0,beat:false},bright:{volume:.65,bass:0,mids:0,highs:.95,beat:false}};
-  if(!frames[kind])return;
-  clearTimeout(vibePreviewTimer);const serial=++vibePreviewSerial;
-  if(!vibePreviewTimer)vibePreviewWasEnabled=!!(state.reactive||{}).enabled;
-  vibePreviewTimer=-1;
-  if(!vibePreviewWasEnabled)await cmd('reactive_enabled',true);
-  if(serial!==vibePreviewSerial||micStream)return;
-  await cmd('audio_frame',frames[kind]);
-  if(serial!==vibePreviewSerial||micStream)return;
-  setMeters(frames[kind].volume,frames[kind].bass,frames[kind].mids,frames[kind].highs,frames[kind].beat);
-  vibePreviewTimer=setTimeout(async()=>{
-    if(serial!==vibePreviewSerial||micStream)return;
-    await cmd('audio_frame',{volume:0,bass:0,mids:0,highs:0,beat:false});
-    if(serial!==vibePreviewSerial||micStream)return;
-    if(!vibePreviewWasEnabled)await cmd('reactive_enabled',false);
-    if(serial===vibePreviewSerial){vibePreviewTimer=null;setMeters(0,0,0,0,false)}
-  },650);
-}
 function beginCalibration(){
   if(!micStream){setStatus('silent','Waiting for mic','Start audio before resetting the room floor.');return}
   const now=performance.now();
@@ -205,11 +178,10 @@ function audioLoop(ts){
   }
   audioAnimation=requestAnimationFrame(audioLoop)
 }
-async function startMic(){if(!micSupported()){updateMicNotice();return}try{micStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false},video:false});clearTimeout(vibePreviewTimer);vibePreviewTimer=null;vibePreviewSerial++;audioContext=new(window.AudioContext||window.webkitAudioContext)();await audioContext.resume();analyser=audioContext.createAnalyser();analyser.fftSize=2048;analyser.smoothingTimeConstant=.16;analyser.minDecibels=-90;analyser.maxDecibels=-10;audioContext.createMediaStreamSource(micStream).connect(analyser);micButton.textContent='■ STOP PHONE AUDIO';micButton.classList.add('active');analyzerLive.textContent='● ANALYZING';cmd('reactive_enabled',true);updateMicNotice();beginCalibration();audioAnimation=requestAnimationFrame(audioLoop)}catch(e){micNotice.textContent='Microphone could not start: '+e.message;micStream=null}}
+async function startMic(){if(!micSupported()){updateMicNotice();return}try{micStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false},video:false});audioContext=new(window.AudioContext||window.webkitAudioContext)();await audioContext.resume();analyser=audioContext.createAnalyser();analyser.fftSize=2048;analyser.smoothingTimeConstant=.16;analyser.minDecibels=-90;analyser.maxDecibels=-10;audioContext.createMediaStreamSource(micStream).connect(analyser);micButton.textContent='■ STOP PHONE AUDIO';micButton.classList.add('active');analyzerLive.textContent='● ANALYZING';cmd('reactive_enabled',true);updateMicNotice();beginCalibration();audioAnimation=requestAnimationFrame(audioLoop)}catch(e){micNotice.textContent='Microphone could not start: '+e.message;micStream=null}}
 function stopMic(){if(audioAnimation)cancelAnimationFrame(audioAnimation);audioAnimation=null;if(micStream)micStream.getTracks().forEach(t=>t.stop());micStream=null;if(audioContext)audioContext.close();audioContext=null;analyser=null;pulseLatch=false;vibeAudio.active=false;vibeAudio.env={energy:0,low:0,body:0,bright:0,pulse:0};setMeters(0,0,0,0,false);setStatus('silent','Mic off','Start audio when you want Vibe to react.');cmd('audio_frame',{volume:0,bass:0,mids:0,highs:0,beat:false});micButton.textContent='🎙 START PHONE AUDIO';micButton.classList.remove('active');analyzerLive.textContent='MIC OFF';cmd('reactive_enabled',false);updateMicNotice()}
 function toggleMic(){micStream?stopMic():startMic()}
-function renderPresets(){const presets=state.reactive_presets||[],sig=presets.join('|');if(presetButtons.dataset.sig!==sig){presetButtons.dataset.sig=sig;presetButtons.innerHTML='';presets.forEach(n=>{let b=document.createElement('button');b.dataset.preset=n;b.textContent=n;b.onclick=()=>cmd('reactive_preset',n);presetButtons.appendChild(b)})}const r=state.reactive||{};document.querySelectorAll('[data-preset]').forEach(b=>b.classList.toggle('active',b.dataset.preset===r.preset));vibePresetHint.textContent=vibePresetDescriptions[r.preset]||'Custom signal mapping.'}
-function syncAudioUI(){if(typeof state==='undefined')return;const r=state.reactive||{};sync('reactiveStrength',r.strength);num('reactiveStrengthValue',r.strength||0,'x');renderPresets();if(!micStream&&state.audio)setMeters(state.audio.volume||0,state.audio.bass||0,state.audio.mids||0,state.audio.highs||0,state.audio.beat||false)}
+function syncAudioUI(){if(typeof state==='undefined')return;const r=state.reactive||{},strength=window.vibeStrengthValue?vibeStrengthValue(r.strength??0):(r.strength??0);sync('reactiveStrength',strength);num('reactiveStrengthValue',strength,'x');if(!micStream&&state.audio)setMeters(state.audio.volume||0,state.audio.bass||0,state.audio.mids||0,state.audio.highs||0,state.audio.beat||false)}
 updateMicNotice();setInterval(syncAudioUI,300);
 """
 
