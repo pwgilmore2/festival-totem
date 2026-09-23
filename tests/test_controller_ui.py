@@ -15,11 +15,39 @@ class ControllerUICompositionTests(unittest.TestCase):
             "expected exactly one %r in composed controller" % marker,
         )
 
+    def test_build_starts_from_raw_base_document(self):
+        self.assertNotIn('id="tabAudio"', controller_ui.BASE_CONTROLLER_HTML)
+        self.assertNotIn('id="tabGuest"', controller_ui.BASE_CONTROLLER_HTML)
+        self.assertNotIn('id="textMessage"', controller_ui.BASE_CONTROLLER_HTML)
+
+    def test_foundation_transform_order_is_explicit(self):
+        modules = [fn.__module__ for fn in controller_ui.CONTROLLER_TRANSFORMS[:4]]
+        self.assertEqual(
+            modules,
+            [
+                "audio_phone_server",
+                "performance_phone_server",
+                "controller_cleanup",
+                "controller_state_ui",
+            ],
+        )
+
     def test_default_build_is_repeatable(self):
         first = controller_ui.build_controller_html()
         second = controller_ui.build_controller_html()
         self.assertEqual(first, second)
         self.assertEqual(first, controller_ui.PHONE_HTML)
+
+    def test_foundation_sections_exist_once(self):
+        for marker in (
+            'id="tabAudio"',
+            'id="textMessage"',
+            'id="guest"',
+            'id="quickPresetList"',
+            "function startMic(){",
+            "function renderLayerControls(){",
+        ):
+            self.assert_once(marker)
 
     def test_runtime_state_layer_is_applied_once(self):
         self.assert_once("function runtimeText(){")
