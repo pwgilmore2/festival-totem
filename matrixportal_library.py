@@ -133,6 +133,10 @@ class MatrixPortalMediaAdapter:
     def select(self, side, index):
         return self.deck.select(side, index)
 
+    def suspend(self, side):
+        """Release a GIF decoder while its panel renders a standalone scene."""
+        self.deck.players.players[side].close()
+
     def render(self, side, index, display, t):
         # TotemRuntime calls select() whenever the logical index changes. The
         # render path therefore only blits the already-decoded current frame.

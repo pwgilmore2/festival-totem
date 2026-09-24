@@ -10,6 +10,7 @@ import time
 
 from chaos_engine import ChaosEngine
 from controller import TotemController
+from info_scenes import InfoScenes, SCENES as INFO_SCENES, clean_schedule
 from particles import ParticleSystem
 from runtime_io import SignalStore
 from text_engine import (
@@ -84,6 +85,7 @@ class TotemRuntime:
         signal_store=None,
         scenes=None,
         particle_factory=ParticleSystem,
+        mirrored=False,
     ):
         self.width = int(width)
         self.height = int(height)
@@ -100,6 +102,8 @@ class TotemRuntime:
 
         self.active_target = "both"
         self.current_scene = "Custom"
+        self.mirrored = bool(mirrored)
+        self.info_scenes = InfoScenes(self.width, self.height)
 
         self.layer_engine = VisualLayerEngine(self.width, self.height)
         self.chaos_engine = ChaosEngine(self.layer_engine)
@@ -124,9 +128,11 @@ class TotemRuntime:
                 "transition": self._transition_state(),
                 "text": self._text_state(),
                 "icon": self._icon_state(),
+                "info_scene": None,
             }
             for side in SIDES
         }
+        self._media_suspended = {side: False for side in SIDES}
         self._separate_initial_media()
 
         self.controllers = {
@@ -136,8 +142,74 @@ class TotemRuntime:
             show = self.panels[side]["slideshow"]
             if show["indices"]:
                 self.panels[side]["image_index"] = show["indices"][0]
-                self.media.select(side, show["indices"][0])
+                if not (self.mirrored and side == "back"):
+                    self.media.select(side, show["indices"][0])
             self.controllers[side].set_effect("Image")
+        if self.mirrored:
+            self._suspend_media("back")
+
+    def _suspend_media(self, side):
+        if self._media_suspended[side]:
+            return
+        suspend = getattr(self.media, "suspend", None)
+        if suspend:
+            suspend(side)
+            self._media_suspended[side] = True
+
+    def _black_background(self, side):
+        panel = self.panels[side]
+        if panel["info_scene"]:
+            return True
+        return (panel["text"]["enabled"] and panel["text"]["background"] == "Black") or (
+            panel["icon"]["icon_enabled"] and not panel["text"]["enabled"]
+            and panel["icon"].get("background") == "Black"
+        )
+
+    def _refresh_media(self, side):
+        if (self.mirrored and side == "back") or self._black_background(side):
+            self._suspend_media(side)
+        elif self._media_suspended[side] and len(self.media):
+            self.media.select(side, self.panels[side]["image_index"])
+            self._media_suspended[side] = False
+
+    def set_mirrored(self, enabled):
+        enabled = bool(enabled)
+        if enabled == self.mirrored:
+            return
+        self.mirrored = enabled
+        if enabled:
+            self._suspend_media("back")
+            self.content_snapshots["back"] = None
+            self.scene_snapshots["back"] = None
+            self.content_transitions["back"].active = False
+            self.content_transitions["back"].source = None
+            self.scene_transitions["back"].active = False
+            self.scene_transitions["back"].source = None
+            self.active_target = "both"
+        else:
+            self._refresh_media("back")
+
+    def _exit_info_scene(self, side):
+        if self.panels[side]["info_scene"] is not None:
+            self.panels[side]["info_scene"] = None
+            self._refresh_media(side)
+
+    def set_info_scene(self, mode):
+        if mode not in INFO_SCENES and mode is not None:
+            return
+        for side in self.target_sides():
+            if self.panels[side]["info_scene"] == mode:
+                continue
+            self._begin_transition(side)
+            if mode is None:
+                self._exit_info_scene(side)
+            else:
+                self.panels[side]["info_scene"] = mode
+                self._stop_show(side)
+                self.panels[side]["text"]["enabled"] = False
+                self._set_icon_enabled(side, False, False)
+                self._suspend_media(side)
+        self.current_scene = mode or "Custom"
 
     # ----- state factories -------------------------------------------------
 
@@ -209,9 +281,13 @@ class TotemRuntime:
     # ----- media/effect helpers -------------------------------------------
 
     def target_sides(self):
+        if self.mirrored:
+            return ["front"]
         return list(SIDES) if self.active_target == "both" else [self.active_target]
 
     def reference_side(self):
+        if self.mirrored:
+            return "front"
         return "back" if self.active_target == "back" else "front"
 
     def reference_index(self):
@@ -256,6 +332,12 @@ class TotemRuntime:
             source=self.content_snapshots[side],
         )
 
+    def _begin_background_transition(self, side):
+        self.content_transitions[side].begin(
+            self.displays[side], "Fade", 0.45,
+            source=self.scene_snapshots[side],
+        )
+
     def _stop_show(self, side):
         show = self.panels[side]["slideshow"]
         show["active"] = False
@@ -272,12 +354,16 @@ class TotemRuntime:
         if (
             index == self.panels[side]["image_index"]
             and self.controllers[side].effect_name == "Image"
+            and self.panels[side]["info_scene"] is None
         ):
             return
         if transition:
             self._begin_transition(side)
         self.panels[side]["image_index"] = index
-        self.media.select(side, index)
+        self.panels[side]["info_scene"] = None
+        if not (self.mirrored and side == "back"):
+            self.media.select(side, index)
+            self._media_suspended[side] = False
         if stop:
             self._stop_show(side)
         self.controllers[side].set_effect("Image")
@@ -482,6 +568,9 @@ class TotemRuntime:
             return
         enabled_any = False
         for side in self.target_sides():
+            if self.panels[side]["icon"].get("background") == "Black":
+                self._begin_background_transition(side)
+            self._exit_info_scene(side)
             state = self.panels[side]["icon"]
             if state["icon_enabled"] and state.get("icon") == name:
                 self._set_icon_enabled(side, False, True)
@@ -518,6 +607,8 @@ class TotemRuntime:
                 continue
             state["transition_active"] = False
             if not state.get("transition_entering", True):
+                if state.get("background") == "Black" and not self.panels[side]["text"]["enabled"]:
+                    self._begin_background_transition(side)
                 state["icon_enabled"] = False
 
     def set_text_settings(self, value):
@@ -525,6 +616,12 @@ class TotemRuntime:
             return
         for side in self.target_sides():
             state = self.panels[side]["text"]
+            if (
+                state["enabled"]
+                and value.get("background") in ("Black", "Dimmed GIF")
+                and value["background"] != state["background"]
+            ):
+                self._begin_background_transition(side)
             if "message" in value:
                 state["message"] = str(value["message"])[:120]
             if value.get("font") in TEXT_FONTS:
@@ -557,7 +654,11 @@ class TotemRuntime:
                 glitch=False,
                 beat_pulse=False,
                 audio_reactivity=audio_mode,
-                background="Dimmed GIF",
+                background=(
+                    value.get("background")
+                    if value.get("background") in ("Black", "Dimmed GIF")
+                    else state.get("background", "Dimmed GIF")
+                ),
                 background_brightness=0.30,
                 backplate=True,
             )
@@ -566,23 +667,34 @@ class TotemRuntime:
         if isinstance(value, dict):
             self.set_text_settings(value)
         for side in self.target_sides():
+            if self.panels[side]["text"]["background"] == "Black":
+                self._begin_background_transition(side)
+            self._exit_info_scene(side)
             self._set_icon_enabled(side, False, False)
             self.panels[side]["text"]["enabled"] = True
 
     def hide_text(self):
         for side in self.target_sides():
+            if (
+                self.panels[side]["text"]["enabled"]
+                and self.panels[side]["text"]["background"] == "Black"
+            ):
+                self._begin_background_transition(side)
             self.panels[side]["text"]["enabled"] = False
 
     # ----- audio / presets -------------------------------------------------
 
     def set_target(self, value):
-        if value in ("front", "back", "both"):
+        if self.mirrored:
+            self.active_target = "both"
+        elif value in ("front", "back", "both"):
             self.active_target = value
 
     def set_effect(self, value):
         for side in self.target_sides():
             if value in self.controllers[side].effects:
                 self._begin_transition(side)
+                self._exit_info_scene(side)
                 self.controllers[side].set_effect(value)
 
     def _master(self, attr, value, minimum, maximum):
@@ -734,6 +846,32 @@ class TotemRuntime:
 
         if command == "set_target":
             self.set_target(value)
+        elif command == "mirror_displays":
+            self.set_mirrored(value)
+        elif command == "info_scene":
+            self.set_info_scene(value)
+        elif command == "clock_sync":
+            self.info_scenes.sync_time(value)
+        elif command == "weather_update":
+            self.info_scenes.set_weather(value)
+        elif command == "scene_background":
+            if (isinstance(value, dict) and value.get("scene") in INFO_SCENES
+                    and value.get("background") in ("Black", "Sky")):
+                self.info_scenes.backgrounds[value["scene"]] = value["background"]
+        elif command == "schedule_update":
+            self.info_scenes.schedule = clean_schedule(value)
+            self.info_scenes.schedule_index = 0
+        elif command == "schedule_step":
+            count = len(self.info_scenes.schedule)
+            if count:
+                self.info_scenes.schedule_index = (self.info_scenes.schedule_index + (1 if value == 1 else -1)) % count
+        elif command == "icon_background":
+            if value in ("Black", "GIF"):
+                for side in self.target_sides():
+                    if (self.panels[side]["icon"]["icon_enabled"]
+                            and self.panels[side]["icon"].get("background") != value):
+                        self._begin_background_transition(side)
+                    self.panels[side]["icon"]["background"] = value
         elif command == "effect":
             self.set_effect(value)
         elif command == "select_image":
@@ -816,7 +954,8 @@ class TotemRuntime:
     # ----- frame update / rendering ---------------------------------------
 
     def update(self, dt):
-        for side in SIDES:
+        for side in ("front",) if self.mirrored else SIDES:
+            self._refresh_media(side)
             controller = self.controllers[side]
             controller.update(dt)
             if not controller.paused:
@@ -829,18 +968,24 @@ class TotemRuntime:
 
     def render(self, frame_number):
         signals = self.signals()
-        for side in SIDES:
+        for side in ("front",) if self.mirrored else SIDES:
             display = self.displays[side]
             controller = self.controllers[side]
             seed = 1000 if side == "back" else 0
 
-            controller.effect(display, controller.time)
+            mode = self.panels[side]["info_scene"]
+            if mode:
+                self.info_scenes.render(mode, display, controller.time, signals)
+            elif self._black_background(side):
+                display.clear()
+            else:
+                controller.effect(display, controller.time)
 
             self.content_transitions[side].apply(display)
             self.content_snapshots[side] = copy_pixels(display)
 
             reactive = self.panels[side]["reactive"]
-            if reactive["enabled"]:
+            if reactive["enabled"] and not mode:
                 self.layer_engine.apply(
                     display,
                     signals,
@@ -852,7 +997,7 @@ class TotemRuntime:
 
             text = self.panels[side]["text"]
             icon = self.panels[side]["icon"]
-            text_enabled = bool(text.get("enabled", False))
+            text_enabled = bool(text.get("enabled", False)) and not mode
             if text_enabled:
                 self.overlay_renderer.draw_text(
                     display,
@@ -864,20 +1009,25 @@ class TotemRuntime:
                 )
             icon_settings = dict(text)
             icon_settings["audio_reactivity"] = "Off"
-            self.overlay_renderer.draw_icon(
-                display,
-                icon,
-                icon_settings,
-                controller.time,
-                signals,
-                seed,
-                text_enabled=text_enabled,
-            )
+            if not mode:
+                self.overlay_renderer.draw_icon(
+                    display,
+                    icon,
+                    icon_settings,
+                    controller.time,
+                    signals,
+                    seed,
+                    text_enabled=text_enabled,
+                )
 
             self.scene_transitions[side].apply(display)
             self.scene_snapshots[side] = copy_pixels(display)
 
-            self.chaos_engine.apply(display, frame_number + seed, signals)
+            if not mode:
+                self.chaos_engine.apply(display, frame_number + seed, signals)
+
+        if self.mirrored:
+            self.displays["back"].copy_from(self.displays["front"])
 
         self.signal_store.end_frame()
 
@@ -888,6 +1038,8 @@ class TotemRuntime:
     # ----- controller state ------------------------------------------------
 
     def phone_panel(self, side):
+        if self.mirrored:
+            side = "front"
         controller = self.controllers[side]
         show = self.panels[side]["slideshow"]
         reactive = self.panels[side]["reactive"]
@@ -918,6 +1070,7 @@ class TotemRuntime:
             "transition": dict(transition),
             "text": dict(self.panels[side]["text"]),
             "icon": dict(self.panels[side]["icon"]),
+            "info_scene": self.panels[side]["info_scene"],
         }
         out.update(info)
         return out
@@ -949,6 +1102,13 @@ class TotemRuntime:
             "transitions": list(TRANSITIONS),
             "performance_scenes": list(self.scenes),
             "current_scene": self.current_scene,
+            "info_scenes": list(INFO_SCENES),
+            "mirrored": self.mirrored,
+            "weather": dict(self.info_scenes.weather),
+            "scene_backgrounds": dict(self.info_scenes.backgrounds),
+            "schedule": list(self.info_scenes.schedule),
+            "schedule_index": self.info_scenes.schedule_index,
+            "clock_ready": self.info_scenes.local_time() is not None,
             "text_fonts": list(TEXT_FONTS),
             "text_motions": list(TEXT_MOTIONS),
             "text_color_modes": list(TEXT_COLORS),

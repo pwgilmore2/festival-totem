@@ -96,6 +96,18 @@ The phone controller is compiled on the Mac to `www/index.html`. The S3 serves t
 
 The S3 should never import the desktop controller builder, Pygame, Pillow, image-editing code, or controller transform modules.
 
+The compiled page now also includes a Scenes tab. The shared runtime implements
+Clock (black by default; optional approximate day/night sky), manual Weather, Set Times, and a waveform drawn from the normalized
+audio signals; those scenes stop GIF rendering and release the decoder on a
+hardware adapter. A mirror switch renders one face and copies the final pixels
+to the other, suspending its decoder. Text and icon controls can fade onto a
+black background and back to GIFs. These paths have desktop tests but require
+the final device `code.py` and physical measurements before being considered
+working on MatrixPortal. Clock time is sent by the phone on page load; weather
+is entered by the operator and set times persist in phone localStorage only.
+Until an on-device schedule file and clock sync are added, a restart without
+reconnecting the phone loses those values.
+
 ## Future chip login / access control
 
 Authentication is intentionally **not enabled yet**. The current local controller remains frictionless while hardware behavior is still being developed.

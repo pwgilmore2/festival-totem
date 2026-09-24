@@ -65,7 +65,16 @@ class ControllerUICompositionTests(unittest.TestCase):
             'id="intenseTransitionGrid"',
             'id="screenModeIndependent"',
             'id="screenModeLinked"',
+            'id="scenes"',
         ):
+            self.assert_once(marker)
+
+    def test_info_scenes_and_background_controls(self):
+        for marker in ('data-info-scene="Clock"', 'data-info-scene="Weather"',
+                       'data-info-scene="Set Times"', 'data-info-scene="Waveform"',
+                       'id="sceneSetTimes"', 'id="mirrorButton"',
+                       'data-text-bg="Black"', 'data-icon-bg="Black"',
+                       'data-clock-bg="Sky"'):
             self.assert_once(marker)
 
     def test_desktop_icon_previews_can_refresh_after_library_reload(self):

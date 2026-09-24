@@ -45,6 +45,9 @@ class MatrixPortalBackendTests(unittest.TestCase):
         self.assertEqual(backend.framebuffer[31 * 128 + 127], 0x001F)
         self.assertEqual(front.get_pixel(0, 0), (255, 0, 0))
         self.assertEqual(back.get_pixel(0, 0), (0, 0, 255))
+        back.copy_from(front)
+        self.assertEqual(back.get_pixel565(0, 0), front.get_pixel565(0, 0))
+        self.assertEqual(backend.framebuffer[31 * 128 + 127], 0xF800)
         backend.present()
         self.assertEqual(backend.matrix.refresh_count, 2)
 

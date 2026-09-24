@@ -10,6 +10,8 @@ class FakeMedia:
         self.items = ["asset_%d.gif" % index for index in range(count)]
         self.selections = []
         self.handled = []
+        self.rendered = []
+        self.suspended = []
 
     def __len__(self):
         return len(self.items)
@@ -28,8 +30,12 @@ class FakeMedia:
         return True
 
     def render(self, side, index, display, t):
+        self.rendered.append(side)
         value = 40 + int(index) * 20
         display.fill((value, 0, 0))
+
+    def suspend(self, side):
+        self.suspended.append(side)
 
     def info(self, index):
         if not self.items:
@@ -114,6 +120,40 @@ class TotemRuntimeTests(unittest.TestCase):
         front = runtime.panels["front"]["image_index"]
         back = runtime.panels["back"]["image_index"]
         self.assertNotEqual(front, back)
+
+    def test_info_scenes_release_gif_and_resume_on_return(self):
+        runtime, media = self.make_runtime()
+        runtime.handle_command({"command": "info_scene", "value": "Weather"})
+        self.assertEqual(media.suspended[-2:], ["front", "back"])
+        runtime.step(.016, 1)
+        self.assertEqual(media.rendered, [])
+        self.assertEqual(runtime.phone_panel("front")["info_scene"], "Weather")
+        runtime.handle_command({"command": "info_scene", "value": None})
+        runtime.step(.016, 2)
+        self.assertIn("front", media.rendered)
+        self.assertIn("back", media.rendered)
+
+    def test_mirror_only_renders_front_and_suspends_back_stream(self):
+        runtime, media = self.make_runtime()
+        runtime.handle_command({"command": "mirror_displays", "value": True})
+        self.assertIn("back", media.suspended)
+        runtime.step(.016, 1)
+        self.assertEqual(media.rendered, ["front"])
+        self.assertEqual(runtime.displays["front"].pixels, runtime.displays["back"].pixels)
+        self.assertEqual(runtime.phone_panel("front"), runtime.phone_panel("back"))
+        runtime.handle_command({"command": "mirror_displays", "value": False})
+        runtime.step(.016, 2)
+        self.assertEqual(media.rendered[-2:], ["front", "back"])
+
+    def test_black_icon_background_suspends_gif_without_hiding_icon(self):
+        runtime, media = self.make_runtime()
+        runtime.handle_command({"command": "set_target", "value": "front"})
+        runtime.handle_command({"command": "icon_background", "value": "Black"})
+        runtime.handle_command({"command": "icon_toggle", "value": "Alien"})
+        runtime.step(.016, 1)
+        self.assertIn("front", media.suspended)
+        self.assertEqual(media.rendered, ["back"])
+        self.assertTrue(runtime.phone_panel("front")["icon"]["icon_enabled"])
 
     def test_targeted_text_and_icon_remain_exclusive(self):
         runtime, _ = self.make_runtime()

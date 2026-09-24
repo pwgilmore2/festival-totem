@@ -130,6 +130,12 @@ class MatrixPortalPanel:
         return (0, 0, 0)
 
     def copy_from(self, other):
+        packed = getattr(other, "get_pixel565", None)
+        if packed is not None:
+            for y in range(self.height):
+                for x in range(self.width):
+                    self.set_pixel565(x, y, packed(x, y))
+            return
         for y in range(self.height):
             for x in range(self.width):
                 self.set_pixel(x, y, other.get_pixel(x, y))

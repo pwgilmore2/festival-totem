@@ -19,6 +19,7 @@ from intense_transition_ui import apply as apply_intense_transitions
 from transition_ui_patch import apply as apply_transition_labels
 from performance_ui_reorg_patch import apply as apply_performance_layout
 from screen_mode_ui_patch import apply as apply_screen_mode
+from info_scene_ui import apply as apply_info_scenes
 
 
 BASE_CONTROLLER_HTML = phone_server.PHONE_HTML
@@ -56,6 +57,7 @@ CONTROLLER_TRANSFORMS = (
     apply_transition_labels,
     apply_performance_layout,
     apply_screen_mode,
+    apply_info_scenes,
     normalize_vibe_language,
 )
 

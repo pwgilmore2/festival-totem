@@ -17,15 +17,16 @@ _JS = r'''
  function allVibeIds(){return (state.library||[]).map(x=>x.index).filter(Number.isInteger)}
  function syncScreenModeUI(){
    const i=document.getElementById('screenModeIndependent'),l=document.getElementById('screenModeLinked'),h=document.getElementById('vibeScreenHint');
-   if(i)i.classList.toggle('active',!vibeLinked);
-   if(l)l.classList.toggle('active',vibeLinked);
-   if(h)h.textContent=vibeLinked?'Linked: front and back use the same shuffled sequence.':'Independent: each panel gets its own shuffled GIF sequence.';
+   const linked=vibeLinked||!!state?.mirrored;
+   if(i){i.classList.toggle('active',!linked);i.disabled=!!state?.mirrored}
+   if(l)l.classList.toggle('active',linked);
+   if(h)h.textContent=state?.mirrored?'Mirrored: one rendered image is shown on both panels.':(linked?'Linked: front and back use the same shuffled sequence.':'Independent: each panel gets its own shuffled GIF sequence.');
  }
  window.setVibeScreenMode=function(linked){vibeLinked=!!linked;try{localStorage.setItem(KEY,vibeLinked?'linked':'independent')}catch(_){ }syncScreenModeUI()}
 
  window.startVibeRandom=async function(){
    const items=allVibeIds();if(!items.length)return;
-   if(vibeLinked){
+   if(vibeLinked||!!state?.mirrored){
      await cmd('set_target','both');
      await cmd('slideshow_start',{indices:items,duration:5,shuffle:true,label:'All'});
    }else{
@@ -39,12 +40,12 @@ _JS = r'''
 
  window.vibeNext=async function(){
    const items=allVibeIds();if(!items.length)return;
-   if(vibeLinked){await cmd('set_target','both');await cmd('filtered_step',{indices:items,delta:1})}
+   if(vibeLinked||!!state?.mirrored){await cmd('set_target','both');await cmd('filtered_step',{indices:items,delta:1})}
    else{await cmd('set_target','front');await cmd('filtered_step',{indices:items,delta:1});await cmd('set_target','back');await cmd('filtered_step',{indices:items,delta:1});await cmd('set_target','both')}
  }
  window.vibePrevious=async function(){
    const items=allVibeIds();if(!items.length)return;
-   if(vibeLinked){await cmd('set_target','both');await cmd('filtered_step',{indices:items,delta:-1})}
+   if(vibeLinked||!!state?.mirrored){await cmd('set_target','both');await cmd('filtered_step',{indices:items,delta:-1})}
    else{await cmd('set_target','front');await cmd('filtered_step',{indices:items,delta:-1});await cmd('set_target','back');await cmd('filtered_step',{indices:items,delta:-1});await cmd('set_target','both')}
  }
 
