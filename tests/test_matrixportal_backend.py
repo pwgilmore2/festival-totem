@@ -24,7 +24,7 @@ class MatrixPortalBackendTests(unittest.TestCase):
     def test_both_panels_map_to_distinct_halves_and_back_can_rotate(self):
         board = types.SimpleNamespace(
             MTX_ADDRESS=(0, 1, 2, 3),
-            MTX_COMMON={"rgb_pins": (), "clock_pin": 0,
+            MTX_COMMON={"rgb_pins": (0, 1, 2, 3, 4, 5), "clock_pin": 0,
                         "latch_pin": 0, "output_enable_pin": 0},
         )
         displayio = types.SimpleNamespace(release_displays=lambda: None)
@@ -37,6 +37,7 @@ class MatrixPortalBackendTests(unittest.TestCase):
             )
 
         self.assertEqual(backend.matrix.kwargs["width"], 128)
+        self.assertEqual(backend.matrix.kwargs["rgb_pins"], (0, 2, 1, 3, 5, 4))
         front = backend.get("front")
         back = backend.get("back")
         front.set_pixel(0, 0, (255, 0, 0))

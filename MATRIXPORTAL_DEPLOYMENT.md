@@ -76,6 +76,34 @@ The physical matrix uses a double-buffered RGBMatrix framebuffer. Application sc
 
 Desktop frame times are not used as estimates for the S3.
 
+On 2026-09-24, the physical board showed stable pixels with the minimal
+`framebufferio` diagnostic at bit depth 1. Both panels display a requested
+RGB sequence as RBG; `matrixportal_backend.py` now swaps G/B pin assignments.
+The original custom-framebuffer first-light test at bit depth 3 hard-faulted;
+do not assume that backend is device validated. To move to animated media
+without that backend, run `python tools/create_matrixportal_gif_demo.py` and
+copy the resulting `matrixportal_gif_demo_bundle` contents to CIRCUITPY. The
+single GIF decoder's bitmap is shared by both panels and emits frame counts,
+worst decode time and free RAM every five seconds. Two synthetic tiny GIFs are
+provided because the repo checkout has no user GIFs in `assets/images/`.
+This is a display/media stepping stone, not the final phone-controlled app.
+
+After the 2-GIF demo worked on physical panels, a separate `matrixportal_phone_demo.py`
+was added for a minimal phone networking check. Copy it as `code.py` along
+with the same `media/` folder; it starts a temporary WPA access point
+`Festival-Totem-Test` with the bench password stored at the top of the file,
+and serves a two-button selector at the printed `http://` address. The
+phone demo is unverified on the S3 and is not the compiled full phone UI.
+
+First verify panel mapping with `matrixportal_first_light.py`: copy it as
+`CIRCUITPY/code.py` and copy `matrixportal_backend.py` beside it. The panel
+connected directly to MatrixPortal should cycle dim red/green/blue every two
+seconds, while the chained panel cycles dim blue/red/green. This requires no
+GIF assets or installed library bundle. If CircuitPython raises an exception,
+read the serial console before changing the panel wiring. Connect/disconnect
+HUB75 cables only when power is off. The test has no device-side validation
+until run on the physical board.
+
 For initial hardware testing, copy the hardware modules and prepared media to CIRCUITPY and temporarily use `matrixportal_smoke_test.py` as `code.py`.
 
 The test reports approximately every five seconds:

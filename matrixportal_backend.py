@@ -192,6 +192,16 @@ class MatrixPortalDisplayBackend:
 
         displayio.release_displays()
         self.framebuffer = array("H", [0]) * (self.total_width * self.height)
+        # Physical panels show RBG when RGB is requested. Correct the wiring
+        # order once at the matrix driver instead of swapping every pixel.
+        common_pins = dict(board.MTX_COMMON)
+        rgb_pins = tuple(common_pins["rgb_pins"])
+        if len(rgb_pins) != 6:
+            raise ValueError("Expected six MatrixPortal RGB pins")
+        common_pins["rgb_pins"] = (
+            rgb_pins[0], rgb_pins[2], rgb_pins[1],
+            rgb_pins[3], rgb_pins[5], rgb_pins[4],
+        )
         self.matrix = rgbmatrix.RGBMatrix(
             width=self.total_width,
             height=self.height,
@@ -201,7 +211,7 @@ class MatrixPortalDisplayBackend:
             serpentine=bool(serpentine),
             doublebuffer=self.doublebuffer,
             framebuffer=self.framebuffer,
-            **board.MTX_COMMON,
+            **common_pins,
         )
 
         self.displays = {
