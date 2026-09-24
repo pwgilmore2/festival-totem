@@ -1,23 +1,31 @@
 # Icon Assets
 
-Drop transparent **32x32 PNG** icon masters in this folder.
+Drop transparent PNG icon masters in this folder. The standard canvas is
+**32×32**, but files up to **40×40** are accepted so artwork with a few extra
+border pixels does not need manual cropping.
 
 Rules:
-- Canvas must be exactly 32x32 pixels.
+- The filename suffix `_32x32` is only a display-name convention; the PNG's
+  actual dimensions determine whether it loads.
 - Preserve transparency.
-- Icons render 1:1 on the LED panel; there is no runtime scaling or auto-repair.
+- Icons render 1:1, centered by the canvas dimensions. Pixels beyond the
+  panel edges are clipped; no scaling or automatic cropping is applied.
 - File names become display names. Example: `water_bottle_32x32.png` -> `Water Bottle`.
-- Restart the simulator after adding/removing files. The folder becomes authoritative when it contains at least one valid PNG.
+- In the desktop simulator, **Reload Library** updates the icon list and phone
+  previews. The root folder becomes authoritative for standard icons when it
+  contains at least one valid PNG.
 
-For a larger icon, put a transparent PNG in `large/` with a canvas between 1×1
-and 64×32 pixels. For example `large/liquid_stranger.png` is the user's
+For a larger icon, put a transparent PNG in `large/` with a canvas up to
+**72×40** pixels (nominal 64×32 plus eight pixels in each dimension). For
+example `large/liquid_stranger.png` is the user's
 60×28 dripping-letter logo with color added inside its original silhouette.
-It renders at native size, centered on each 64×32 panel;
-Orbit and Bounce use only the free margin, so a 64×32 canvas stays still.
-Original 32×32 icons retain their existing motion, including edge clipping.
+It renders at native size, centered on each 64×32 panel. Orbit and Bounce use
+the free margin when available; a full-size or slightly oversized icon can
+clip another one or two pixels as it moves. Original 32×32 icons keep their
+existing motion, including edge clipping.
 Keep display names unique across both folders (the filename becomes the name).
 
-Restart the simulator after changing icons. `python tools/build_large_icons.py`
+`python tools/build_large_icons.py`
 compiles the large PNGs into `large_icon_data.py` for the PIL-free CircuitPython
 icon library. The MatrixPortal asset build also refreshes that module and copies
 it into `matrixportal_build/`; deploy it beside `embedded_icon_library.py` (or

@@ -22,18 +22,39 @@ class LargeIconTests(unittest.TestCase):
         self.assertIn("Alien", IconLibrary().names())
         self.assertIn("Liquid Stranger", _icon_preview_data())
 
-    def test_legacy_folder_requires_32x32_and_large_folder_rejects_oversize(self):
+    def test_both_folders_accept_small_canvas_overflow_but_reject_large_files(self):
         with tempfile.TemporaryDirectory() as tmp:
             directory = Path(tmp)
             large = directory / "large"
             large.mkdir()
-            Image.new("RGBA", (60, 28)).save(directory / "wrong.png")
-            Image.new("RGBA", (65, 28)).save(large / "too_wide.png")
+            Image.new("RGBA", (36, 35)).save(directory / "bordered_32x32.png")
+            Image.new("RGBA", (41, 32)).save(directory / "too_wide.png")
+            Image.new("RGBA", (68, 36)).save(large / "oversized.png")
+            Image.new("RGBA", (73, 28)).save(large / "much_too_wide.png")
             Image.new("RGBA", (64, 32)).save(large / "full.png")
             library = IconLibrary(directory)
             self.assertIn("Full", library.names())
-            self.assertIn("Alien", library.names())
+            self.assertIn("Bordered", library.names())
+            self.assertIn("Oversized", library.names())
+            self.assertEqual((len(library.get("Bordered").pixels[0]), len(library.get("Bordered").pixels)), (36, 35))
             self.assertEqual(len(library.errors), 2)
+
+    def test_oversized_canvases_center_and_clip_slightly_during_motion(self):
+        renderer = OverlayRenderer(64, 32, IconLibrary())
+        self.assertEqual(renderer._icon_origin({"motion": "Orbit"}, 0, 32, 32), (24, 0))
+        self.assertEqual(renderer._icon_origin({"motion": "Orbit"}, 0, 68, 36), (0, -2))
+        self.assertEqual(renderer._icon_origin({"motion": "Bounce"}, 0, 68, 36), (-2, -1))
+        self.assertEqual(renderer._icon_origin({"motion": "Orbit"}, 0, 64, 32), (2, 0))
+        with tempfile.TemporaryDirectory() as tmp:
+            large = Path(tmp) / "large"
+            large.mkdir()
+            Image.new("RGBA", (68, 36), (255, 0, 0, 255)).save(large / "oversized.png")
+            display = VirtualDisplay()
+            renderer = OverlayRenderer(64, 32, IconLibrary(tmp))
+            renderer.draw_icon(display, {"icon_enabled": True, "icon": "Oversized", "motion": "Bounce"},
+                               {"audio_reactivity": "Off"}, 0)
+            self.assertEqual(display.get_pixel(0, 0), (255, 0, 0))
+            self.assertEqual(display.get_pixel(63, 31), (255, 0, 0))
 
     def test_large_icon_remains_on_panel_through_orbit_bounce_and_audio(self):
         renderer = OverlayRenderer(64, 32, IconLibrary())
@@ -53,10 +74,12 @@ class LargeIconTests(unittest.TestCase):
         for motion in ("Orbit", "Bounce"):
             for t in (0, math.pi / 2, math.pi, 2 * math.pi):
                 x, y = renderer._icon_origin({"motion": motion}, t, width, height)
-                self.assertGreaterEqual(x, 0)
-                self.assertGreaterEqual(y, 0)
-                self.assertLessEqual(x + width, 64)
-                self.assertLessEqual(y + height, 32)
+                if width < 64:
+                    self.assertGreaterEqual(x, 0)
+                    self.assertLessEqual(x + width, 64)
+                if height < 32:
+                    self.assertGreaterEqual(y, 0)
+                    self.assertLessEqual(y + height, 32)
                 display = VirtualDisplay()
                 renderer.draw_icon(display, {"icon_enabled": True, "icon": name, "motion": motion},
                                    {"audio_reactivity": "Reactive"}, t,

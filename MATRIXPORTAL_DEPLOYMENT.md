@@ -53,10 +53,11 @@ www/
 - manifest bytes
 - total deployment payload
 
-Place transparent icons up to 64×32 in `assets/icons/large/`. The Mac build
+Place transparent icons up to 72×40 in `assets/icons/large/`. The Mac build
 compiles them into `large_icon_data.py`, a PIL-free Python module included in
 the build. Copy it beside `embedded_icon_library.py` on the board. The native
-size compositor limits motion to the space left around each large icon. The
+size compositor centers the canvas and clips pixels beyond the 64×32 panel;
+full-size and oversized icons may clip another two pixels during Orbit. The
 `Liquid Stranger` sample uses the user's original 60×28 dripping-letter
 silhouette with a new color treatment. Edit its PNG and rebuild for any
 further changes. Test icon RAM and frame timing on hardware.

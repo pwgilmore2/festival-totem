@@ -47,12 +47,13 @@ update();setInterval(update,300);
 
 class PhoneControlServer:
     def __init__(self,port=8765):
-        self.port=port;self.commands=Queue();self.state_lock=threading.Lock();self.state={};self.thumbnail_provider=None;self.server=None
+        self.port=port;self.commands=Queue();self.state_lock=threading.Lock();self.state={};self.thumbnail_provider=None;self.icon_preview_provider=None;self.server=None
     def update_state(self,state):
         with self.state_lock:self.state=dict(state)
     def get_state(self):
         with self.state_lock:return dict(self.state)
     def set_thumbnail_provider(self,provider):self.thumbnail_provider=provider
+    def set_icon_preview_provider(self,provider):self.icon_preview_provider=provider
     def add_command(self,command,value=None):self.commands.put({"command":command,"value":value})
     def get_commands(self):
         out=[]
@@ -75,6 +76,9 @@ class PhoneControlServer:
             def do_GET(self):
                 if self.path=="/":self.send_bytes(PHONE_HTML.encode(),"text/html; charset=utf-8");return
                 if self.path=="/api/state":self.send_bytes(json.dumps(owner.get_state()).encode(),"application/json");return
+                if self.path=="/api/icon-previews":
+                    previews=owner.icon_preview_provider() if owner.icon_preview_provider else {}
+                    self.send_bytes(json.dumps(previews).encode(),"application/json");return
                 if self.path.startswith("/thumb/"):
                     try:
                         i=int(self.path.split("?",1)[0].split("/")[-1]);data=owner.thumbnail_provider(i) if owner.thumbnail_provider else None

@@ -22,7 +22,8 @@ _FONT_NEW = r'''<div><div class="sh"><span>Font</span></div><select id="textFont
 
 _ICONS_SECTION = r'''
 <section id="icons" class="view"><div class="card iconCard"><h2>Icons</h2>
-<div class="iconHint">PNG icons render at native size, up to 64×32. Tap an icon to show it; tap the active icon again to clear it.</div>
+<div class="iconHint">PNG icons render at native size, centered by their canvas. Slightly oversized edges may clip. Tap an icon to show it; tap the active icon again to clear it.</div>
+<div id="iconErrors" class="iconHint" style="display:none"></div>
 <div id="overlayIconGrid" class="iconGrid"></div>
 <div class="iconControls">
 <div class="sh"><span>Motion</span><span class="tiny">whole-pixel movement only</span></div>
@@ -57,11 +58,18 @@ def _script():
 <script>
 let overlayIconLocal='',overlayIconEnabledLocal=false;
 const iconPreviews=__PREVIEWS__;
+function refreshIconPreviews(){
+ fetch('/api/icon-previews',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(data=>{
+  if(!data)return;Object.assign(iconPreviews,data);
+  document.querySelectorAll('[data-overlay-icon]').forEach(b=>{let im=b.querySelector('img');if(im)im.src=iconPreviews[b.dataset.overlayIcon]||''});
+ }).catch(()=>{});
+}
 
 function renderOverlayIcons(){
  const g=document.getElementById('overlayIconGrid');if(!g)return;
- const names=(state.overlay_icons||[]),sig=names.join('|');
- if(g.dataset.sig!==sig){g.dataset.sig=sig;g.innerHTML='';names.forEach(name=>{let b=document.createElement('button');b.className='iconTile';b.dataset.overlayIcon=name;b.onclick=()=>selectOverlayIcon(name);let im=document.createElement('img');im.alt=name;im.src=iconPreviews[name]||'';let s=document.createElement('span');s.textContent=name;b.append(im,s);g.appendChild(b)})}
+ const names=(state.overlay_icons||[]),sig=names.join('|')+'@'+(state.icon_library_revision||0);
+ if(g.dataset.sig!==sig){g.dataset.sig=sig;g.innerHTML='';names.forEach(name=>{let b=document.createElement('button');b.className='iconTile';b.dataset.overlayIcon=name;b.onclick=()=>selectOverlayIcon(name);let im=document.createElement('img');im.alt=name;im.src=iconPreviews[name]||'';let s=document.createElement('span');s.textContent=name;b.append(im,s);g.appendChild(b)});refreshIconPreviews()}
+ const errors=document.getElementById('iconErrors');if(errors){let items=state.icon_library_errors||[];errors.style.display=items.length?'':'none';errors.textContent=items.length?'Skipped icons: '+items.join(' • '):''}
  document.querySelectorAll('[data-overlay-icon]').forEach(b=>b.classList.toggle('active',overlayIconEnabledLocal&&b.dataset.overlayIcon===overlayIconLocal));
 }
 function selectOverlayIcon(name){cmd('icon_toggle',name)}

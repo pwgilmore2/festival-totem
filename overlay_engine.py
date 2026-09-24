@@ -37,13 +37,15 @@ class OverlayRenderer:
         legacy = width == 32 and height == 32
         motion = state.get("motion", "Bounce")
         if motion == "Orbit":
-            dx = 8 if legacy else min(8, x0, self.width - width - x0)
-            dy = 5 if legacy else min(5, y0, self.height - height - y0)
+            # Full-size/oversized canvases intentionally lose up to two extra
+            # edge pixels as they move. Smaller canvases stay within the panel.
+            dx = 8 if legacy else (2 if width >= self.width else min(8, x0, self.width - width - x0))
+            dy = 5 if legacy else (2 if height >= self.height else min(5, y0, self.height - height - y0))
             x0 += int(round(math.cos(t * 1.15) * dx))
             y0 += int(round(math.sin(t * 1.15) * dy))
         else:
             bounce = int(round(-abs(math.sin(t * 2.5)) * 2.0 + 1.0))
-            y0 += bounce if legacy else max(-y0, min(bounce, self.height - height - y0))
+            y0 += bounce if legacy or height >= self.height else max(-y0, min(bounce, self.height - height - y0))
         return x0, y0
 
     def _transition(self, state, seed):
@@ -90,8 +92,10 @@ class OverlayRenderer:
                 y0 -= 1
 
         if (width, height) != (32, 32):
-            x0 = max(0, min(x0, self.width - width))
-            y0 = max(0, min(y0, self.height - height))
+            if width < self.width:
+                x0 = max(0, min(x0, self.width - width))
+            if height < self.height:
+                y0 = max(0, min(y0, self.height - height))
 
         pixels = []
         for sy, row in enumerate(rgba):

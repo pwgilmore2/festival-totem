@@ -5,6 +5,7 @@ import pygame
 from desktop_media import DesktopMediaAdapter
 from effects import EFFECTS
 from icon_assets import ICON_LIBRARY
+from overlay_ui_patch import _icon_preview_data
 from overlay_engine import OverlayRenderer
 from runtime_io import VirtualDisplayBackend
 from secure_phone_server import PhoneControlServer
@@ -37,6 +38,7 @@ runtime = TotemRuntime(
 
 server = PhoneControlServer(8765)
 server.set_thumbnail_provider(media.thumbnail)
+server.set_icon_preview_provider(_icon_preview_data)
 phone_url = server.start()
 
 

@@ -90,6 +90,7 @@ class TotemRuntime:
         self.displays = displays
         self.media = media
         self.icon_library = icon_library
+        self.icon_library_revision = 0
         self.overlay_renderer = overlay_renderer
         self.base_effects = effects
         self.signal_store = signal_store or SignalStore()
@@ -713,6 +714,7 @@ class TotemRuntime:
         reload_icons = getattr(self.icon_library, "reload", None)
         if reload_icons:
             reload_icons()
+            self.icon_library_revision += 1
         self._normalize_icons()
         for side in SIDES:
             self.panels[side]["image_index"] = 0
@@ -953,6 +955,7 @@ class TotemRuntime:
             "text_effects": list(TEXT_EFFECTS),
             "text_backgrounds": list(TEXT_BACKGROUNDS),
             "overlay_icons": self.icon_library.names(),
+            "icon_library_revision": self.icon_library_revision,
             "icon_library_errors": list(icon_errors),
             "icon_motions": list(ICON_MOTIONS),
             "guest": self.chaos_engine.snapshot(),

@@ -24,8 +24,8 @@ def build():
         with Image.open(path) as image:
             image = image.convert("RGBA")
             width, height = image.size
-            if not (1 <= width <= 64 and 1 <= height <= 32):
-                raise ValueError("%s must fit within 64x32" % path.name)
+            if not (1 <= width <= 72 and 1 <= height <= 40):
+                raise ValueError("%s must fit within 72x40" % path.name)
             payload = base64.b85encode(zlib.compress(image.tobytes(), 9)).decode("ascii")
         entries.append((name, width, height, payload))
 

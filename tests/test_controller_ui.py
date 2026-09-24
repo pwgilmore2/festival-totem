@@ -1,4 +1,6 @@
 import unittest
+import json
+from urllib.request import urlopen
 
 import controller_ui
 
@@ -65,6 +67,21 @@ class ControllerUICompositionTests(unittest.TestCase):
             'id="screenModeLinked"',
         ):
             self.assert_once(marker)
+
+    def test_desktop_icon_previews_can_refresh_after_library_reload(self):
+        previews = {"First": "data:image/png;base64,AAAA"}
+        server = controller_ui.PhoneControlServer(0)
+        server.set_icon_preview_provider(lambda: dict(previews))
+        try:
+            server.start()
+            url = "http://127.0.0.1:%d/api/icon-previews" % server.server.server_address[1]
+            with urlopen(url, timeout=2) as response:
+                self.assertEqual(json.load(response), previews)
+            previews["Added"] = "data:image/png;base64,BBBB"
+            with urlopen(url, timeout=2) as response:
+                self.assertEqual(json.load(response), previews)
+        finally:
+            server.stop()
 
     def test_controller_keeps_current_performance_language(self):
         self.assertIn("audio.textContent='Vibe'", self.html)

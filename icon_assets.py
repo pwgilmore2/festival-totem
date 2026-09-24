@@ -14,7 +14,8 @@ from overlay_exact_assets import EXACT_SPRITES, sprite_rgba
 
 ICON_SIZE = 32
 PANEL_SIZE = (64, 32)
-DEFAULT_ICON_DIR = Path("assets/icons")
+CANVAS_ALLOWANCE = 8  # Up to four extra pixels beyond each nominal edge.
+DEFAULT_ICON_DIR = Path(__file__).resolve().parent / "assets" / "icons"
 
 
 def _display_name(path: Path):
@@ -32,10 +33,9 @@ class IconAsset:
         with Image.open(path) as im:
             im = im.convert("RGBA")
             width, height = im.size
-            if large and not (1 <= width <= PANEL_SIZE[0] and 1 <= height <= PANEL_SIZE[1]):
-                raise ValueError(f"{path.name} must fit within 64x32; got {width}x{height}")
-            if not large and im.size != (ICON_SIZE, ICON_SIZE):
-                raise ValueError(f"{path.name} must be exactly 32x32; got {im.size[0]}x{im.size[1]}")
+            maximum = (PANEL_SIZE[0] + CANVAS_ALLOWANCE, PANEL_SIZE[1] + CANVAS_ALLOWANCE) if large else (ICON_SIZE + CANVAS_ALLOWANCE,) * 2
+            if not (1 <= width <= maximum[0] and 1 <= height <= maximum[1]):
+                raise ValueError(f"{path.name} must fit within {maximum[0]}x{maximum[1]}; got {width}x{height}")
             px = im.load()
             rows = tuple(
                 tuple(tuple(px[x, y]) for x in range(width))
