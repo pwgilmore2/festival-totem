@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from display import VirtualDisplay
 from runtime_io import SignalStore
@@ -97,6 +98,32 @@ EFFECTS = {"Rainbow": fill, "Plasma": fill}
 
 
 class TotemRuntimeTests(unittest.TestCase):
+    def test_text_transition_lifecycle(self):
+        runtime, _ = self.make_runtime()
+        runtime.set_target('front')
+        with patch('totem_runtime.time.monotonic', return_value=100):
+            runtime.show_text({'message': 'FIRST', 'scale': 1})
+            self.assertIsNone(runtime.text_transitions['front']['previous'])
+        with patch('totem_runtime.time.monotonic', return_value=101):
+            runtime._update_text_transitions()
+            runtime.set_text_settings({'message': 'NEXT', 'scale': 2, 'font': 'Block'})
+            transition = runtime.text_transitions['front']
+            self.assertEqual(transition['previous']['message'], 'FIRST')
+            self.assertEqual(transition['previous']['scale'], 1)
+            runtime.set_text_settings({'message': 'NEXT', 'scale': 2, 'font': 'Block'})
+            self.assertIs(runtime.text_transitions['front'], transition)
+        with patch('totem_runtime.time.monotonic', return_value=102):
+            runtime._update_text_transitions()
+            runtime.set_overlay_background('Black')
+            runtime.hide_text()
+            self.assertFalse(runtime.panels['front']['text']['enabled'])
+            self.assertTrue(runtime._black_background('front'))
+            self.assertEqual(runtime.text_transitions['front']['previous']['message'], 'NEXT')
+        with patch('totem_runtime.time.monotonic', return_value=103):
+            runtime._update_text_transitions()
+            self.assertIsNone(runtime.text_transitions['front'])
+            self.assertFalse(runtime._black_background('front'))
+
     def make_runtime(self, media_count=3):
         displays = {
             "front": VirtualDisplay(64, 32),

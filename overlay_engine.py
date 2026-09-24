@@ -1,17 +1,52 @@
 import math
-import random
 import time
 
-from text_engine import TextRenderer, clamp01, hsv_color, parse_color
+from text_engine import TextRenderer, clamp01, parse_color
+
+
+def audio_brightness(mode, signals):
+    """Shared brightness pulse; glyph geometry and icon colors stay intact."""
+    bass = clamp01(signals.get("bass", 0))
+    beat = bool(signals.get("beat", False))
+    if mode == "Subtle":
+        return min(1.0, .78 + bass * .16 + (.10 if beat else 0))
+    if mode in ("Reactive", "Intense"):
+        return min(1.0, .60 + bass * .30 + clamp01(signals.get("highs", 0)) * .08 + (.18 if beat else 0))
+    return 1.0
+
+
+class DissolveDisplay:
+    """Blend only touched pixels into the live background, without a frame buffer."""
+    def __init__(self, display, progress, seed=0, outgoing=False):
+        self.display = display
+        self.width, self.height = display.width, display.height
+        self.progress = clamp01(progress)
+        self.amount = 1 - self.progress if outgoing else self.progress
+        self.seed, self.outgoing = seed, outgoing
+
+    def get_pixel(self, x, y):
+        return self.display.get_pixel(x, y)
+
+    def set_pixel(self, x, y, color):
+        if not (0 <= x < self.width and 0 <= y < self.height):
+            return
+        # An integer hash replaces one Random instance per pixel per frame.
+        value = ((x * 374761393 + y * 668265263 + self.seed * 1274126177) & 0xffffffff)
+        value = ((value ^ (value >> 13)) * 1274126177) & 0xffffffff
+        threshold = (value & 65535) / 65536.0
+        if (threshold >= self.progress) != self.outgoing:
+            return
+        old = self.display.get_pixel(x, y)
+        a = self.amount
+        self.display.set_pixel(x, y, tuple(int(old[i] * (1-a) + color[i] * a) for i in range(3)))
 
 
 class OverlayRenderer:
     """Native final-frame overlay compositor.
 
     Icons render from authored native-size masters 1:1. Text layout is automatic:
-    static one-line, static two-line, then fast scroll. Text visuals are clean
-    when audio reactivity is Off and derive their motion/pulse from the live
-    music signal when Subtle or Reactive is selected.
+    static one-line, static two-line, then fast scroll. Static text shares icon motion; audio changes brightness without changing
+    glyph geometry. Dissolves write directly into the live background.
 
     The icon source is dependency-injected so this module stays PIL-free and can
     run unchanged on both desktop and MatrixPortal.
@@ -22,19 +57,16 @@ class OverlayRenderer:
         self.height = height
         self.icon_library = icon_library
         self.text = TextRenderer(width, height)
-        self._text_clock = {
-            "front": {"signature": None, "started": time.monotonic()},
-            "back": {"signature": None, "started": time.monotonic()},
-        }
+        self._text_clock = {"front": [], "back": []}
 
     def _put(self, display, x, y, color):
         if 0 <= x < display.width and 0 <= y < display.height:
             display.set_pixel(x, y, color)
 
-    def _icon_origin(self, state, t, width=32, height=32):
+    def _icon_origin(self, state, t, width=32, height=32, legacy_icon=True):
         x0 = (self.width - width) // 2
         y0 = (self.height - height) // 2
-        legacy = width == 32 and height == 32
+        legacy = legacy_icon and width == 32 and height == 32
         motion = state.get("motion", "Bounce")
         if motion == "Orbit":
             # Full-size/oversized canvases intentionally lose up to two extra
@@ -75,49 +107,16 @@ class OverlayRenderer:
         if not width:
             return
         x0, y0 = self._icon_origin(state, t, width, height)
-        amount, reveal = self._transition(state, seed)
+        _, reveal = self._transition(state, seed)
 
-        bass = clamp01(signals.get("bass", 0.0))
-        mids = clamp01(signals.get("mids", 0.0))
-        beat = bool(signals.get("beat", False))
-        audio_mode = text_settings.get("audio_reactivity", "Off")
-        if audio_mode == "Subtle":
-            y0 += int(round(math.sin(t * 5.0) * bass))
-            if beat:
-                y0 -= 1
-        elif audio_mode == "Reactive":
-            y0 += int(round(math.sin(t * 6.0) * bass * 1.5))
-            x0 += int(round(math.sin(t * 3.1) * mids))
-            if beat:
-                y0 -= 1
-
-        if (width, height) != (32, 32):
-            if width < self.width:
-                x0 = max(0, min(x0, self.width - width))
-            if height < self.height:
-                y0 = max(0, min(y0, self.height - height))
-
-        pixels = []
+        brightness = audio_brightness(text_settings.get("audio_reactivity", "Off"), signals)
+        if reveal is not None:
+            display = DissolveDisplay(display, reveal, seed)
         for sy, row in enumerate(rgba):
             for sx, (r, g, b, a) in enumerate(row):
-                if a == 0:
-                    continue
-                if reveal is not None:
-                    rr = random.Random(seed + sy * 97 + sx * 193)
-                    if rr.random() > reveal:
-                        continue
-                px = x0 + sx
-                py = y0 + sy
-                brightness = max(0.0, min(1.0, amount))
-                if audio_mode == "Subtle":
-                    brightness *= min(1.0, .78 + bass * .16 + (.10 if beat else 0))
-                elif audio_mode in ("Reactive", "Intense"):
-                    brightness *= min(1.0, .60 + bass * .30 + mids * .08 + (.18 if beat else 0))
-                color = (int(r * brightness), int(g * brightness), int(b * brightness))
-                pixels.append((px, py, color))
-
-        for px, py, color in pixels:
-            self._put(display, px, py, color)
+                if a:
+                    color = (int(r * brightness), int(g * brightness), int(b * brightness))
+                    self._put(display, x0 + sx, y0 + sy, color)
 
     def _split_two_lines(self, text, scale, font):
         words = text.split()
@@ -150,10 +149,13 @@ class OverlayRenderer:
 
     def _text_time(self, seed, signature):
         side = "back" if int(seed or 0) >= 1000 else "front"
-        clock = self._text_clock[side]
-        if clock["signature"] != signature:
-            clock["signature"] = signature
-            clock["started"] = time.monotonic()
+        clocks = self._text_clock[side]
+        clock = next((entry for entry in clocks if entry["signature"] == signature), None)
+        if clock is None:
+            clock = {"signature": signature, "started": time.monotonic()}
+            clocks.append(clock)
+            if len(clocks) > 2:
+                clocks.pop(0)
         return max(0.0, time.monotonic() - clock["started"])
 
     def draw_text(self, display, settings, t, signals=None, seed=0, bottom=False):
@@ -174,20 +176,11 @@ class OverlayRenderer:
         text_t = self._text_time(seed, signature)
         speed = 34.0
 
-        bass = clamp01(signals.get("bass", 0.0))
-        mids = clamp01(signals.get("mids", 0.0))
-        highs = clamp01(signals.get("highs", 0.0))
-        beat = bool(signals.get("beat", False))
-        audio_mode = settings.get("audio_reactivity", "Off")
-        if audio_mode not in ("Off", "Subtle", "Reactive", "Intense"):
-            audio_mode = "Off"
-
         base = parse_color(settings.get("color", "#ffffff"))
-        pulse = 1.0
-        if audio_mode == "Subtle":
-            pulse = min(1.0, .78 + bass * .16 + (.10 if beat else 0.0))
-        elif audio_mode in ("Reactive", "Intense"):
-            pulse = min(1.0, .60 + bass * .30 + highs * .08 + (.18 if beat else 0.0))
+        pulse = audio_brightness(settings.get("audio_reactivity", "Off"), signals)
+        if "transition_progress" in settings:
+            display = DissolveDisplay(display, settings["transition_progress"], seed,
+                                      settings.get("transition_outgoing", False))
 
         def draw_line(line, x, y, draw_backplate=True):
             width = self.text.text_width(line, scale, font)
@@ -199,17 +192,21 @@ class OverlayRenderer:
         if layout == "single":
             line = lines[0]
             width = self.text.text_width(line, scale, font)
-            x = (self.width - width) // 2
-            y = self.height - 7 * scale - 1 if bottom else (self.height - 7 * scale) // 2
+            x, y = self._icon_origin(settings, t, width, 7 * scale, legacy_icon=False)
+            if bottom:
+                y = self.height - 7 * scale - 1
         elif layout == "double":
             gap = max(2, scale)
             total_h = 14 * scale + gap
-            y1 = self.height - total_h - 1 if bottom else (self.height - total_h) // 2
+            block_width = max(self.text.text_width(line, scale, font) for line in lines)
+            block_x, y1 = self._icon_origin(settings, t, block_width, total_h, legacy_icon=False)
+            if bottom:
+                y1 = self.height - total_h - 1
             y2 = y1 + 7 * scale + gap
             positions = []
             for line, y in zip(lines, (y1, y2)):
                 width = self.text.text_width(line, scale, font)
-                x = (self.width - width) // 2
+                x = block_x + (block_width - width) // 2
                 positions.append((line, x, y, width))
 
             if settings.get("backplate"):
@@ -224,8 +221,6 @@ class OverlayRenderer:
 
             for line, x, y, _ in positions:
                 draw_line(line, x, y, draw_backplate=False)
-            if audio_mode == "Reactive" and beat:
-                self.text._beat_flash(display, .08 + bass * .10)
             return
         else:
             line = lines[0]
@@ -235,5 +230,3 @@ class OverlayRenderer:
             y = self.height - 7 * scale - 1 if bottom else (self.height - 7 * scale) // 2
 
         draw_line(line, x, y)
-        if audio_mode == "Reactive" and beat:
-            self.text._beat_flash(display, .08 + bass * .10)

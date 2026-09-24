@@ -1,6 +1,7 @@
 import math
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from PIL import Image
@@ -13,6 +14,25 @@ from overlay_ui_patch import _icon_preview_data
 
 
 class LargeIconTests(unittest.TestCase):
+    def test_text_dissolve_and_static_motion(self):
+        renderer = OverlayRenderer(64, 32, IconLibrary())
+        settings = {'message': 'HEY', 'scale': 1, 'font': 'Pixel',
+                    'color_mode': 'Solid', 'color': '#ffffff', 'motion': 'Orbit'}
+        def render(progress, outgoing=False, t=0):
+            display = VirtualDisplay()
+            with patch('overlay_engine.time.monotonic', return_value=100):
+                renderer.draw_text(display, dict(settings, transition_progress=progress,
+                                   transition_outgoing=outgoing), t)
+            return {(x,y) for y,row in enumerate(display.pixels) for x,p in enumerate(row) if p != (0,0,0)}
+        self.assertFalse(render(0))
+        full = render(1)
+        middle = render(.5)
+        self.assertTrue(middle)
+        self.assertLess(len(middle), len(full))
+        self.assertFalse(render(1, outgoing=True))
+        self.assertEqual(render(0, outgoing=True), full)
+        self.assertNotEqual(full, render(1, t=math.pi/1.15))
+
     def test_audio_changes_text_brightness_without_changing_glyph_shape(self):
         renderer = OverlayRenderer(64, 32, IconLibrary())
         base = {"message": "HELLO", "font": "Pixel", "color_mode": "Solid",

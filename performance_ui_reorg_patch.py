@@ -34,8 +34,6 @@ _VIBE_PRESETS = r'''
 
 _VIBE_EDITOR = r'''<div class="card vibeEditor"><h2>Audio Preset Management</h2><div class="sectionHint">Choose a preset, adjust the sound mapping, then save, rename, add or delete it. Presets live in this browser.</div><div id="manageVibeButtons" class="vibePresetGrid"></div><div class="vibePresetSave"><input id="vibePresetName" maxlength="32" placeholder="Preset name" aria-label="Preset name"></div><div class="vibePresetActions"><button onclick="saveCurrentVibe()">Save Changes</button><button onclick="addCurrentVibe()">Add New</button><button class="warn" onclick="removeMyVibe()">Delete</button></div><div id="vibePresetStatus" class="vibePresetStatus" role="status" aria-live="polite"></div></div>'''
 
-_OVERLAY_AUDIO = r'''<div class="overlayAudio"><div class="vibePresetHead"><strong>Overlay Audio Reactivity</strong><span class="tiny">icons + text</span></div><div class="vibePresetActions"><button data-overlay-audio="Off" onclick="setOverlayAudio('Off')">Off</button><button data-overlay-audio="Subtle" onclick="setOverlayAudio('Subtle')">Subtle</button><button data-overlay-audio="Intense" onclick="setOverlayAudio('Intense')">Intense</button></div></div>'''
-
 _MANAGE_SWITCH = r'''
 <div class="manageSwitcher">
 <button data-manage="library" onclick="openManage('library')">GIF Library</button>
@@ -188,10 +186,7 @@ _JS = r'''
  window.applyBatchTag=async function(){const input=document.getElementById('batchTagInput'),tag=(input?.value||'').trim();if(!tag||!batchSelected.size)return;await cmd('batch_add_tag',{indices:[...batchSelected],tag});batchSelected.clear();if(input)input.value='';syncBatchUI()}
  function installBatchCapture(){const g=document.getElementById('gallery');if(!g||g.dataset.batchCapture==='1')return;g.dataset.batchCapture='1';g.addEventListener('click',e=>{if(!batchMode)return;const tile=e.target.closest('.tile[data-index]');if(!tile)return;e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();const i=parseInt(tile.dataset.index);if(batchSelected.has(i))batchSelected.delete(i);else batchSelected.add(i);syncBatchUI()},true)}
 
- window.setOverlayAudio=value=>{if(['Off','Subtle','Intense'].includes(value)){try{localStorage.setItem('festivalTotem.overlayAudio.v1',value)}catch(_){}cmd('overlay_audio_reactivity',value)}};
- window.addEventListener('load',()=>{const saved=localStorage.getItem('festivalTotem.overlayAudio.v1');if(['Off','Subtle','Intense'].includes(saved))setOverlayAudio(saved)});
- function syncOverlayAudio(){document.querySelectorAll('[data-overlay-audio]').forEach(b=>b.classList.toggle('active',b.dataset.overlayAudio===(state?.overlay_audio_reactivity||'Off')))}
- function performanceNavTick(){syncOverlayAudio();ensurePerformanceNav();renderMyVibes();markManage(currentManage);installBatchCapture();syncBatchUI()}
+ function performanceNavTick(){ensurePerformanceNav();renderMyVibes();markManage(currentManage);installBatchCapture();syncBatchUI()}
  setInterval(performanceNavTick,250);
  window.addEventListener('load',()=>{ensurePerformanceNav();renderMyVibes();installBatchCapture();setTimeout(()=>{if(section('audio'))view('audio')},100)})
 })();
@@ -227,7 +222,6 @@ def apply(html):
         html = html[:mapping_start] + html[mapping_end:]
         html = html.replace('<div class="card"><h2>Quick Text Presets</h2>', _VIBE_EDITOR + mapping + '<div class="card"><h2>Quick Text Presets</h2>', 1)
     html = html.replace(_VIBE_CARD, _VIBE_CARD + _VIBE_PRESETS, 1)
-    html = html.replace('<div class="pulseRow"><span>PULSE</span><div id="beatLamp" class="pulseLamp"></div></div>', '<div class="pulseRow"><span>PULSE</span><div id="beatLamp" class="pulseLamp"></div></div>' + _OVERLAY_AUDIO, 1)
 
     for section_id in ('live', 'edit'):
         html = _insert_after_section_start(html, section_id, _MANAGE_SWITCH)

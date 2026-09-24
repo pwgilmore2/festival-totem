@@ -27,7 +27,7 @@ from visual_engine import LAYER_KEYS, TRANSITIONS, VisualLayerEngine, copy_pixel
 
 SIDES = ("front", "back")
 ICON_MOTIONS = ("Bounce", "Orbit")
-ICON_TRANSITION_DURATION = 0.55
+OVERLAY_TRANSITION_DURATION = 0.55
 REACTIVE_PRESETS = ("Pulse", "Neon", "Spark", "Chaos")
 
 DEFAULT_SCENES = {
@@ -132,6 +132,7 @@ class TotemRuntime:
             }
             for side in SIDES
         }
+        self.text_transitions = {side: None for side in SIDES}
         self.overlay_background = "Dimmed"
         self.overlay_audio_reactivity = "Off"
         self._media_suspended = {side: False for side in SIDES}
@@ -163,7 +164,7 @@ class TotemRuntime:
         if panel["info_scene"]:
             return True
         return self.overlay_background == "Black" and (
-            panel["text"]["enabled"] or panel["icon"]["icon_enabled"]
+            panel["text"]["enabled"] or bool(self.text_transitions[side]) or panel["icon"]["icon_enabled"]
         )
 
     def set_overlay_background(self, value):
@@ -171,7 +172,7 @@ class TotemRuntime:
             return
         for side in ("front", "back"):
             panel = self.panels[side]
-            if panel["text"]["enabled"] or panel["icon"]["icon_enabled"]:
+            if panel["text"]["enabled"] or bool(self.text_transitions[side]) or panel["icon"]["icon_enabled"]:
                 self._begin_background_transition(side)
         self.overlay_background = value
         for side in ("front", "back"):
@@ -225,6 +226,7 @@ class TotemRuntime:
                 self.panels[side]["info_scene"] = mode
                 self._stop_show(side)
                 self.panels[side]["text"]["enabled"] = False
+                self.text_transitions[side] = None
                 self._set_icon_enabled(side, False, False)
                 self._suspend_media(side)
         self.current_scene = mode or "Custom"
@@ -285,7 +287,7 @@ class TotemRuntime:
             "transition_entering": True,
             "transition_started": 0.0,
             "transition_active": False,
-            "transition_duration": ICON_TRANSITION_DURATION,
+            "transition_duration": OVERLAY_TRANSITION_DURATION,
         }
 
     def _separate_initial_media(self):
@@ -565,7 +567,7 @@ class TotemRuntime:
         state["transition_entering"] = bool(entering)
         state["transition_started"] = time.monotonic()
         state["transition_active"] = True
-        state["transition_duration"] = ICON_TRANSITION_DURATION
+        state["transition_duration"] = OVERLAY_TRANSITION_DURATION
 
     def _set_icon_enabled(self, side, enabled, animate=True):
         state = self.panels[side]["icon"]
@@ -600,7 +602,7 @@ class TotemRuntime:
                     self._begin_icon_transition(state, True)
                 enabled_any = True
         if enabled_any:
-            self.hide_text()
+            self.hide_text(animate=False)
 
     def clear_icon(self):
         for side in self.target_sides():
@@ -619,7 +621,7 @@ class TotemRuntime:
             if not state.get("transition_active"):
                 continue
             duration = float(
-                state.get("transition_duration", ICON_TRANSITION_DURATION)
+                state.get("transition_duration", OVERLAY_TRANSITION_DURATION)
             )
             if now - float(state.get("transition_started", now)) < duration:
                 continue
@@ -629,11 +631,29 @@ class TotemRuntime:
                     self._begin_background_transition(side)
                 state["icon_enabled"] = False
 
+    def _begin_text_transition(self, side, previous):
+        self.text_transitions[side] = {
+            "previous": dict(previous) if previous.get("enabled") else None,
+            "started": time.monotonic(),
+        }
+
+    def _update_text_transitions(self):
+        now = time.monotonic()
+        for side in SIDES:
+            transition = self.text_transitions[side]
+            if transition and now - transition["started"] >= OVERLAY_TRANSITION_DURATION:
+                self.text_transitions[side] = None
+                if not self.panels[side]["text"]["enabled"]:
+                    if self.overlay_background == "Black":
+                        self._begin_background_transition(side)
+                    self._refresh_media(side)
+
     def set_text_settings(self, value):
         if not isinstance(value, dict):
             return
         for side in self.target_sides():
             state = self.panels[side]["text"]
+            previous = dict(state)
             if "message" in value:
                 state["message"] = str(value["message"])[:120]
             if value.get("font") in TEXT_FONTS:
@@ -662,6 +682,9 @@ class TotemRuntime:
                 background_brightness=0.65,
                 backplate=True,
             )
+            keys = ("message", "font", "scale", "color", "color_mode")
+            if state["enabled"] and any(previous.get(k) != state.get(k) for k in keys):
+                self._begin_text_transition(side, previous)
 
     def show_text(self, value=None):
         if isinstance(value, dict):
@@ -671,16 +694,19 @@ class TotemRuntime:
                 self._begin_background_transition(side)
             self._exit_info_scene(side)
             self._set_icon_enabled(side, False, False)
-            self.panels[side]["text"]["enabled"] = True
+            state = self.panels[side]["text"]
+            if not state["enabled"]:
+                self._begin_text_transition(side, state)
+            state["enabled"] = True
 
-    def hide_text(self):
+    def hide_text(self, animate=True):
         for side in self.target_sides():
-            if (
-                self.panels[side]["text"]["enabled"]
-                and self.overlay_background == "Black"
-            ):
-                self._begin_background_transition(side)
-            self.panels[side]["text"]["enabled"] = False
+            state = self.panels[side]["text"]
+            if state["enabled"] and animate:
+                self._begin_text_transition(side, state)
+            elif not animate:
+                self.text_transitions[side] = None
+            state["enabled"] = False
 
     # ----- audio / presets -------------------------------------------------
 
@@ -966,6 +992,7 @@ class TotemRuntime:
             self.scene_transitions[side].update(dt)
         self._update_shows(dt)
         self._update_icon_transitions()
+        self._update_text_transitions()
         self.chaos_engine.update()
 
     def render(self, frame_number):
@@ -1000,20 +1027,25 @@ class TotemRuntime:
             text = self.panels[side]["text"]
             icon = self.panels[side]["icon"]
             text_enabled = bool(text.get("enabled", False)) and not mode
+            text_transition = self.text_transitions[side] if not mode else None
             if not mode and self.overlay_background == "Dimmed" and (
-                text_enabled or icon.get("icon_enabled")
+                text_enabled or text_transition or icon.get("icon_enabled")
             ):
                 self.text_engine.prepare_background(display, text)
-            if text_enabled:
+            if not mode:
                 text["audio_reactivity"] = self.overlay_audio_reactivity
-                self.overlay_renderer.draw_text(
-                    display,
-                    text,
-                    controller.time,
-                    signals,
-                    seed,
-                    bottom=bool(icon.get("icon_enabled")),
-                )
+                progress = min(1.0, (time.monotonic() - text_transition["started"]) / OVERLAY_TRANSITION_DURATION) if text_transition else 1.0
+                previous = text_transition["previous"] if text_transition else None
+                for settings, outgoing in ((previous, True), (text if text_enabled else None, False)):
+                    if settings is None:
+                        continue
+                    render_settings = dict(settings)
+                    render_settings.update(motion=icon.get("motion", "Bounce"),
+                                           audio_reactivity=self.overlay_audio_reactivity)
+                    if text_transition:
+                        render_settings.update(transition_progress=progress, transition_outgoing=outgoing)
+                    self.overlay_renderer.draw_text(display, render_settings, controller.time,
+                                                    signals, seed, bottom=False)
             icon_settings = {"audio_reactivity": self.overlay_audio_reactivity}
             if not mode:
                 self.overlay_renderer.draw_icon(

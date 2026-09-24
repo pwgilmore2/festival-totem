@@ -18,13 +18,12 @@ _JS = r'''<script>
    ['edit','🏷️ Selected GIF & tags',['Selected Asset'],true],
    ['edit','🔍 Framing',['Framing'],false],
    ['edit','🎨 Image processing',['Processing'],false],
-   ['setup','🖥️ Panels',['Panels'],true],
+   ['setup','🔆 Display & panels',['Display','Panels'],true],
    ['setup','🎚️ Audio presets & mappings',['Audio Preset Management','Audio Style','Sound → Visuals'],false],
    ['setup','✨ Overlay behavior',['Overlay Behavior'],false],
    ['setup','🌤 Clock & weather',['Clock + Weather Settings'],false],
    ['setup','📜 Set times',['Set Time Management'],false],
    ['setup','💬 Quick text presets',['Quick Text Presets'],false],
-   ['setup','🔆 Display & playback',['Display'],false]
  ];
  const known=new Set();
  for(const [kind,label,names,initiallyOpen] of definitions){

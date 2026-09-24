@@ -150,3 +150,7 @@ The final `code.py` still needs to tie together:
 - runtime metrics/state publication
 
 Once that exists, the build tool can be extended from "prepared media/controller bundle" to a complete one-command CIRCUITPY staging bundle containing both runtime code and assets.
+
+### Overlay polish before board testing
+
+Text dissolves in/out and between message, font, size and color edits. Static text shares icon Bounce/Orbit; long text keeps its scrolling layout. Manage → Setup → Overlay Behavior now owns background, motion and shared music response; Display contains panel modes and targeting. Text transitions retain only small settings snapshots, with a deterministic dissolve adapter writing into the existing framebuffer. Icon rendering no longer allocates a pixel list or per-pixel Random objects. These changes have desktop regression coverage; frame cost and memory still need physical S3 measurements. The final device integration blockers above remain open.
