@@ -1,4 +1,4 @@
-"""File-backed 32x32 icon assets.
+"""File-backed native-size icon assets for the 64x32 panels.
 
 Drop transparent PNGs into assets/icons. Files are loaded losslessly and
 rendered 1:1. The embedded authored masters remain a fallback so the simulator
@@ -13,6 +13,7 @@ from PIL import Image
 from overlay_exact_assets import EXACT_SPRITES, sprite_rgba
 
 ICON_SIZE = 32
+PANEL_SIZE = (64, 32)
 DEFAULT_ICON_DIR = Path("assets/icons")
 
 
@@ -27,15 +28,18 @@ class IconAsset:
     path: Path | None = None
 
     @classmethod
-    def from_png(cls, path: Path):
+    def from_png(cls, path: Path, large=False):
         with Image.open(path) as im:
             im = im.convert("RGBA")
-            if im.size != (ICON_SIZE, ICON_SIZE):
+            width, height = im.size
+            if large and not (1 <= width <= PANEL_SIZE[0] and 1 <= height <= PANEL_SIZE[1]):
+                raise ValueError(f"{path.name} must fit within 64x32; got {width}x{height}")
+            if not large and im.size != (ICON_SIZE, ICON_SIZE):
                 raise ValueError(f"{path.name} must be exactly 32x32; got {im.size[0]}x{im.size[1]}")
             px = im.load()
             rows = tuple(
-                tuple(tuple(px[x, y]) for x in range(ICON_SIZE))
-                for y in range(ICON_SIZE)
+                tuple(tuple(px[x, y]) for x in range(width))
+                for y in range(height)
             )
         return cls(_display_name(path), rows, path)
 
@@ -53,24 +57,33 @@ class IconLibrary:
         self.by_name = {}
         self.errors = []
 
-        if self.directory.exists():
-            for path in sorted(self.directory.glob("*.png")):
-                try:
-                    asset = IconAsset.from_png(path)
-                except Exception as exc:
-                    self.errors.append(str(exc))
-                    continue
-                self.assets.append(asset)
-                self.by_name[asset.name] = asset
+        for path in sorted(self.directory.glob("*.png")):
+            try:
+                asset = IconAsset.from_png(path)
+            except Exception as exc:
+                self.errors.append(str(exc))
+                continue
+            self.assets.append(asset)
+            self.by_name[asset.name] = asset
 
-        # Empty folder / fresh checkout: keep the authored embedded masters as
-        # a zero-config fallback. Once PNGs exist, the folder is authoritative.
+        # Root 32x32 PNGs are authoritative for that set. Adding only large
+        # icons must not remove the existing embedded 32x32 choices.
         if not self.assets:
             for name in EXACT_SPRITES:
                 rows = tuple(tuple(tuple(px) for px in row) for row in sprite_rgba(name))
                 asset = IconAsset(name, rows, None)
                 self.assets.append(asset)
                 self.by_name[name] = asset
+        for path in sorted((self.directory / "large").glob("*.png")):
+            try:
+                asset = IconAsset.from_png(path, large=True)
+                if asset.name in self.by_name:
+                    raise ValueError(f"Duplicate icon name {asset.name!r}: {path}")
+            except Exception as exc:
+                self.errors.append(str(exc))
+                continue
+            self.assets.append(asset)
+            self.by_name[asset.name] = asset
         return self
 
     def names(self):

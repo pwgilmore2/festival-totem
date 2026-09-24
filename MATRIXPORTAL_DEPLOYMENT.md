@@ -28,6 +28,7 @@ Do not use the advertised flash-chip capacity as the deployment budget. CircuitP
 
 ```text
 manifest.json
+large_icon_data.py
 BUILD_REPORT.txt
 build_report.json
 media/
@@ -51,6 +52,13 @@ www/
 - controller HTML bytes
 - manifest bytes
 - total deployment payload
+
+Place transparent icons up to 64×32 in `assets/icons/large/`. The Mac build
+compiles them into `large_icon_data.py`, a PIL-free Python module included in
+the build. Copy it beside `embedded_icon_library.py` on the board. The native
+size compositor limits motion to the space left around each large icon. The
+simple `Liquid Stranger` sample is a placeholder that can be replaced by
+editing its PNG and rebuilding. Test icon RAM and frame timing on hardware.
 
 `BUILD_REPORT.txt` is meant for humans and lists the largest GIFs first so oversized assets are easy to spot.
 

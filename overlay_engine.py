@@ -8,7 +8,7 @@ from text_engine import TextRenderer, clamp01, hsv_color, parse_color
 class OverlayRenderer:
     """Native final-frame overlay compositor.
 
-    Icons render from authored 32x32 masters 1:1. Text layout is automatic:
+    Icons render from authored native-size masters 1:1. Text layout is automatic:
     static one-line, static two-line, then fast scroll. Text visuals are clean
     when audio reactivity is Off and derive their motion/pulse from the live
     music signal when Subtle or Reactive is selected.
@@ -31,15 +31,19 @@ class OverlayRenderer:
         if 0 <= x < display.width and 0 <= y < display.height:
             display.set_pixel(x, y, color)
 
-    def _icon_origin(self, state, t):
-        x0 = (self.width - 32) // 2
-        y0 = 0
+    def _icon_origin(self, state, t, width=32, height=32):
+        x0 = (self.width - width) // 2
+        y0 = (self.height - height) // 2
+        legacy = width == 32 and height == 32
         motion = state.get("motion", "Bounce")
         if motion == "Orbit":
-            x0 += int(round(math.cos(t * 1.15) * 8.0))
-            y0 += int(round(math.sin(t * 1.15) * 5.0))
+            dx = 8 if legacy else min(8, x0, self.width - width - x0)
+            dy = 5 if legacy else min(5, y0, self.height - height - y0)
+            x0 += int(round(math.cos(t * 1.15) * dx))
+            y0 += int(round(math.sin(t * 1.15) * dy))
         else:
-            y0 += int(round(-abs(math.sin(t * 2.5)) * 2.0 + 1.0))
+            bounce = int(round(-abs(math.sin(t * 2.5)) * 2.0 + 1.0))
+            y0 += bounce if legacy else max(-y0, min(bounce, self.height - height - y0))
         return x0, y0
 
     def _transition(self, state, seed):
@@ -64,7 +68,11 @@ class OverlayRenderer:
 
         signals = signals or {}
         rgba = asset.pixels
-        x0, y0 = self._icon_origin(state, t)
+        height = len(rgba)
+        width = len(rgba[0]) if height else 0
+        if not width:
+            return
+        x0, y0 = self._icon_origin(state, t, width, height)
         amount, reveal = self._transition(state, seed)
 
         bass = clamp01(signals.get("bass", 0.0))
@@ -80,6 +88,10 @@ class OverlayRenderer:
             x0 += int(round(math.sin(t * 3.1) * mids))
             if beat:
                 y0 -= 1
+
+        if (width, height) != (32, 32):
+            x0 = max(0, min(x0, self.width - width))
+            y0 = max(0, min(y0, self.height - height))
 
         pixels = []
         for sy, row in enumerate(rgba):

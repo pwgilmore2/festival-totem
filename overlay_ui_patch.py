@@ -22,7 +22,7 @@ _FONT_NEW = r'''<div><div class="sh"><span>Font</span></div><select id="textFont
 
 _ICONS_SECTION = r'''
 <section id="icons" class="view"><div class="card iconCard"><h2>Icons</h2>
-<div class="iconHint">32×32 PNG assets render 1:1. Tap an icon to show it; tap the active icon again to clear it.</div>
+<div class="iconHint">PNG icons render at native size, up to 64×32. Tap an icon to show it; tap the active icon again to clear it.</div>
 <div id="overlayIconGrid" class="iconGrid"></div>
 <div class="iconControls">
 <div class="sh"><span>Motion</span><span class="tiny">whole-pixel movement only</span></div>
@@ -38,7 +38,9 @@ _ICONS_SECTION = r'''
 def _icon_preview_data():
     out = {}
     for asset in ICON_LIBRARY.assets:
-        im = Image.new('RGBA', (32, 32), (0, 0, 0, 0))
+        height = len(asset.pixels)
+        width = len(asset.pixels[0])
+        im = Image.new('RGBA', (width, height), (0, 0, 0, 0))
         px = im.load()
         for y, row in enumerate(asset.pixels):
             for x, rgba in enumerate(row):
@@ -97,4 +99,3 @@ def apply(html):
         html = html.replace('</body>', _ICONS_SECTION + '</body>', 1)
     html = html.replace('</body>', _script() + '</body>', 1)
     return html
-

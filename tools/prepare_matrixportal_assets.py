@@ -26,6 +26,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from image_assets import ImageLibrary
+from tools.build_large_icons import DESTINATION as LARGE_ICON_MODULE, build as build_large_icons
 from tools.build_controller_asset import build as build_controller_asset
 
 
@@ -118,6 +119,7 @@ def write_build_report(output, manifest, target_storage=None):
         "GIF media: %s" % human_bytes(build["media_bytes"]),
         "Controller thumbnails: %s" % human_bytes(build["thumbnail_bytes"]),
         "Controller HTML: %s" % human_bytes(build["controller_bytes"]),
+        "Large icon module: %s" % human_bytes(build["large_icon_bytes"]),
         "Manifest: %s" % human_bytes(build["manifest_bytes"]),
         "Total generated payload: %s" % human_bytes(build["payload_bytes"]),
         "",
@@ -161,6 +163,7 @@ def write_build_report(output, manifest, target_storage=None):
 
 
 def build(args):
+    build_large_icons()
     source = Path(args.source)
     output = Path(args.output)
     media_dir = output / "media"
@@ -171,6 +174,8 @@ def build(args):
         shutil.rmtree(output)
     media_dir.mkdir(parents=True, exist_ok=True)
     thumbs_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(LARGE_ICON_MODULE, output / LARGE_ICON_MODULE.name)
+    large_icon_bytes = (output / LARGE_ICON_MODULE.name).stat().st_size
 
     library = ImageLibrary(
         source,
@@ -233,6 +238,7 @@ def build(args):
         "media_bytes": media_bytes,
         "thumbnail_bytes": thumbnail_bytes,
         "controller_bytes": controller_bytes,
+        "large_icon_bytes": large_icon_bytes,
         # Filled after the manifest is serialized.
         "manifest_bytes": 0,
         "payload_bytes": 0,
@@ -247,7 +253,7 @@ def build(args):
     manifest_bytes = manifest_path.stat().st_size
     manifest["build"]["manifest_bytes"] = manifest_bytes
     manifest["build"]["payload_bytes"] = (
-        media_bytes + thumbnail_bytes + controller_bytes + manifest_bytes
+        media_bytes + thumbnail_bytes + controller_bytes + large_icon_bytes + manifest_bytes
     )
     with open(manifest_path, "w", encoding="utf-8") as handle:
         json.dump(manifest, handle, indent=2)
@@ -257,7 +263,7 @@ def build(args):
     final_manifest_bytes = manifest_path.stat().st_size
     manifest["build"]["manifest_bytes"] = final_manifest_bytes
     manifest["build"]["payload_bytes"] = (
-        media_bytes + thumbnail_bytes + controller_bytes + final_manifest_bytes
+        media_bytes + thumbnail_bytes + controller_bytes + large_icon_bytes + final_manifest_bytes
     )
     with open(manifest_path, "w", encoding="utf-8") as handle:
         json.dump(manifest, handle, indent=2)

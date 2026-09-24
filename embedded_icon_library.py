@@ -6,6 +6,7 @@ renderer only depends on the small names()/get() contract implemented here.
 """
 
 from overlay_exact_assets import EXACT_SPRITES, sprite_rgba
+from large_icon_data import DATA as LARGE_ICONS, sprite_rgba as large_sprite_rgba
 
 
 class EmbeddedIconAsset:
@@ -33,6 +34,15 @@ class EmbeddedIconLibrary:
                     for row in sprite_rgba(name)
                 )
                 asset = EmbeddedIconAsset(name, rows)
+                self.assets.append(asset)
+                self.by_name[name] = asset
+            except Exception as exc:
+                self.errors.append("%s: %s" % (name, exc))
+        for name in LARGE_ICONS:
+            try:
+                if name in self.by_name:
+                    raise ValueError("duplicate icon name")
+                asset = EmbeddedIconAsset(name, large_sprite_rgba(name))
                 self.assets.append(asset)
                 self.by_name[name] = asset
             except Exception as exc:

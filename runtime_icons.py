@@ -5,6 +5,7 @@ Desktop can still use file-backed PNG icons. Hardware uses the exact embedded
 """
 
 from overlay_exact_assets import EXACT_SPRITES, sprite_rgba
+from large_icon_data import DATA as LARGE_ICONS, sprite_rgba as large_sprite_rgba
 
 
 class EmbeddedIconAsset:
@@ -28,6 +29,13 @@ class EmbeddedIconLibrary:
         for name in EXACT_SPRITES:
             rows = tuple(tuple(tuple(pixel) for pixel in row) for row in sprite_rgba(name))
             asset = EmbeddedIconAsset(name, rows)
+            self.assets.append(asset)
+            self.by_name[name] = asset
+        for name in LARGE_ICONS:
+            if name in self.by_name:
+                self.errors.append("duplicate icon name: " + name)
+                continue
+            asset = EmbeddedIconAsset(name, large_sprite_rgba(name))
             self.assets.append(asset)
             self.by_name[name] = asset
         return self
