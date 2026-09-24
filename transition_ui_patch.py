@@ -6,6 +6,7 @@ _CSS = r'''
 .transitionScopeNote strong{display:block;font-size:12px;letter-spacing:.06em;margin-bottom:2px}
 .transitionScopeNote.background{box-shadow:inset 3px 0 #39a8ff}
 .transitionScopeNote.scene{box-shadow:inset 3px 0 #ff4f9a}
+.clockBackgroundChoice{margin:10px 0 15px}.clockBackgroundChoice .sh{margin-bottom:6px}
 </style>
 '''
 
@@ -15,6 +16,11 @@ def apply(html):
     html = html.replace(
         '<h2>Slideshow + Transitions</h2>',
         '<h2>Slideshow + Background Transitions</h2>',
+    )
+    html = html.replace(
+        '<h2>Slideshow + Background Transitions</h2>',
+        '<h2>Slideshow + Background Transitions</h2><div class="clockBackgroundChoice"><div class="sh"><span>Clock + Weather background</span></div><div class="backgroundChoice"><button data-clock-bg="Sky" onclick="setClockBackground(\'Sky\')">Day / Dusk / Night</button><button data-clock-bg="Black" onclick="setClockBackground(\'Black\')">Black</button></div></div>',
+        1,
     )
     html = html.replace(
         '<div class="transitionGrid">',

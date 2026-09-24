@@ -3,6 +3,7 @@
 _CSS = r'''
 <style>
 .tabs{gap:7px!important}.tabs .performancePrimary{min-width:88px!important}.tabs .managementTab{margin-left:auto;background:#2b2b35!important;color:#ddd!important}
+.audioQuickBar{margin:0 0 8px}.audioQuickBar .audioStart,.audioQuickBar .audioStart.active{width:100%;min-height:48px;font-size:14px;background:#343442;box-shadow:none;border:1px solid #ffffff2a}.audioQuickBar .audioStart.active:after{content:'';display:inline-block;width:7px;height:7px;margin-left:8px;background:#5bebb0;border-radius:50%}
 .tabs button{position:relative}.tabs button.active,.tabs button.runtimeOn,.tabs button.runtimeChaos,.tabs button.beatHit{background:#343442!important;box-shadow:none!important;filter:none!important}.tabs button.active{border-bottom:2px solid #8b7cff!important}.tabs .managementTab.active{background:#2b2b35!important;color:white!important}
 .tabs button.runtimeOn:after,.tabs button.runtimeChaos:after{content:'';display:inline-block;width:7px;height:7px;margin-left:5px;border-radius:50%;vertical-align:middle;background:#5bebb0;box-shadow:0 0 7px #5bebb088}.tabs button.runtimeChaos:after{background:#ff77bd;box-shadow:0 0 7px #ff77bd88}.tabs button.beatHit:after{background:#fff;box-shadow:0 0 7px #fff}
 #tabLive,#tabLibrary,#tabEdit,#tabSetup{display:none!important}
@@ -10,7 +11,7 @@ _CSS = r'''
 .vibePresetBox{margin:12px 0;padding:12px;border-radius:14px;background:#ffffff0b;border:1px solid #ffffff14}.vibePresetHead{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}.vibePresetHead strong{font-size:14px}.vibePresetGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin-bottom:9px}.vibePresetGrid button{min-height:46px}.vibePresetGrid button.active{background:#7063d7}.vibePresetSave input{width:100%;background:#202029;color:#fff;border:1px solid #444456;border-radius:10px;padding:10px;font-size:16px}.vibePresetActions{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:8px}.vibePresetActions button{min-height:46px}.vibePresetStatus{font-size:12px;opacity:.75;min-height:18px;margin-top:8px}.vibePresetHelp{font-size:11px;opacity:.68;line-height:1.4;margin:7px 0}
 .manageSwitcher{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin:2px 0 12px;position:sticky;top:62px;z-index:16;padding:7px;background:#101016ed;backdrop-filter:blur(10px);border-radius:13px}.manageSwitcher button{min-height:42px;font-size:13px}.manageSwitcher button.active{background:#7063d7}.manageHint{font-size:11px;opacity:.62;margin:-4px 0 8px;text-align:center}
 .batchTagBar{display:grid;grid-template-columns:auto 1fr auto;gap:7px;align-items:center;margin:4px 0 10px;padding:9px;background:#ffffff0b;border:1px solid #ffffff12;border-radius:12px}.batchTagBar input{min-width:0;background:#202029;color:#fff;border:1px solid #444456;border-radius:9px;padding:9px;font-size:15px}.batchTagBar button{min-height:40px;padding:7px 10px}.tile.batchSelected{border-color:#53e6a8!important;box-shadow:0 0 0 2px #53e6a855 inset}.batchCount{font-size:11px;opacity:.7;grid-column:1/-1}
-body.manageMode #targetCard{display:none!important}body.manageMode .manageSwitcher{display:grid}body:not(.manageMode) .manageSwitcher{display:none}
+body.manageMode .manageSwitcher{display:grid}body:not(.manageMode) .manageSwitcher{display:none}
 @media(max-width:520px){.tabs button.performancePrimary{min-width:78px!important}.tabs .managementTab{min-width:72px!important}.manageSwitcher{top:60px}.vibePresetGrid{grid-template-columns:1fr 1fr}.batchTagBar{grid-template-columns:1fr 1fr}.batchTagBar input{grid-column:1/-1}}
 </style>
 '''
@@ -18,7 +19,7 @@ body.manageMode #targetCard{display:none!important}body.manageMode .manageSwitch
 _VIBE_CARD = r'''
 <div id="vibeLaunchCard" class="card vibeLaunch">
 <h2>Vibe</h2>
-<div class="vibeSub">Start random GIFs on both screens, then bring the phone mic in and shape the music response below.</div>
+<div class="vibeSub">Shape the sound response here. Start phone audio from the button above the tabs.</div>
 <button class="vibeStart" onclick="startVibeRandom()">Shuffle</button>
 <div class="vibeTransport"><button onclick="vibePrevious()">◀ Previous</button><button onclick="vibeNext()">Next ▶</button></div>
 </div>
@@ -74,13 +75,13 @@ _JS = r'''
    const root=tabsRoot();if(!root)return;
    const audio=tab('tabAudio'),guest=tab('tabGuest'),icons=tab('tabIcons'),text=tab('tabText');
    if(audio)audio.textContent='Vibe';if(guest)guest.textContent='Chaos';if(icons)icons.textContent='Icons';if(text)text.textContent='Text';
-   [audio,guest,icons,text].filter(Boolean).forEach(el=>{el.classList.add('performancePrimary');root.appendChild(el)});
+   [audio,icons,text,guest,tab('tabScenes')].filter(Boolean).forEach(el=>{el.classList.add('performancePrimary');root.appendChild(el)});
    let manage=tab('tabManage');if(!manage){manage=document.createElement('button');manage.id='tabManage';manage.className='managementTab';manage.textContent='Manage';manage.onclick=()=>openManage(currentManage||'library')}root.appendChild(manage)
  }
  function setManageMode(on){document.body.classList.toggle('manageMode',!!on);const m=tab('tabManage');if(m)m.classList.toggle('active',!!on)}
  function markManage(kind){document.querySelectorAll('[data-manage]').forEach(b=>b.classList.toggle('active',b.dataset.manage===kind))}
- function scrollManage(kind){let el=null;if(kind==='library')el=document.getElementById('gallery')?.closest('.card');if(kind==='edit')el=document.getElementById('editname')?.closest('.card');if(kind==='setup')el=document.getElementById('brightness')?.closest('.card')||document.getElementById('quickPresetList')?.closest('.card');if(el)setTimeout(()=>el.scrollIntoView({behavior:'smooth',block:'start'}),40)}
- window.openManage=function(kind){if(!['library','edit','setup'].includes(kind))kind='library';currentManage=kind;setManageMode(true);const target=(kind==='library')?'live':'edit';_performanceBaseView(target);document.querySelectorAll('.tabs button').forEach(b=>b.classList.remove('active'));const m=tab('tabManage');if(m)m.classList.add('active');markManage(kind);const tc=document.getElementById('targetCard');if(tc)tc.style.display='none';scrollManage(kind)}
+ function scrollManage(kind){let el=null;if(kind==='library')el=document.getElementById('gallery')?.closest('.card');if(kind==='edit')el=document.getElementById('editname')?.closest('.card');if(kind==='setup')el=document.getElementById('panelCard')||document.getElementById('brightness')?.closest('.card');if(el)setTimeout(()=>el.scrollIntoView({behavior:'smooth',block:'start'}),40)}
+ window.openManage=function(kind){if(!['library','edit','setup'].includes(kind))kind='library';currentManage=kind;setManageMode(true);const target=(kind==='library')?'live':'edit';_performanceBaseView(target);document.querySelectorAll('.tabs button').forEach(b=>b.classList.remove('active'));const m=tab('tabManage');if(m)m.classList.add('active');markManage(kind);scrollManage(kind)}
  view=function(name){if(name==='live'||name==='library'){openManage('library');return}if(name==='edit'||name==='setup'){openManage(name==='setup'?'setup':'edit');return}setManageMode(false);_performanceBaseView(name);const m=tab('tabManage');if(m)m.classList.remove('active')}
 
  function allIds(){return (state.library||[]).map(x=>x.index).filter(Number.isInteger)}
@@ -156,6 +157,13 @@ _JS = r'''
    selectedVibeId=null;pendingVibe={};vibeDirty=false;applyToken++;applyingVibe=false;
    saveVibes();vibeStatus('Deleted '+current.name+'. Current display settings remain until you choose another preset.')
  }
+ window.ensureLiveAudio=async function(){
+   if(micStream)return true;
+   const started=await startMic();if(!started)return false;
+   if(!selectedVibeId){const pulse=loadVibes().find(v=>v.id==='starter:pulse')||loadVibes()[0];if(pulse)await applyMyVibe(pulse.id)}
+   return true
+ }
+ window.toggleLiveAudio=async function(){if(micStream){stopMic();return}await ensureLiveAudio()};
  window.applyMyVibe=async function(id){
    const v=loadVibes().find(p=>p.id===id);if(!v)return;
    selectedVibeId=id;pendingVibe={};vibeDirty=false;applyingVibe=true;

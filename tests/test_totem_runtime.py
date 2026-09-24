@@ -182,6 +182,20 @@ class TotemRuntimeTests(unittest.TestCase):
         self.assertTrue(runtime.panels["front"]["icon"]["icon_enabled"])
         self.assertFalse(runtime.panels["front"]["text"]["enabled"])
 
+    def test_dimmed_gif_reduces_image_before_text_overlay(self):
+        runtime, _ = self.make_runtime()
+        runtime.handle_command({"command": "effect", "value": "Image"})
+        for frame in range(70):
+            runtime.step(.016, frame)
+        original = runtime.displays["front"].get_pixel(0, 0)
+        back_original = runtime.displays["back"].get_pixel(0, 0)
+        runtime.set_target("front")
+        runtime.handle_command({"command": "text_show", "value": {"message": "HELLO", "background": "Dimmed GIF"}})
+        runtime.step(.016, 70)
+        self.assertGreater(original[0], 0)
+        self.assertEqual(runtime.displays["front"].get_pixel(0, 0), (int(original[0] * .65), 0, 0))
+        self.assertEqual(runtime.displays["back"].get_pixel(0, 0), back_original)
+
     def test_controller_state_preserves_phone_contract(self):
         runtime, _ = self.make_runtime()
         state = runtime.controller_state()

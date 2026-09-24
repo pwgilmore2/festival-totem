@@ -80,6 +80,27 @@ class ControllerUICompositionTests(unittest.TestCase):
                        'data-schedule-day="2026-10-03"', 'America/Chicago'):
             self.assert_once(marker)
 
+    def test_performance_navigation_and_setup_keep_controls_in_one_place(self):
+        html = self.html
+        self.assert_once('id="micButton"')
+        self.assert_once('id="panelCard"')
+        self.assert_once('id="targetCard"')
+        self.assert_once('id="mirrorButton"')
+        self.assertNotIn('id="sceneButtons"', html)
+        self.assertNotIn('<h2>Performance Modes</h2>', html)
+        self.assertLess(html.index('id="micButton"'), html.index('<div class="tabs">'))
+        self.assertGreater(html.index('id="panelCard"'), html.index('<section id="edit"'))
+        self.assertLess(html.index('id="panelCard"'), html.index('id="targetCard"'))
+        self.assertLess(html.index('id="panelCard"'), html.index('id="mirrorButton"'))
+        self.assertIn("[audio,icons,text,guest,tab('tabScenes')]", html)
+        self.assertIn("if(mode==='Waveform'&&window.ensureLiveAudio", html)
+        self.assertIn("id==='starter:pulse'", html)
+        scenes = html.split('<section id="scenes"', 1)[1].split('</section>', 1)[0]
+        self.assertLess(scenes.index('>Waveform</button>'), scenes.index('>Back to GIFs</button>'))
+        self.assertNotIn('id="mirrorButton"', scenes)
+        slideshow = html.split('<h2>Slideshow + Background Transitions</h2>', 1)[1].split('<h2>', 1)[0]
+        self.assertIn('data-clock-bg="Black"', slideshow)
+
     def test_desktop_icon_previews_can_refresh_after_library_reload(self):
         previews = {"First": "data:image/png;base64,AAAA"}
         server = controller_ui.PhoneControlServer(0)

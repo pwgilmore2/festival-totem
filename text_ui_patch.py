@@ -59,7 +59,7 @@ textPayload=function(){
   const scale=Math.max(1,Math.min(3,parseInt(scaleEl?.value||textScaleLocal||1)));
   let colorMode=document.getElementById('textColorMode')?.value||'Rainbow';
   if(colorMode==='Audio')colorMode='Rainbow';
-  return {message:textMessage.value,font:textFont.value,motion:'Static',color_mode:colorMode,color:textColor.value,scale,speed:34,wave:false,glow:false,glitch:false,beat_pulse:false,audio_reactivity:textAudioLocal,background:'Dimmed GIF',background_brightness:.30,backplate:true}
+  return {message:textMessage.value,font:textFont.value,motion:'Static',color_mode:colorMode,color:textColor.value,scale,speed:34,wave:false,glow:false,glitch:false,beat_pulse:false,audio_reactivity:textAudioLocal,background:'Dimmed GIF',background_brightness:.65,backplate:true}
 };
 textChanged=function(){clearTimeout(textTimer);textTimer=setTimeout(()=>cmd('text_settings',textPayload()),25)};
 

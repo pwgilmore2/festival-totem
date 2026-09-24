@@ -11,11 +11,12 @@ AUDIO_CSS = r"""
 
 AUDIO_TAB = r"""<button id="tabAudio" onclick="view('audio')">Audio</button>"""
 
+AUDIO_HEADER = r'''<div class="audioQuickBar"><button id="micButton" class="audioStart" onclick="toggleLiveAudio()">🎙 START PHONE AUDIO</button></div>'''
+
 AUDIO_SECTION = r"""
 <section id="audio" class="view">
 <div class="card">
 <h2>Phone Audio</h2>
-<button id="micButton" class="audioStart" onclick="toggleMic()">🎙 START PHONE AUDIO</button>
 <div id="micNotice" class="audioNotice">Checking microphone support...</div>
 <div id="calStatus" class="calStatus silent"><strong id="calibrationState">Waiting for mic</strong><span id="calibrationDetail">Start audio and the controller will learn the room floor automatically.</span></div>
 <div class="audioMeters">
@@ -57,7 +58,7 @@ AUDIO_SECTION = r"""
 """
 
 AUDIO_JS = r"""
-let audioContext=null,analyser=null,micStream=null,audioAnimation=null,lastAudioSend=0,lastBeatTime=0;
+let audioContext=null,analyser=null,micStream=null,audioAnimation=null,lastAudioSend=0,lastBeatTime=0,micStarting=false;
 let signalHistory=[],pulseLatch=false;
 let vibeAudio={
   active:false,
@@ -178,7 +179,23 @@ function audioLoop(ts){
   }
   audioAnimation=requestAnimationFrame(audioLoop)
 }
-async function startMic(){if(!micSupported()){updateMicNotice();return}try{micStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false},video:false});audioContext=new(window.AudioContext||window.webkitAudioContext)();await audioContext.resume();analyser=audioContext.createAnalyser();analyser.fftSize=2048;analyser.smoothingTimeConstant=.16;analyser.minDecibels=-90;analyser.maxDecibels=-10;audioContext.createMediaStreamSource(micStream).connect(analyser);micButton.textContent='■ STOP PHONE AUDIO';micButton.classList.add('active');analyzerLive.textContent='● ANALYZING';cmd('reactive_enabled',true);updateMicNotice();beginCalibration();audioAnimation=requestAnimationFrame(audioLoop)}catch(e){micNotice.textContent='Microphone could not start: '+e.message;micStream=null}}
+async function startMic(){
+  if(!micSupported()){updateMicNotice();return false}
+  if(micStarting)return false;
+  micStarting=true;micButton.disabled=true;
+  try{
+    micStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false},video:false});
+    audioContext=new(window.AudioContext||window.webkitAudioContext)();await audioContext.resume();
+    analyser=audioContext.createAnalyser();analyser.fftSize=2048;analyser.smoothingTimeConstant=.16;analyser.minDecibels=-90;analyser.maxDecibels=-10;
+    audioContext.createMediaStreamSource(micStream).connect(analyser);
+    micButton.textContent='■ STOP PHONE AUDIO';micButton.classList.add('active');analyzerLive.textContent='● ANALYZING';
+    cmd('reactive_enabled',true);updateMicNotice();beginCalibration();audioAnimation=requestAnimationFrame(audioLoop);return true
+  }catch(e){
+    micNotice.textContent='Microphone could not start: '+e.message;
+    if(micStream)micStream.getTracks().forEach(t=>t.stop());micStream=null;
+    if(audioContext)audioContext.close();audioContext=null;analyser=null;return false
+  }finally{micStarting=false;micButton.disabled=false}
+}
 function stopMic(){if(audioAnimation)cancelAnimationFrame(audioAnimation);audioAnimation=null;if(micStream)micStream.getTracks().forEach(t=>t.stop());micStream=null;if(audioContext)audioContext.close();audioContext=null;analyser=null;pulseLatch=false;vibeAudio.active=false;vibeAudio.env={energy:0,low:0,body:0,bright:0,pulse:0};setMeters(0,0,0,0,false);setStatus('silent','Mic off','Start audio when you want Vibe to react.');cmd('audio_frame',{volume:0,bass:0,mids:0,highs:0,beat:false});micButton.textContent='🎙 START PHONE AUDIO';micButton.classList.remove('active');analyzerLive.textContent='MIC OFF';cmd('reactive_enabled',false);updateMicNotice()}
 function toggleMic(){micStream?stopMic():startMic()}
 function syncAudioUI(){if(typeof state==='undefined')return;const r=state.reactive||{},strength=window.vibeStrengthValue?vibeStrengthValue(r.strength??0):(r.strength??0);sync('reactiveStrength',strength);num('reactiveStrengthValue',strength,'x');if(!micStream&&state.audio)setMeters(state.audio.volume||0,state.audio.bass||0,state.audio.mids||0,state.audio.highs||0,state.audio.beat||false)}
@@ -188,6 +205,7 @@ updateMicNotice();setInterval(syncAudioUI,300);
 
 def enhanced_html(source):
     html=source.replace("</head>",AUDIO_CSS+"\n</head>",1)
+    html=html.replace('<div class="tabs">',AUDIO_HEADER+'<div class="tabs">',1)
     html=html.replace('<button id="tabEdit" onclick="view(\'edit\')">Edit</button>',AUDIO_TAB+'<button id="tabEdit" onclick="view(\'edit\')">Edit</button>',1)
     html=html.replace('<section id="edit" class="view">',AUDIO_SECTION+'\n<section id="edit" class="view">',1)
     html=html.replace('["live","library","edit"]','["live","library","audio","edit"]')

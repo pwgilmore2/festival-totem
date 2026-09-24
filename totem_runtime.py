@@ -244,7 +244,7 @@ class TotemRuntime:
         state.update(
             enabled=False,
             background="Dimmed GIF",
-            background_brightness=0.30,
+            background_brightness=0.65,
             backplate=True,
             speed=34.0,
             motion="Static",
@@ -659,7 +659,7 @@ class TotemRuntime:
                     if value.get("background") in ("Black", "Dimmed GIF")
                     else state.get("background", "Dimmed GIF")
                 ),
-                background_brightness=0.30,
+                background_brightness=0.65,
                 backplate=True,
             )
 
@@ -1002,6 +1002,8 @@ class TotemRuntime:
             icon = self.panels[side]["icon"]
             text_enabled = bool(text.get("enabled", False)) and not mode
             if text_enabled:
+                if text.get("background") == "Dimmed GIF":
+                    self.text_engine.prepare_background(display, text)
                 self.overlay_renderer.draw_text(
                     display,
                     text,

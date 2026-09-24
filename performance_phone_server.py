@@ -21,10 +21,6 @@ LIBRARY_CARD = r"""
 <div class="card"><div class="row"><h2>Library</h2><div id="count" class="muted"></div></div><div id="filters" class="filters"></div><div id="gallery" class="gallery"></div></div>
 """
 
-SCENE_CARD = r"""
-<div class="card"><h2>Performance Modes</h2><div class="sectionHint">Whole-totem vibes: slideshow pace, transitions, beat sync, audio style, and intensity together.</div><div id="sceneButtons" class="sceneGrid"></div></div>
-"""
-
 SHOW_CARD = r"""
 <div class="card"><h2>Slideshow + Transitions</h2><div class="muted" id="selection"></div>
 <div class="slider"><div class="sh"><span>Seconds per item</span><span id="dv" class="value">5s</span></div><input id="duration" type="range" min="1" max="30" value="5" oninput="durationPending=parseFloat(this.value);dv.textContent=this.value+'s'"></div>
@@ -70,14 +66,12 @@ GUEST_SECTION = r"""
 
 PERFORMANCE_JS = r"""
 const layerLabels={bass_zoom:'Bass → Zoom',beat_flash:'Beat → Flash',mids_hue:'Mids → Hue',high_sparkle:'Highs → Sparkles',volume_brightness:'Volume → Brightness',bass_shake:'Bass → Shake',high_rgb_split:'Highs → RGB Split'};
-let layerSignature='',sceneSignature='',textTimer=null,textBackplateLocal=true,durationPending=null;
+let layerSignature='',textTimer=null,textBackplateLocal=true,durationPending=null;
 const baseView=view;
-view=function(n){baseView(n);let tc=document.getElementById('targetCard');if(tc)tc.style.display=n==='guest'?'none':'';if(n==='guest')cmd('set_target','both')}
+view=function(n){baseView(n);if(n==='guest')cmd('set_target','both')}
 function setTransition(){const k=transitionKind.value,d=parseFloat(transitionDuration.value),r=state.transition||{};cmd('transition_settings',{kind:k,duration:d,random:!!r.random})}
 function toggleRandomTransition(){const r=state.transition||{};cmd('transition_settings',{random:!r.random})}
 function toggleBeatSync(){const s=state.slideshow||{};cmd('slideshow_beat_sync',!s.beat_sync)}
-function applyScene(name){durationPending=null;cmd('performance_scene',name)}
-function renderScenes(){const names=state.performance_scenes||[],sig=names.join('|');if(sig!==sceneSignature){sceneSignature=sig;sceneButtons.innerHTML='';names.forEach(n=>{let b=document.createElement('button');b.textContent=n;b.dataset.scene=n;b.onclick=()=>applyScene(n);sceneButtons.appendChild(b)})}document.querySelectorAll('[data-scene]').forEach(b=>b.classList.toggle('active',b.dataset.scene===state.current_scene))}
 function ensureOptions(el,items){if(!el)return;let sig=(items||[]).join('|');if(el.dataset.sig===sig)return;el.dataset.sig=sig;el.innerHTML='';(items||[]).forEach(n=>{let o=document.createElement('option');o.value=n;o.textContent=n;el.appendChild(o)})}
 function styleFlags(){let s=textStyle.value;return {glow:s==='Glow'||s==='Rave',wave:s==='Wave'||s==='Rave',glitch:s==='Glitch',beat_pulse:s==='Beat Pulse'||s==='Rave'}}
 function textPayload(){return {message:textMessage.value,font:textFont.value,motion:textMotion.value,color_mode:textColorMode.value,color:textColor.value,scale:parseInt(textScale.value),speed:parseFloat(textSpeed.value),background:textBackground.value,background_brightness:parseFloat(textBgBrightness.value),backplate:textBackplateLocal,...styleFlags()}}
@@ -93,7 +87,7 @@ function guestHold(on){return bothThen(on?'guest_action':'guest_stop',on?{kind:'
 function chaosStart(e){e.preventDefault();if(e.currentTarget.setPointerCapture)try{e.currentTarget.setPointerCapture(e.pointerId)}catch(_){ }e.currentTarget.classList.add('pressed');guestHold(true)}
 function chaosEnd(e){e.preventDefault();e.currentTarget.classList.remove('pressed');guestHold(false)}
 function renderLayerControls(){const keys=state.layer_keys||[],sig=keys.join('|'),grid=document.getElementById('layerGrid');if(!grid)return;if(sig!==layerSignature){layerSignature=sig;grid.innerHTML='';keys.forEach(k=>{let wrap=document.createElement('div');wrap.className='slider';let head=document.createElement('div');head.className='sh';let a=document.createElement('span');a.textContent=layerLabels[k]||k;let val=document.createElement('span');val.id='lv_'+k;head.append(a,val);let input=document.createElement('input');input.type='range';input.min='0';input.max='1.5';input.step='.05';input.id='layer_'+k;input.oninput=()=>{num(val.id,input.value,'x');cmd('reactive_layer',{name:k,value:parseFloat(input.value)});if(window.markVibeDirty)markVibeDirty(k,input.value)};wrap.append(head,input);grid.appendChild(wrap)})}const layers=(state.reactive||{}).layers||{};keys.forEach(k=>{let e=document.getElementById('layer_'+k);if(e&&document.activeElement!==e)e.value=window.vibeLayerValue?vibeLayerValue(k,layers[k]??0):(layers[k]??0);let v=document.getElementById('lv_'+k);if(v)v.textContent=parseFloat(e?e.value:(layers[k]??0)).toFixed(2)+'x'})}
-function syncPerformanceUI(){if(typeof state==='undefined')return;renderLayerControls();renderScenes();syncTextUI();let tr=state.transition||{},select=document.getElementById('transitionKind');if(select){let options=state.transitions||[],sig=options.join('|');if(select.dataset.sig!==sig){select.dataset.sig=sig;select.innerHTML='';options.forEach(n=>{let o=document.createElement('option');o.value=n;o.textContent=n;select.appendChild(o)})}if(document.activeElement!==select&&tr.kind)select.value=tr.kind}let td=document.getElementById('transitionDuration');if(td&&document.activeElement!==td&&tr.duration!=null)td.value=tr.duration;let tv=document.getElementById('transitionDurationValue');if(tv&&tr.duration!=null)tv.textContent=parseFloat(tr.duration).toFixed(1)+'s';let rb=document.getElementById('randomTransition');if(rb){rb.textContent='Random: '+(tr.random?'On':'Off');rb.classList.toggle('active',!!tr.random)}let sl=state.slideshow||{},bb=document.getElementById('beatSyncButton');if(bb){bb.textContent=sl.beat_sync?'♫ Beat Sync: On':'♫ Beat Sync: Off';bb.classList.toggle('active',!!sl.beat_sync)}if(window.duration&&sl.duration!=null){if(durationPending!=null&&Math.abs(parseFloat(sl.duration)-durationPending)<.01)durationPending=null;if(durationPending==null&&document.activeElement!==duration){duration.value=sl.duration;dv.textContent=parseFloat(sl.duration).toFixed(sl.duration%1?1:0)+'s'}}}
+function syncPerformanceUI(){if(typeof state==='undefined')return;renderLayerControls();syncTextUI();let tr=state.transition||{},select=document.getElementById('transitionKind');if(select){let options=state.transitions||[],sig=options.join('|');if(select.dataset.sig!==sig){select.dataset.sig=sig;select.innerHTML='';options.forEach(n=>{let o=document.createElement('option');o.value=n;o.textContent=n;select.appendChild(o)})}if(document.activeElement!==select&&tr.kind)select.value=tr.kind}let td=document.getElementById('transitionDuration');if(td&&document.activeElement!==td&&tr.duration!=null)td.value=tr.duration;let tv=document.getElementById('transitionDurationValue');if(tv&&tr.duration!=null)tv.textContent=parseFloat(tr.duration).toFixed(1)+'s';let rb=document.getElementById('randomTransition');if(rb){rb.textContent='Random: '+(tr.random?'On':'Off');rb.classList.toggle('active',!!tr.random)}let sl=state.slideshow||{},bb=document.getElementById('beatSyncButton');if(bb){bb.textContent=sl.beat_sync?'♫ Beat Sync: On':'♫ Beat Sync: Off';bb.classList.toggle('active',!!sl.beat_sync)}if(window.duration&&sl.duration!=null){if(durationPending!=null&&Math.abs(parseFloat(sl.duration)-durationPending)<.01)durationPending=null;if(durationPending==null&&document.activeElement!==duration){duration.value=sl.duration;dv.textContent=parseFloat(sl.duration).toFixed(sl.duration%1?1:0)+'s'}}}
 setInterval(syncPerformanceUI,300);
 """
 
@@ -110,7 +104,7 @@ def enhanced_html(source):
     playback=r'''<div class="card"><h2>Playback</h2><div class="slider"><div class="sh"><span>Brightness</span><span id="bv" class="value"></span></div><input id="brightness" type="range" min=".1" max="1" step=".05" oninput="pct('bv',this.value);range('brightness',this.value)"></div><div class="slider"><div class="sh"><span>Speed</span><span id="sv" class="value"></span></div><input id="speed" type="range" min=".1" max="5" step=".1" oninput="num('sv',this.value,'x');range('speed',this.value)"></div><div class="g2"><button id="pause" onclick="cmd('toggle_pause')">Pause</button><button onclick="cmd('reload_library')">Reload Library</button></div></div>'''
     slideshow=r'''<div class="card"><h2>Slideshow</h2><div class="muted" id="selection"></div><div class="slider"><div class="sh"><span>Seconds per item</span><span id="dv" class="value">5s</span></div><input id="duration" type="range" min="1" max="30" value="5" oninput="dv.textContent=this.value+'s'"></div><div class="g3"><button onclick="start(false)">Play</button><button onclick="start(true)">Shuffle</button><button class="warn" onclick="cmd('slideshow_stop')">Stop</button></div><div class="g2" style="margin-top:8px"><button onclick="step(-1)">◀ Previous</button><button onclick="step(1)">Next ▶</button></div></div>'''
     library_section=r'''<section id="library" class="view"><div class="card"><div class="row"><h2>Library</h2><div id="count" class="muted"></div></div><div id="filters" class="filters"></div><div id="gallery" class="gallery"></div></div></section>'''
-    html=html.replace(now_playing,'',1).replace(effects,'',1).replace(playback,'',1).replace(slideshow,SCENE_CARD+SHOW_CARD+LIBRARY_CARD,1).replace(library_section,'',1)
+    html=html.replace(now_playing,'',1).replace(effects,'',1).replace(playback,'',1).replace(slideshow,SHOW_CARD+LIBRARY_CARD,1).replace(library_section,'',1)
     html=html.replace('<section id="edit" class="view">',TEXT_SECTION+'\n'+GUEST_SECTION+'\n<section id="edit" class="view">'+DISPLAY_CARD,1)
     html=html.replace('<div id="reactiveLayerMount"></div>',LAYER_BLOCK,1).replace('<h2>Sound → Visuals</h2>','<h2>Audio Style</h2>',1).replace('effectRender();','')
     html=html.replace('async function update(){',PERFORMANCE_JS+'\nasync function update(){',1)
@@ -122,4 +116,3 @@ def apply(html):
 
 
 PhoneControlServer=phone_server.PhoneControlServer
-
