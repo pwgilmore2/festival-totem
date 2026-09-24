@@ -861,10 +861,13 @@ class TotemRuntime:
         elif command == "schedule_update":
             self.info_scenes.schedule = clean_schedule(value)
             self.info_scenes.schedule_index = 0
+            self.info_scenes.schedule_manual = False
+        elif command == "schedule_append":
+            self.info_scenes.schedule = clean_schedule(self.info_scenes.schedule + clean_schedule(value))
+        elif command == "schedule_day":
+            self.info_scenes.select_day(value)
         elif command == "schedule_step":
-            count = len(self.info_scenes.schedule)
-            if count:
-                self.info_scenes.schedule_index = (self.info_scenes.schedule_index + (1 if value == 1 else -1)) % count
+            self.info_scenes.step_schedule(value)
         elif command == "icon_background":
             if value in ("Black", "GIF"):
                 for side in self.target_sides():
@@ -1106,8 +1109,9 @@ class TotemRuntime:
             "mirrored": self.mirrored,
             "weather": dict(self.info_scenes.weather),
             "scene_backgrounds": dict(self.info_scenes.backgrounds),
-            "schedule": list(self.info_scenes.schedule),
+            "schedule_count": len(self.info_scenes.schedule),
             "schedule_index": self.info_scenes.schedule_index,
+            "schedule_day": self.info_scenes.schedule_day,
             "clock_ready": self.info_scenes.local_time() is not None,
             "text_fonts": list(TEXT_FONTS),
             "text_motions": list(TEXT_MOTIONS),

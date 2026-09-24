@@ -133,6 +133,15 @@ class TotemRuntimeTests(unittest.TestCase):
         self.assertIn("front", media.rendered)
         self.assertIn("back", media.rendered)
 
+    def test_schedule_batches_preserve_multiple_days(self):
+        runtime, _ = self.make_runtime()
+        runtime.handle_command({"command": "schedule_update", "value": [{"day": "2026-09-30", "name": "One"}]})
+        runtime.handle_command({"command": "schedule_append", "value": [{"day": "2026-10-02", "name": "Two"}]})
+        runtime.handle_command({"command": "schedule_day", "value": "2026-10-02"})
+        self.assertEqual(runtime.info_scenes.day_schedule()[0]["name"], "Two")
+        runtime.handle_command({"command": "schedule_day", "value": "Auto"})
+        self.assertEqual(len(runtime.info_scenes.schedule), 2)
+
     def test_mirror_only_renders_front_and_suspends_back_stream(self):
         runtime, media = self.make_runtime()
         runtime.handle_command({"command": "mirror_displays", "value": True})

@@ -1,7 +1,7 @@
 """Small, asset-independent 64x32 scenes shared by desktop and CircuitPython.
 
-Clock time is explicitly supplied by a phone or future network time sync. Weather
-is entered by the operator; this renderer never makes a network request.
+Clock time and the festival's UTC offset are supplied by the phone. Weather is
+supplied by the phone; this renderer never makes a network request.
 """
 
 import math
@@ -12,6 +12,8 @@ from text import FONT
 
 SCENES = ("Clock", "Weather", "Set Times", "Waveform")
 CONDITIONS = ("Clear", "Cloudy", "Rain", "Snow", "Wind")
+FESTIVAL_DAYS = (("2026-09-30", "WED"), ("2026-10-01", "THU"),
+                 ("2026-10-02", "FRI"), ("2026-10-03", "SAT"))
 
 
 def clamp01(value):
@@ -25,13 +27,14 @@ def clean_schedule(value):
     if not isinstance(value, list):
         return []
     result = []
-    for entry in value[:32]:
+    for entry in value[:128]:
         if not isinstance(entry, dict):
             continue
         name = str(entry.get("name", "")).strip()[:36]
         when = str(entry.get("time", "")).strip()[:12]
-        if name and when:
-            result.append({"name": name, "time": when})
+        day = str(entry.get("day", "2026-09-30"))
+        if name and day in (item[0] for item in FESTIVAL_DAYS):
+            result.append({"name": name, "time": when, "day": day})
     return result
 
 
@@ -41,26 +44,103 @@ class InfoScenes:
         self.height = height
         self.clock_epoch = None
         self.clock_at = 0.0
+        self.clock_offset = 0
         self.weather = {"temperature": "", "condition": "Clear"}
         self.backgrounds = {"Clock": "Black", "Weather": "Sky", "Set Times": "Black", "Waveform": "Black"}
         self.schedule = []
         self.schedule_index = 0
+        self.schedule_day = "Auto"
+        self.schedule_manual = False
 
-    def sync_time(self, epoch):
+    def sync_time(self, value):
+        offset = 0
+        if isinstance(value, dict):
+            offset = value.get("offset_seconds", 0)
+            value = value.get("epoch")
         try:
-            epoch = float(epoch)
+            epoch = float(value)
+            offset = int(offset)
         except (TypeError, ValueError, OverflowError):
             return False
-        if not 946684800 <= epoch <= 4102444800:  # 2000..2100
+        if not 946684800 <= epoch <= 4102444800 or not -50400 <= offset <= 50400:
             return False
         self.clock_epoch = epoch
+        self.clock_offset = offset
         self.clock_at = time.monotonic()
         return True
 
     def local_time(self):
         if self.clock_epoch is None:
             return None
-        return time.localtime(int(self.clock_epoch + time.monotonic() - self.clock_at))
+        return time.gmtime(int(self.clock_epoch + self.clock_offset + time.monotonic() - self.clock_at))
+
+    def active_day(self, now=None):
+        if self.schedule_day != "Auto":
+            return self.schedule_day
+        now = now or self.local_time()
+        if now is None:
+            return FESTIVAL_DAYS[0][0]
+        date = "%04d-%02d-%02d" % (now.tm_year, now.tm_mon, now.tm_mday)
+        days = [day for day, _ in FESTIVAL_DAYS]
+        if date in days:
+            index = days.index(date)
+            if now.tm_hour < 9 and index > 0:
+                index -= 1  # Overnight sets still belong to the previous evening.
+            return days[index]
+        if date == "2026-10-04" and now.tm_hour < 9:
+            return days[-1]
+        return days[0] if date < days[0] else days[-1]
+
+    def day_schedule(self, now=None):
+        day = self.active_day(now)
+        return [entry for entry in self.schedule if entry["day"] == day]
+
+    def select_day(self, day):
+        if day != "Auto" and day not in (item[0] for item in FESTIVAL_DAYS):
+            return
+        self.schedule_day = day
+        self.schedule_index = 0
+        self.schedule_manual = False
+
+    def step_schedule(self, direction):
+        rows = self.day_schedule()
+        if rows:
+            self.schedule_index = (self.current_schedule_index(rows) + (1 if direction == 1 else -1)) % len(rows)
+            self.schedule_manual = True
+
+    def current_schedule_index(self, rows, now=None):
+        if not rows:
+            return 0
+        if self.schedule_manual:
+            return self.schedule_index % len(rows)
+        now = now or self.local_time()
+        if now is None or self.schedule_day != "Auto":
+            return 0
+        minutes = now.tm_hour * 60 + now.tm_min
+        if now.tm_hour < 9:
+            minutes += 1440
+        selected = 0
+        for index, row in enumerate(rows):
+            parts = row["time"].upper().replace(" ", "")
+            suffix = parts[-2:]
+            try:
+                if suffix in ("AM", "PM"):
+                    hour, minute = (int(x) for x in parts[:-2].split(":"))
+                    if not 1 <= hour <= 12:
+                        continue
+                    hour = hour % 12 + (12 if suffix == "PM" else 0)
+                else:
+                    hour, minute = (int(x) for x in parts.split(":"))
+                    if not 0 <= hour <= 23:
+                        continue
+                if not 0 <= minute <= 59:
+                    continue
+            except (ValueError, IndexError):
+                continue
+            start = hour * 60 + minute + (1440 if hour < 9 else 0)
+            if start <= minutes:
+                selected = index
+        return selected
 
     def set_weather(self, value):
         if not isinstance(value, dict):
@@ -139,20 +219,21 @@ class InfoScenes:
             if now is None:
                 self.draw_label(display, "SET TIME", 12, (140, 185, 225))
             else:
-                hour = now.tm_hour % 12 or 12
-                self.draw_label(display, "%d:%02d" % (hour, now.tm_min), 12, (235, 243, 255))
-                self.draw_label(display, "AM" if now.tm_hour < 12 else "PM", 23, (125, 180, 225))
+                self.draw_label(display, "%02d:%02d" % (now.tm_hour, now.tm_min), 12, (235, 243, 255))
         elif mode == "Weather":
             temperature = self.weather["temperature"]
-            self.draw_label(display, temperature + "F" if temperature else "WEATHER", 9, (236, 243, 255))
-            self.draw_label(display, self.weather["condition"], 22, (125, 190, 220))
+            self.draw_label(display, temperature + "F" if temperature else "--F", 3, (236, 243, 255), 2)
+            self.draw_label(display, self.weather["condition"] if temperature else "NO DATA", 23, (125, 190, 220))
         elif mode == "Set Times":
-            if not self.schedule:
-                self.draw_label(display, "NO SET TIMES", 12, (140, 185, 225))
+            day = self.active_day(now)
+            self.draw_label(display, dict(FESTIVAL_DAYS)[day], 1, (125, 190, 220))
+            rows = self.day_schedule(now)
+            if not rows:
+                self.draw_label(display, "TIMES TBA", 15, (140, 185, 225))
             else:
-                item = self.schedule[self.schedule_index % len(self.schedule)]
-                self.draw_label(display, item["time"], 6, (180, 234, 240))
+                item = rows[self.current_schedule_index(rows, now)]
+                self.draw_label(display, item["time"] or "TIME TBA", 10, (180, 234, 240))
                 name = item["name"].upper()
                 if len(name) * 7 - 2 > display.width:
                     name = name[:9]
-                self.draw_label(display, name, 19, (235, 243, 255))
+                self.draw_label(display, name, 22, (235, 243, 255))

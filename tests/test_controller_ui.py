@@ -74,7 +74,8 @@ class ControllerUICompositionTests(unittest.TestCase):
                        'data-info-scene="Set Times"', 'data-info-scene="Waveform"',
                        'id="sceneSetTimes"', 'id="mirrorButton"',
                        'data-text-bg="Black"', 'data-icon-bg="Black"',
-                       'data-clock-bg="Sky"'):
+                       'data-clock-bg="Sky"', 'window.refreshTotemWeather=',
+                       'data-schedule-day="2026-10-03"', 'America/Chicago'):
             self.assert_once(marker)
 
     def test_desktop_icon_previews_can_refresh_after_library_reload(self):
