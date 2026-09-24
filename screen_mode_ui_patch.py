@@ -2,15 +2,15 @@
 
 _CSS = r'''
 <style>
-.vibeScreenMode{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0 2px}.vibeScreenMode button{min-height:44px}.vibeScreenMode button.active{background:#343442;box-shadow:none}.vibeScreenMode button.active:after{content:'';display:inline-block;width:7px;height:7px;margin-left:7px;background:#5bebb0;border-radius:50%}
+.vibeScreenMode{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:10px 0 2px}.vibeScreenMode button{min-height:52px;padding:8px 5px;font-size:12px}.vibeScreenMode button:nth-child(1){background:linear-gradient(145deg,#333f69,#295779)}.vibeScreenMode button:nth-child(2){background:linear-gradient(145deg,#58409a,#356192)}.vibeScreenMode button:nth-child(3){background:linear-gradient(145deg,#80438a,#493d8c)}.vibeScreenMode button.active{background:#343442;box-shadow:none}.vibeScreenMode button.active:after{content:'';display:inline-block;width:7px;height:7px;margin-left:7px;background:#5bebb0;border-radius:50%}
 .vibeScreenHint{font-size:11px;opacity:.62;text-align:center;margin-bottom:9px}
 #panelCard{scroll-margin-top:120px}.panelTarget{margin-top:13px;padding-top:13px;border-top:1px solid #ffffff22}.panelTarget[hidden]{display:none}.panelTarget h3{font-size:14px;margin:0 0 8px}.panelTarget button.active{background:#343442}.panelTarget button.active:after{content:'';display:inline-block;width:7px;height:7px;margin-left:7px;background:#5bebb0;border-radius:50%}
 </style>
 '''
 
 _PANEL_CARD = r'''<div id="panelCard" class="card"><h2>Panels</h2><div class="muted">Choose how the two sides play. Front / Both / Back appears when they run independently.</div>
-<div class="vibeScreenMode"><button id="screenModeIndependent" onclick="setVibeScreenMode(false)">Independent</button><button id="screenModeLinked" onclick="setVibeScreenMode(true)">Linked</button></div>
-<div id="vibeScreenHint" class="vibeScreenHint"></div><button id="mirrorButton" onclick="toggleTotemMirror()">Mirror both panels</button>'''
+<div class="vibeScreenMode"><button id="screenModeIndependent" onclick="setVibeScreenMode('independent')">Independent</button><button id="screenModeLinked" onclick="setVibeScreenMode('linked')">Linked</button><button id="screenModeMirrored" onclick="setVibeScreenMode('mirrored')">Mirrored</button></div>
+<div id="vibeScreenHint" class="vibeScreenHint"></div>'''
 
 _JS = r'''
 <script>
@@ -21,14 +21,21 @@ _JS = r'''
 
  function allVibeIds(){return (state.library||[]).map(x=>x.index).filter(Number.isInteger)}
  function syncScreenModeUI(){
-   const i=document.getElementById('screenModeIndependent'),l=document.getElementById('screenModeLinked'),h=document.getElementById('vibeScreenHint');
-   const linked=vibeLinked||!!state?.mirrored;
-   if(i){i.classList.toggle('active',!linked);i.disabled=!!state?.mirrored}
+   const i=document.getElementById('screenModeIndependent'),l=document.getElementById('screenModeLinked'),m=document.getElementById('screenModeMirrored'),h=document.getElementById('vibeScreenHint');
+   const mirrored=!!state?.mirrored,linked=vibeLinked&&!mirrored;
+   if(i)i.classList.toggle('active',!linked&&!mirrored);
    if(l)l.classList.toggle('active',linked);
-   if(h)h.textContent=state?.mirrored?'Mirrored: one rendered image is shown on both panels.':(linked?'Linked: front and back use the same shuffled sequence.':'Independent: each panel gets its own shuffled GIF sequence.');
-   const target=document.getElementById('targetCard');if(target)target.hidden=linked;
+   if(m)m.classList.toggle('active',mirrored);
+   if(h)h.textContent=mirrored?'Mirrored: one rendered image is copied to both panels.':(linked?'Linked: both panels start together, each rendered separately.':'Independent: each panel gets its own shuffled GIF sequence.');
+   const target=document.getElementById('targetCard');if(target)target.hidden=linked||mirrored;
  }
- window.setVibeScreenMode=function(linked){vibeLinked=!!linked;try{localStorage.setItem(KEY,vibeLinked?'linked':'independent')}catch(_){ }if(vibeLinked)cmd('set_target','both');syncScreenModeUI()}
+ window.setVibeScreenMode=async function(mode){if(!['independent','linked','mirrored'].includes(mode))return;
+   vibeLinked=mode==='linked';try{localStorage.setItem(KEY,vibeLinked?'linked':'independent')}catch(_){ }
+   if(mode==='mirrored'){await cmd('mirror_displays',true)}
+   else if(state?.mirrored){await cmd('mirror_displays',false)}
+   if(mode!=='independent')await cmd('set_target','both');
+   syncScreenModeUI()
+ }
 
  window.startVibeRandom=async function(){
    const items=allVibeIds();if(!items.length)return;
@@ -56,7 +63,7 @@ _JS = r'''
  }
 
  setInterval(syncScreenModeUI,500);
- window.addEventListener('load',()=>{if(vibeLinked)cmd('set_target','both');syncScreenModeUI()});
+ window.addEventListener('load',()=>{if(vibeLinked&&!state?.mirrored)cmd('set_target','both');syncScreenModeUI()});
 })();
 </script>
 '''

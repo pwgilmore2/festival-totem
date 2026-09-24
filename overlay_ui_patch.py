@@ -25,12 +25,7 @@ _ICONS_SECTION = r'''
 <div class="iconHint">PNG icons render at native size, centered by their canvas. Slightly oversized edges may clip. Tap an icon to show it; tap the active icon again to clear it.</div>
 <div id="iconErrors" class="iconHint" style="display:none"></div>
 <div id="overlayIconGrid" class="iconGrid"></div>
-<div class="iconControls">
-<div class="sh"><span>Motion</span><span class="tiny">whole-pixel movement only</span></div>
-<div id="iconMotionGrid" class="iconMotionGrid"></div>
-<div class="iconFadeNote">Icons automatically dissolve + fade in when shown and dissolve + fade out when cleared.</div>
-
-</div>
+<div class="iconFadeNote">Icons automatically dissolve + fade in when shown and dissolve + fade out when cleared. Choose icon motion in Manage → Overlay Behavior.</div>
 <div class="modeNotice">Full-size icons and text are currently exclusive: selecting an icon hides text, and showing text hides the icon.</div>
 </div></section>
 '''

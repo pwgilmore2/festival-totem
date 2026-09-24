@@ -20,6 +20,7 @@ from transition_ui_patch import apply as apply_transition_labels
 from performance_ui_reorg_patch import apply as apply_performance_layout
 from screen_mode_ui_patch import apply as apply_screen_mode
 from info_scene_ui import apply as apply_info_scenes
+from manage_layout_ui import apply as apply_manage_layout
 
 
 BASE_CONTROLLER_HTML = phone_server.PHONE_HTML
@@ -58,6 +59,7 @@ CONTROLLER_TRANSFORMS = (
     apply_performance_layout,
     apply_screen_mode,
     apply_info_scenes,
+    apply_manage_layout,
     normalize_vibe_language,
 )
 

@@ -65,6 +65,7 @@ class ControllerUICompositionTests(unittest.TestCase):
             'id="intenseTransitionGrid"',
             'id="screenModeIndependent"',
             'id="screenModeLinked"',
+            'id="screenModeMirrored"',
             'id="sceneStatus"',
         ):
             self.assert_once(marker)
@@ -74,7 +75,7 @@ class ControllerUICompositionTests(unittest.TestCase):
         self.assertIn('Clock + Weather', self.html)
         for marker in ('data-info-scene="Clock"',
                        'data-info-scene="Set Times"', 'data-info-scene="Waveform"',
-                       'id="sceneSetTimes"', 'id="mirrorButton"',
+                       'id="sceneSetTimes"', 'id="screenModeMirrored"',
                        'data-overlay-bg="Black"', 'data-overlay-bg="Dimmed"',
                        'data-overlay-bg="None"',
                        'data-clock-bg="Sky"', 'window.refreshTotemWeather=',
@@ -86,20 +87,22 @@ class ControllerUICompositionTests(unittest.TestCase):
         self.assert_once('id="micButton"')
         self.assert_once('id="panelCard"')
         self.assert_once('id="targetCard"')
-        self.assert_once('id="mirrorButton"')
+        self.assert_once('id="screenModeMirrored"')
+        self.assertNotIn('id="mirrorButton"', html)
         self.assertNotIn('id="sceneButtons"', html)
         self.assertNotIn('<h2>Performance Modes</h2>', html)
         self.assertLess(html.index('id="micButton"'), html.index('<div class="tabs">'))
         self.assertGreater(html.index('id="panelCard"'), html.index('<section id="edit"'))
         self.assertLess(html.index('id="panelCard"'), html.index('id="targetCard"'))
-        self.assertLess(html.index('id="panelCard"'), html.index('id="mirrorButton"'))
+        self.assertLess(html.index('id="panelCard"'), html.index('id="screenModeMirrored"'))
         self.assertIn("[audio,icons,text,guest]", html)
         self.assertNotIn('id="tabScenes"', html)
         self.assertIn("if(mode==='Waveform'&&window.ensureLiveAudio", html)
         self.assertIn("id==='starter:pulse'", html)
-        scenes = html.split('<h2>Scenes</h2>', 1)[1].split('id="sceneStatus"', 1)[0]
-        self.assertLess(scenes.index('>Waveform</button>'), scenes.index('>Back to GIFs</button>'))
-        self.assertNotIn('id="mirrorButton"', scenes)
+        scenes = html.split('<summary>🎭 Scenes', 1)[1].split('id="sceneStatus"', 1)[0]
+        self.assertLess(scenes.index('Waveform</button>'), scenes.index('Back to GIFs</button>'))
+        self.assertNotIn('id="screenModeMirrored"', scenes)
+        self.assertIn('class="infoSceneCard sceneChooser"', html)
         setup = html.split('id="panelCard"', 1)[1]
         self.assertIn('data-clock-bg="Black"', setup)
         self.assertLess(html.index('id="vibeLaunchCard"'), html.index('id="myVibeButtons"'))
@@ -107,6 +110,10 @@ class ControllerUICompositionTests(unittest.TestCase):
         self.assertGreater(html.index('id="reactiveMappingCard"'), html.index('<section id="edit"'))
         self.assert_once('id="manageVibeButtons"')
         self.assert_once('<summary>Input Settings</summary>')
+        self.assertIn("['setup','✨ Overlay behavior',['Overlay Behavior'],false]", html)
+        self.assertIn("['setup','🎚️ Audio presets & mappings',['Audio Preset Management','Audio Style','Sound → Visuals'],false]", html)
+        self.assertIn('window.selectManageGroup=function(kind)', html)
+        self.assertEqual(html.count('id="iconMotionGrid"'), 1)
 
     def test_desktop_icon_previews_can_refresh_after_library_reload(self):
         previews = {"First": "data:image/png;base64,AAAA"}
