@@ -195,7 +195,7 @@ class TextRenderer:
             color = base_color
             if color_mode == "Rainbow":
                 color = hsv_color(t * 75 + index * 28, .95, min(1.0, pulse))
-            elif pulse > 1.0:
+            elif pulse != 1.0:
                 color = tuple(min(255, int(c * pulse)) for c in base_color)
             self._draw_glyph(display, ch, cursor, y, color, scale, font)
             cursor += 5 * scale + spacing

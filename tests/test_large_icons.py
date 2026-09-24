@@ -13,6 +13,22 @@ from overlay_ui_patch import _icon_preview_data
 
 
 class LargeIconTests(unittest.TestCase):
+    def test_audio_changes_text_brightness_without_changing_glyph_shape(self):
+        renderer = OverlayRenderer(64, 32, IconLibrary())
+        base = {"message": "HELLO", "font": "Pixel", "color_mode": "Solid",
+                "color": "#ffffff", "scale": 1, "backplate": False}
+        quiet = VirtualDisplay(64, 32)
+        intense = VirtualDisplay(64, 32)
+        renderer.draw_text(quiet, {**base, "audio_reactivity": "Off"}, 0,
+                           signals={"bass": 0, "highs": 0, "beat": False})
+        renderer.draw_text(intense, {**base, "audio_reactivity": "Intense"}, 0,
+                           signals={"bass": 0, "highs": 0, "beat": False})
+        mask = lambda display: {(x, y) for y, row in enumerate(display.pixels)
+                                for x, pixel in enumerate(row) if pixel != (0, 0, 0)}
+        self.assertEqual(mask(quiet), mask(intense))
+        self.assertLess(sum(intense.get_pixel(x, y)[0] for x, y in mask(intense)),
+                        sum(quiet.get_pixel(x, y)[0] for x, y in mask(quiet)))
+
     def test_desktop_and_hardware_read_the_same_sample(self):
         desktop = IconLibrary().get("Liquid Stranger")
         hardware = EmbeddedIconLibrary().get("Liquid Stranger")

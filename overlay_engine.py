@@ -109,6 +109,10 @@ class OverlayRenderer:
                 px = x0 + sx
                 py = y0 + sy
                 brightness = max(0.0, min(1.0, amount))
+                if audio_mode == "Subtle":
+                    brightness *= min(1.0, .78 + bass * .16 + (.10 if beat else 0))
+                elif audio_mode in ("Reactive", "Intense"):
+                    brightness *= min(1.0, .60 + bass * .30 + mids * .08 + (.18 if beat else 0))
                 color = (int(r * brightness), int(g * brightness), int(b * brightness))
                 pixels.append((px, py, color))
 
@@ -175,30 +179,20 @@ class OverlayRenderer:
         highs = clamp01(signals.get("highs", 0.0))
         beat = bool(signals.get("beat", False))
         audio_mode = settings.get("audio_reactivity", "Off")
-        if audio_mode not in ("Off", "Subtle", "Reactive"):
+        if audio_mode not in ("Off", "Subtle", "Reactive", "Intense"):
             audio_mode = "Off"
 
         base = parse_color(settings.get("color", "#ffffff"))
         pulse = 1.0
         if audio_mode == "Subtle":
-            pulse = 1.0 + bass * 0.10 + (0.06 if beat else 0.0)
-        elif audio_mode == "Reactive":
-            pulse = 1.0 + bass * 0.24 + (0.16 if beat else 0.0)
+            pulse = min(1.0, .78 + bass * .16 + (.10 if beat else 0.0))
+        elif audio_mode in ("Reactive", "Intense"):
+            pulse = min(1.0, .60 + bass * .30 + highs * .08 + (.18 if beat else 0.0))
 
         def draw_line(line, x, y, draw_backplate=True):
             width = self.text.text_width(line, scale, font)
             if draw_backplate and settings.get("backplate"):
                 self.text._backplate(display, x, y, width, 7 * scale)
-
-            glow_strength = 0.0
-            if audio_mode == "Subtle":
-                glow_strength = 0.10 + highs * 0.05
-            elif audio_mode == "Reactive":
-                glow_strength = 0.17 + highs * 0.12
-            if glow_strength > 0:
-                glow = tuple(min(255, int(c * glow_strength)) for c in base)
-                for ox, oy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
-                    self.text._draw_text(display, line, x + ox, y + oy, glow, scale, font, color_mode, text_t, pulse)
 
             self.text._draw_text(display, line, x, y, base, scale, font, color_mode, text_t, pulse)
 
@@ -216,11 +210,6 @@ class OverlayRenderer:
             for line, y in zip(lines, (y1, y2)):
                 width = self.text.text_width(line, scale, font)
                 x = (self.width - width) // 2
-                if audio_mode == "Subtle" and beat:
-                    y -= 1
-                elif audio_mode == "Reactive":
-                    x += int(round(math.sin(text_t * 3.1) * mids * 1.5))
-                    y += int(round(math.sin(text_t * 5.7) * bass * 1.5)) - (1 if beat else 0)
                 positions.append((line, x, y, width))
 
             if settings.get("backplate"):
@@ -244,16 +233,6 @@ class OverlayRenderer:
             total = self.width + width
             x = self.width - (int(text_t * speed) % max(1, total))
             y = self.height - 7 * scale - 1 if bottom else (self.height - 7 * scale) // 2
-
-        if audio_mode == "Subtle":
-            y -= 1 if beat else 0
-        elif audio_mode == "Reactive":
-            x += int(round(math.sin(text_t * 3.1) * mids * 1.5))
-            y += int(round(math.sin(text_t * 5.7) * bass * 1.5)) - (1 if beat else 0)
-            if highs > .60:
-                rng = random.Random(seed + int(text_t * 20))
-                if rng.random() < highs * .12:
-                    x += rng.choice((-1, 1))
 
         draw_line(line, x, y)
         if audio_mode == "Reactive" and beat:

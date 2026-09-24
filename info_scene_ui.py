@@ -1,19 +1,21 @@
-"""Controller scene tab and black-background choices."""
+"""Scene playback controls and shared overlay preferences."""
 
 _CSS = r'''<style>
 .infoSceneGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}.infoSceneGrid button{min-height:49px}.infoSceneGrid button.active,.backgroundChoice button.active,#mirrorButton.active{background:#343442}.infoSceneGrid button.active:after,.backgroundChoice button.active:after,#mirrorButton.active:after{content:"";display:inline-block;width:7px;height:7px;margin-left:7px;background:#5bebb0;border-radius:50%}
-.infoSceneCard input,.infoSceneCard select,.infoSceneCard textarea{width:100%;background:#202029;color:white;border:1px solid #444456;border-radius:9px;padding:10px;font:inherit;font-size:16px}.infoSceneCard textarea{min-height:113px;resize:vertical}.infoSceneCard .muted{line-height:1.4;margin:7px 0}.infoSceneCard .row{margin-top:10px}.infoSceneCard .row input{max-width:95px}.infoSceneCard .row select{max-width:155px}.backgroundChoice{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:7px 0}
+.infoSceneCard input,.infoSceneCard select,.infoSceneCard textarea{width:100%;background:#202029;color:white;border:1px solid #444456;border-radius:9px;padding:10px;font:inherit;font-size:16px}.infoSceneCard textarea{min-height:113px;resize:vertical}.infoSceneCard .muted{line-height:1.4;margin:7px 0}.infoSceneCard .row{margin-top:10px}.infoSceneCard .row input{max-width:95px}.infoSceneCard .row select{max-width:155px}.backgroundChoice{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:7px 0}.overlayBackgroundChoice{grid-template-columns:repeat(3,1fr)}.overlayBackgroundChoice button{min-height:48px;font-size:12px}.vibeLaunch .sceneChooser{margin-top:14px;padding:12px;border:1px solid #ffffff1c;border-radius:13px;background:radial-gradient(circle at 100% 0%,#ec58a52a,transparent 55%),#171823}.vibeLaunch .sceneChooser h2{font-size:16px!important}
 </style>'''
 
-_SECTION = r'''<section id="scenes" class="view">
-<div class="card infoSceneCard"><h2>Scenes</h2><div class="muted">Switch out the GIF for a dedicated scene. Tap GIFs to return.</div>
+_SECTION = r'''<div class="infoSceneCard sceneChooser"><h2>Scenes</h2><div class="muted">Switch the display, then return to the slideshow whenever you like.</div>
 <div class="infoSceneGrid"><button data-info-scene="Clock" onclick="selectInfoScene('Clock')">Clock + Weather</button><button data-info-scene="Set Times" onclick="selectInfoScene('Set Times')">Set Times</button><button data-info-scene="Waveform" onclick="selectInfoScene('Waveform')">Waveform</button><button onclick="selectInfoScene(null)">Back to GIFs</button></div>
-<div class="muted" id="sceneStatus">Clock needs phone time after each power cycle. Refresh weather below when connected.</div></div>
-<div class="card infoSceneCard"><h2>Clock + Weather</h2><div class="muted">Tap Clock + Weather above to sync time and refresh festival weather. The last reading stays on screen if the phone is offline.</div>
+<div class="muted" id="sceneStatus">Clock syncs from your phone. Weather refreshes when you enter that scene.</div></div>
+'''
+
+_SETTINGS = r'''
+<div class="card infoSceneCard"><h2>Clock + Weather Settings</h2><div class="clockBackgroundChoice"><div class="sh"><span>Clock + Weather background</span></div><div class="backgroundChoice"><button data-clock-bg="Sky" onclick="setClockBackground('Sky')">Day / Dusk / Night</button><button data-clock-bg="Black" onclick="setClockBackground('Black')">Black</button></div></div><div class="muted">Choosing Clock + Weather in Vibe syncs time and refreshes festival weather. The last reading stays on screen if the phone is offline.</div>
 <div class="infoSceneGrid"><button onclick="refreshTotemWeather(false)">Refresh festival weather</button><button onclick="refreshTotemWeather(true)">Use phone location</button></div><div class="muted" id="weatherStatus">Festival location is the default. Phone location needs browser location permission and HTTPS.</div>
 <div class="row"><input id="weatherTemp" inputmode="numeric" maxlength="4" placeholder="Temp °F" aria-label="Temperature in Fahrenheit"><select id="weatherCondition"><option>Clear</option><option>Cloudy</option><option>Rain</option><option>Snow</option><option>Wind</option></select><button onclick="saveTotemWeather()">Set manually</button></div></div>
-<div class="card infoSceneCard"><h2>Set Times</h2><div class="muted">Choose a night. Add an artist per line, optionally with a time: 9:30 PM | Artist. Times remain TBA until entered. The roster below is confirmed for the festival, but days are not assigned yet.</div><div class="infoSceneGrid" id="scheduleDayButtons"><button data-schedule-day="Auto" onclick="selectScheduleDay('Auto')">Auto</button><button data-schedule-day="2026-09-30" onclick="selectScheduleDay('2026-09-30')">Wed 9/30</button><button data-schedule-day="2026-10-01" onclick="selectScheduleDay('2026-10-01')">Thu 10/1</button><button data-schedule-day="2026-10-02" onclick="selectScheduleDay('2026-10-02')">Fri 10/2</button><button data-schedule-day="2026-10-03" onclick="selectScheduleDay('2026-10-03')">Sat 10/3</button></div><div class="muted" id="scheduleEditingDay">Editing Wednesday</div><textarea id="sceneSetTimes" placeholder="Artist name\n9:30 PM | Another artist"></textarea><button onclick="saveTotemSchedule()">Save this night</button><div class="infoSceneGrid" style="margin-top:8px"><button onclick="cmd('schedule_step',-1)">◀ Previous</button><button onclick="cmd('schedule_step',1)">Next ▶</button></div><details><summary>Official 2026 artist roster (days TBA)</summary><div class="muted" id="wakaanRoster"></div></details></div>
-</section>'''
+<div class="card infoSceneCard"><h2>Set Time Management</h2><div class="muted">Choose a night. Add an artist per line, optionally with a time: 9:30 PM | Artist. Times remain TBA until entered. The roster below is confirmed for the festival, but days are not assigned yet.</div><div class="infoSceneGrid" id="scheduleDayButtons"><button data-schedule-day="Auto" onclick="selectScheduleDay('Auto')">Auto</button><button data-schedule-day="2026-09-30" onclick="selectScheduleDay('2026-09-30')">Wed 9/30</button><button data-schedule-day="2026-10-01" onclick="selectScheduleDay('2026-10-01')">Thu 10/1</button><button data-schedule-day="2026-10-02" onclick="selectScheduleDay('2026-10-02')">Fri 10/2</button><button data-schedule-day="2026-10-03" onclick="selectScheduleDay('2026-10-03')">Sat 10/3</button></div><div class="muted" id="scheduleEditingDay">Editing Wednesday</div><textarea id="sceneSetTimes" placeholder="Artist name\n9:30 PM | Another artist"></textarea><button onclick="saveTotemSchedule()">Save this night</button><div class="infoSceneGrid" style="margin-top:8px"><button onclick="cmd('schedule_step',-1)">◀ Previous</button><button onclick="cmd('schedule_step',1)">Next ▶</button></div><details><summary>Official 2026 artist roster (days TBA)</summary><div class="muted" id="wakaanRoster"></div></details></div>
+'''
 
 _JS = r'''<script>
 (function(){
@@ -22,22 +24,8 @@ _JS = r'''<script>
  // Official 2026 Wakaan alphabetical poster: wakaanfestival.com/wp-content/uploads/2026/08/Wakaan_MusicFestival_2026_Lineup_Final.png
  const ARTISTS='AHEE|ARTIFAKTS|ASHEZ|AYCH|CANABLISS|CANVAS|CAPOCHINO|CASEY CLUB|CHAMPAGNE DRIP|CHOZEN|CYCLOPS|DARK MATTER|DEBBIE CHECK|DETOX UNIT|DEV|DIRTYSNATCHA|DISTINCT MOTIVE|DOCTOR P|EAZYBAKED|FLOZONE|FLUX PAVILION|FLY|GALLIUM|GARDELLA|GETTER|HAIRTAGE|HERSHE|HOSTAGE SITUATION|JANTSEN|JILLI|JON CASEY|LIQUID STRANGER (2 SETS)|MACHINEDRUM|MEDUSO|MINDSET|MLOTIK|NOETIKA|NOSTALGIX|OF THE TREES|OVEREAZY|OZZTIN|PRETTY SWEET|RSUN|SATURNA|SHLUMP|SMOAKLAND|SPOONE|STVSH|STYLUST|SULLY|SUPER FUTURE|THE WIDDLER|TRUTH (2 SETS)|TVBOO|TWOPERCENT|VYHARA|WHETHAN|WONKYWILLA|WRAZ|XOTIX|YOOKIE|ZOUTH'.split('|');
  let schedule=[],editingDay=DAYS[0][0];
- const previousView=view;
- view=function(name){
-   if(name==='scenes'){
-     document.body.classList.remove('manageMode');
-     document.querySelectorAll('.view').forEach(el=>el.classList.toggle('active',el.id==='scenes'));
-     document.querySelectorAll('.tabs button').forEach(el=>el.classList.toggle('active',el.id==='tabScenes'));
-     return;
-   }
-   previousView(name);
-   document.getElementById('scenes')?.classList.remove('active');
-   document.getElementById('tabScenes')?.classList.remove('active');
- };
- const nav=document.querySelector('.tabs');
- if(nav){const button=document.createElement('button');button.id='tabScenes';button.textContent='Scenes';button.className='performancePrimary';button.onclick=()=>view('scenes');nav.appendChild(button)}
  window.syncTotemClock=()=>{const now=new Date(),epoch=Math.floor(now.getTime()/1000),parts=Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:'America/Chicago',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(now).filter(p=>p.type!=='literal').map(p=>[p.type,Number(p.value)]));const festivalWall=Date.UTC(parts.year,parts.month-1,parts.day,parts.hour,parts.minute,parts.second);return cmd('clock_sync',{epoch:epoch,offset_seconds:Math.round(festivalWall/1000)-epoch})};
- window.selectInfoScene=async function(mode){if(mode==='Waveform'&&window.ensureLiveAudio&&!(await ensureLiveAudio())){document.getElementById('sceneStatus').textContent='Waveform needs phone audio. Open this controller over HTTPS and allow the microphone.';return}if(mode==='Clock'||mode==='Set Times')await syncTotemClock();await cmd('info_scene',mode);refreshInfoScenes();if(mode==='Clock')refreshTotemWeather(false)};
+ window.selectInfoScene=async function(mode){if(mode==='Waveform'&&window.ensureLiveAudio&&!(await ensureLiveAudio())){document.getElementById('sceneStatus').textContent='Waveform needs phone audio. Open this controller over HTTPS and allow the microphone.';return}if(mode==='Clock'||mode==='Set Times')await syncTotemClock();await cmd('info_scene',mode);if(mode===null&&window.startVibeRandom)startVibeRandom();refreshInfoScenes();if(mode==='Clock')refreshTotemWeather(false)};
  window.saveTotemWeather=function(){let data={temperature:document.getElementById('weatherTemp').value.trim(),condition:document.getElementById('weatherCondition').value};try{localStorage.setItem(WEATHER_KEY,JSON.stringify(data))}catch(_){ }return cmd('weather_update',data)};
  window.refreshTotemWeather=async function(usePhone){const status=document.getElementById('weatherStatus');status.textContent='Getting current conditions…';try{let latitude=35.70987,longitude=-93.79483;if(usePhone){if(!navigator.geolocation)throw Error('Phone location needs HTTPS and browser location permission. Use Festival location instead.');const position=await new Promise((resolve,reject)=>navigator.geolocation.getCurrentPosition(resolve,reject,{timeout:12000,maximumAge:300000}));latitude=position.coords.latitude;longitude=position.coords.longitude}const url='https://api.open-meteo.com/v1/forecast?latitude='+encodeURIComponent(latitude)+'&longitude='+encodeURIComponent(longitude)+'&current=temperature_2m,weather_code,wind_speed_10m&temperature_unit=fahrenheit&wind_speed_unit=mph';const response=await fetch(url);if(!response.ok)throw Error('Weather service returned '+response.status);const data=(await response.json()).current;if(!data||!Number.isFinite(data.temperature_2m))throw Error('Weather service returned no current temperature');const code=Number(data.weather_code);let condition=code>=71&&code<=77||code>=85&&code<=86?'Snow':code>=51&&code<=67||code>=80&&code<=82||code>=95?'Rain':code>=2&&code<=3||code===45||code===48?'Cloudy':Number(data.wind_speed_10m)>=20?'Wind':'Clear';document.getElementById('weatherTemp').value=String(Math.round(data.temperature_2m));document.getElementById('weatherCondition').value=condition;await saveTotemWeather();status.textContent=condition+' · '+Math.round(data.temperature_2m)+'°F, updated '+new Date().toLocaleTimeString()+(usePhone?' near phone':' near festival')}catch(error){status.textContent='Could not refresh: '+(error.message||'location unavailable')+'. Last saved reading remains available.'}};
  function renderScheduleEditor(){document.getElementById('scheduleEditingDay').textContent='Editing '+(DAYS.find(x=>x[0]===editingDay)||DAYS[0])[1];document.getElementById('sceneSetTimes').value=schedule.filter(x=>x.day===editingDay).map(x=>(x.time?x.time+' | ':'')+x.name).join('\n')}
@@ -60,25 +48,20 @@ _JS = r'''<script>
 })();
 </script>'''
 
-_BLACK = r'''<div class="sh"><span>Background</span></div><div class="backgroundChoice"><button data-text-bg="Dimmed GIF" onclick="setTextBackground('Dimmed GIF')">Dimmed GIF</button><button data-text-bg="Black" onclick="setTextBackground('Black')">Black</button></div>'''
-_ICON_BLACK = r'''<div class="sh"><span>Background</span></div><div class="backgroundChoice"><button data-icon-bg="GIF" onclick="setIconBackground('GIF')">GIF</button><button data-icon-bg="Black" onclick="setIconBackground('Black')">Black</button></div>'''
+_OVERLAY_SETTINGS = r'''<div class="card infoSceneCard"><h2>Overlay Background Behavior</h2><div class="muted">Applies to icons and text on both screens.</div><div class="backgroundChoice overlayBackgroundChoice"><button data-overlay-bg="Black" onclick="setOverlayBackground('Black')">Black</button><button data-overlay-bg="Dimmed" onclick="setOverlayBackground('Dimmed')">Dimmed</button><button data-overlay-bg="None" onclick="setOverlayBackground('None')">None · GIF</button></div></div>'''
 _BG_JS = r'''<script>
 (function(){
- let textBackground='Dimmed GIF';
- const originalPayload=textPayload;
- textPayload=function(){let value=originalPayload();value.background=textBackground;return value};
- window.setTextBackground=function(value){if(value!=='Black'&&value!=='Dimmed GIF')return;textBackground=value;textChanged();syncBackgrounds()};
- window.setIconBackground=function(value){if(value!=='Black'&&value!=='GIF')return;cmd('icon_background',value)};
- function syncBackgrounds(){if(typeof state==='undefined'||!state)return;const t=state.text||{},i=state.icon||{};if(document.activeElement?.dataset?.textBg===undefined&&t.background)textBackground=t.background;document.querySelectorAll('[data-text-bg]').forEach(b=>b.classList.toggle('active',b.dataset.textBg===textBackground));document.querySelectorAll('[data-icon-bg]').forEach(b=>b.classList.toggle('active',b.dataset.iconBg===(i.background||'GIF')))}
- setInterval(syncBackgrounds,500);
+ window.setOverlayBackground=value=>{if(['Black','Dimmed','None'].includes(value)){try{localStorage.setItem('festivalTotem.overlayBackground.v1',value)}catch(_){}cmd('overlay_background',value)}};
+ window.addEventListener('load',()=>{const saved=localStorage.getItem('festivalTotem.overlayBackground.v1');if(['Black','Dimmed','None'].includes(saved))setOverlayBackground(saved)});
+ function syncOverlayBackground(){document.querySelectorAll('[data-overlay-bg]').forEach(b=>b.classList.toggle('active',b.dataset.overlayBg===state?.overlay_background))}
+ setInterval(syncOverlayBackground,400);
 })();
 </script>'''
 
 
 def apply(html):
     html = html.replace('</head>', _CSS + '</head>', 1)
-    html = html.replace('<section id="edit" class="view">', _SECTION + '<section id="edit" class="view">', 1)
-    html = html.replace('<div class="iconFadeNote">', _ICON_BLACK + '<div class="iconFadeNote">', 1)
-    html = html.replace('<div class="card textCard"><h2>Text Engine</h2>', '<div class="card textCard"><h2>Text Engine</h2>' + _BLACK, 1)
+    html = html.replace('<div class="vibeTransport"><button onclick="vibePrevious()">◀ Previous</button><button onclick="vibeNext()">Next ▶</button></div>', '<div class="vibeTransport"><button onclick="vibePrevious()">◀ Previous</button><button onclick="vibeNext()">Next ▶</button></div>' + _SECTION, 1)
+    html = html.replace('<div class="card"><h2>Quick Text Presets</h2>', _OVERLAY_SETTINGS + _SETTINGS + '<div class="card"><h2>Quick Text Presets</h2>', 1)
     html = html.replace('</body>', _BG_JS + _JS + '</body>', 1)
     return html

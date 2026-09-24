@@ -18,11 +18,6 @@ def apply(html):
         '<h2>Slideshow + Background Transitions</h2>',
     )
     html = html.replace(
-        '<h2>Slideshow + Background Transitions</h2>',
-        '<h2>Slideshow + Background Transitions</h2><div class="clockBackgroundChoice"><div class="sh"><span>Clock + Weather background</span></div><div class="backgroundChoice"><button data-clock-bg="Sky" onclick="setClockBackground(\'Sky\')">Day / Dusk / Night</button><button data-clock-bg="Black" onclick="setClockBackground(\'Black\')">Black</button></div></div>',
-        1,
-    )
-    html = html.replace(
         '<div class="transitionGrid">',
         '<div class="transitionScopeNote background"><strong>BACKGROUND ONLY</strong>Changes the GIF/image underneath. Icons and text stay steady.</div><div class="transitionGrid">',
         1,

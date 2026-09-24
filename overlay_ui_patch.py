@@ -29,7 +29,7 @@ _ICONS_SECTION = r'''
 <div class="sh"><span>Motion</span><span class="tiny">whole-pixel movement only</span></div>
 <div id="iconMotionGrid" class="iconMotionGrid"></div>
 <div class="iconFadeNote">Icons automatically dissolve + fade in when shown and dissolve + fade out when cleared.</div>
-<div class="iconActions"><button onclick="cmd('icon_clear')">CLEAR ICON</button></div>
+
 </div>
 <div class="modeNotice">Full-size icons and text are currently exclusive: selecting an icon hides text, and showing text hides the icon.</div>
 </div></section>

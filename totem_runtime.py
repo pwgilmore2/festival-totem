@@ -132,6 +132,8 @@ class TotemRuntime:
             }
             for side in SIDES
         }
+        self.overlay_background = "Dimmed"
+        self.overlay_audio_reactivity = "Off"
         self._media_suspended = {side: False for side in SIDES}
         self._separate_initial_media()
 
@@ -160,10 +162,26 @@ class TotemRuntime:
         panel = self.panels[side]
         if panel["info_scene"]:
             return True
-        return (panel["text"]["enabled"] and panel["text"]["background"] == "Black") or (
-            panel["icon"]["icon_enabled"] and not panel["text"]["enabled"]
-            and panel["icon"].get("background") == "Black"
+        return self.overlay_background == "Black" and (
+            panel["text"]["enabled"] or panel["icon"]["icon_enabled"]
         )
+
+    def set_overlay_background(self, value):
+        if value not in ("Black", "Dimmed", "None") or value == self.overlay_background:
+            return
+        for side in ("front", "back"):
+            panel = self.panels[side]
+            if panel["text"]["enabled"] or panel["icon"]["icon_enabled"]:
+                self._begin_background_transition(side)
+        self.overlay_background = value
+        for side in ("front", "back"):
+            self._refresh_media(side)
+
+    def set_overlay_audio_reactivity(self, value):
+        if value == "Reactive":
+            value = "Intense"
+        if value in ("Off", "Subtle", "Intense"):
+            self.overlay_audio_reactivity = value
 
     def _refresh_media(self, side):
         if (self.mirrored and side == "back") or self._black_background(side):
@@ -568,7 +586,7 @@ class TotemRuntime:
             return
         enabled_any = False
         for side in self.target_sides():
-            if self.panels[side]["icon"].get("background") == "Black":
+            if self.overlay_background == "Black":
                 self._begin_background_transition(side)
             self._exit_info_scene(side)
             state = self.panels[side]["icon"]
@@ -607,7 +625,7 @@ class TotemRuntime:
                 continue
             state["transition_active"] = False
             if not state.get("transition_entering", True):
-                if state.get("background") == "Black" and not self.panels[side]["text"]["enabled"]:
+                if self.overlay_background == "Black" and not self.panels[side]["text"]["enabled"]:
                     self._begin_background_transition(side)
                 state["icon_enabled"] = False
 
@@ -616,12 +634,6 @@ class TotemRuntime:
             return
         for side in self.target_sides():
             state = self.panels[side]["text"]
-            if (
-                state["enabled"]
-                and value.get("background") in ("Black", "Dimmed GIF")
-                and value["background"] != state["background"]
-            ):
-                self._begin_background_transition(side)
             if "message" in value:
                 state["message"] = str(value["message"])[:120]
             if value.get("font") in TEXT_FONTS:
@@ -639,13 +651,6 @@ class TotemRuntime:
                     state["scale"] = max(1, min(3, int(value["scale"])))
                 except (TypeError, ValueError):
                     pass
-            audio_mode = str(
-                value.get("audio_reactivity", state.get("audio_reactivity", "Off"))
-            )
-            if audio_mode == "Intense":
-                audio_mode = "Reactive"
-            if audio_mode not in ("Off", "Subtle", "Reactive"):
-                audio_mode = "Off"
             state.update(
                 motion="Static",
                 speed=34.0,
@@ -653,12 +658,7 @@ class TotemRuntime:
                 wave=False,
                 glitch=False,
                 beat_pulse=False,
-                audio_reactivity=audio_mode,
-                background=(
-                    value.get("background")
-                    if value.get("background") in ("Black", "Dimmed GIF")
-                    else state.get("background", "Dimmed GIF")
-                ),
+                audio_reactivity=self.overlay_audio_reactivity,
                 background_brightness=0.65,
                 backplate=True,
             )
@@ -667,7 +667,7 @@ class TotemRuntime:
         if isinstance(value, dict):
             self.set_text_settings(value)
         for side in self.target_sides():
-            if self.panels[side]["text"]["background"] == "Black":
+            if self.overlay_background == "Black":
                 self._begin_background_transition(side)
             self._exit_info_scene(side)
             self._set_icon_enabled(side, False, False)
@@ -677,7 +677,7 @@ class TotemRuntime:
         for side in self.target_sides():
             if (
                 self.panels[side]["text"]["enabled"]
-                and self.panels[side]["text"]["background"] == "Black"
+                and self.overlay_background == "Black"
             ):
                 self._begin_background_transition(side)
             self.panels[side]["text"]["enabled"] = False
@@ -869,12 +869,11 @@ class TotemRuntime:
         elif command == "schedule_step":
             self.info_scenes.step_schedule(value)
         elif command == "icon_background":
-            if value in ("Black", "GIF"):
-                for side in self.target_sides():
-                    if (self.panels[side]["icon"]["icon_enabled"]
-                            and self.panels[side]["icon"].get("background") != value):
-                        self._begin_background_transition(side)
-                    self.panels[side]["icon"]["background"] = value
+            self.set_overlay_background("None" if value == "GIF" else value)
+        elif command == "overlay_background":
+            self.set_overlay_background(value)
+        elif command == "overlay_audio_reactivity":
+            self.set_overlay_audio_reactivity(value)
         elif command == "effect":
             self.set_effect(value)
         elif command == "select_image":
@@ -1001,9 +1000,12 @@ class TotemRuntime:
             text = self.panels[side]["text"]
             icon = self.panels[side]["icon"]
             text_enabled = bool(text.get("enabled", False)) and not mode
+            if not mode and self.overlay_background == "Dimmed" and (
+                text_enabled or icon.get("icon_enabled")
+            ):
+                self.text_engine.prepare_background(display, text)
             if text_enabled:
-                if text.get("background") == "Dimmed GIF":
-                    self.text_engine.prepare_background(display, text)
+                text["audio_reactivity"] = self.overlay_audio_reactivity
                 self.overlay_renderer.draw_text(
                     display,
                     text,
@@ -1012,8 +1014,7 @@ class TotemRuntime:
                     seed,
                     bottom=bool(icon.get("icon_enabled")),
                 )
-            icon_settings = dict(text)
-            icon_settings["audio_reactivity"] = "Off"
+            icon_settings = {"audio_reactivity": self.overlay_audio_reactivity}
             if not mode:
                 self.overlay_renderer.draw_icon(
                     display,
@@ -1109,6 +1110,8 @@ class TotemRuntime:
             "current_scene": self.current_scene,
             "info_scenes": list(INFO_SCENES),
             "mirrored": self.mirrored,
+            "overlay_background": self.overlay_background,
+            "overlay_audio_reactivity": self.overlay_audio_reactivity,
             "weather": dict(self.info_scenes.weather),
             "scene_backgrounds": dict(self.info_scenes.backgrounds),
             "schedule_count": len(self.info_scenes.schedule),

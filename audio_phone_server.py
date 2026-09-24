@@ -26,11 +26,11 @@ AUDIO_SECTION = r"""
 <div class="audioMeter"><div class="audioBar"><div id="highsBar" class="audioFill"></div></div><div class="audioLabel">Bright</div></div>
 </div>
 <div id="beatLamp" class="pulseLamp"></div>
-<div class="simpleAudioGrid">
+<details class="advancedAudio"><summary>Input Settings</summary><div class="simpleAudioGrid">
 <div class="slider"><div class="sh"><span>Input gain</span><span id="inputGainValue">1.00x</span></div><input id="inputGain" type="range" min=".4" max="3" step=".05" value="1" oninput="num('inputGainValue',this.value,'x')" onchange="beginCalibration()"></div>
 <div class="slider"><div class="sh"><span>Pulse sensitivity</span><span id="beatSensitivityValue">55%</span></div><input id="beatSensitivity" type="range" min="0" max="1" step=".05" value=".55" oninput="pct('beatSensitivityValue',this.value)"></div>
 </div>
-<button style="width:100%" onclick="beginCalibration()">↻ Reset Room Floor</button>
+<button style="width:100%" onclick="beginCalibration()">↻ Reset Room Floor</button></details>
 <div class="audioNotice">The raw spectrum is diagnostic only. Vibe uses a silence gate plus slow per-band baselines, so ordinary bass-heavy spectral slope should not keep every effect active.</div>
 <details class="advancedAudio"><summary>Signal analyzer</summary>
 <div class="analyzerTitle"><h2>Audio Analyzer</h2><div id="analyzerLive" class="liveDot">MIC OFF</div></div>

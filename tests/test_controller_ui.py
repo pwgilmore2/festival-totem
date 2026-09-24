@@ -65,7 +65,7 @@ class ControllerUICompositionTests(unittest.TestCase):
             'id="intenseTransitionGrid"',
             'id="screenModeIndependent"',
             'id="screenModeLinked"',
-            'id="scenes"',
+            'id="sceneStatus"',
         ):
             self.assert_once(marker)
 
@@ -75,7 +75,8 @@ class ControllerUICompositionTests(unittest.TestCase):
         for marker in ('data-info-scene="Clock"',
                        'data-info-scene="Set Times"', 'data-info-scene="Waveform"',
                        'id="sceneSetTimes"', 'id="mirrorButton"',
-                       'data-text-bg="Black"', 'data-icon-bg="Black"',
+                       'data-overlay-bg="Black"', 'data-overlay-bg="Dimmed"',
+                       'data-overlay-bg="None"',
                        'data-clock-bg="Sky"', 'window.refreshTotemWeather=',
                        'data-schedule-day="2026-10-03"', 'America/Chicago'):
             self.assert_once(marker)
@@ -92,14 +93,20 @@ class ControllerUICompositionTests(unittest.TestCase):
         self.assertGreater(html.index('id="panelCard"'), html.index('<section id="edit"'))
         self.assertLess(html.index('id="panelCard"'), html.index('id="targetCard"'))
         self.assertLess(html.index('id="panelCard"'), html.index('id="mirrorButton"'))
-        self.assertIn("[audio,icons,text,guest,tab('tabScenes')]", html)
+        self.assertIn("[audio,icons,text,guest]", html)
+        self.assertNotIn('id="tabScenes"', html)
         self.assertIn("if(mode==='Waveform'&&window.ensureLiveAudio", html)
         self.assertIn("id==='starter:pulse'", html)
-        scenes = html.split('<section id="scenes"', 1)[1].split('</section>', 1)[0]
+        scenes = html.split('<h2>Scenes</h2>', 1)[1].split('id="sceneStatus"', 1)[0]
         self.assertLess(scenes.index('>Waveform</button>'), scenes.index('>Back to GIFs</button>'))
         self.assertNotIn('id="mirrorButton"', scenes)
-        slideshow = html.split('<h2>Slideshow + Background Transitions</h2>', 1)[1].split('<h2>', 1)[0]
-        self.assertIn('data-clock-bg="Black"', slideshow)
+        setup = html.split('id="panelCard"', 1)[1]
+        self.assertIn('data-clock-bg="Black"', setup)
+        self.assertLess(html.index('id="vibeLaunchCard"'), html.index('id="myVibeButtons"'))
+        self.assertLess(html.index('id="myVibeButtons"'), html.index('id="volumeBar"'))
+        self.assertGreater(html.index('id="reactiveMappingCard"'), html.index('<section id="edit"'))
+        self.assert_once('id="manageVibeButtons"')
+        self.assert_once('<summary>Input Settings</summary>')
 
     def test_desktop_icon_previews_can_refresh_after_library_reload(self):
         previews = {"First": "data:image/png;base64,AAAA"}
@@ -157,9 +164,9 @@ class ControllerUICompositionTests(unittest.TestCase):
         self.assertNotIn('id="presetButtons"', self.html)
 
     def test_text_controls_are_simplified(self):
-        self.assertIn('id="textAudioOff"', self.html)
-        self.assertIn('id="textAudioSubtle"', self.html)
-        self.assertIn('id="textAudioIntense"', self.html)
+        self.assertIn('data-overlay-audio="Off"', self.html)
+        self.assertIn('data-overlay-audio="Subtle"', self.html)
+        self.assertIn('data-overlay-audio="Intense"', self.html)
         self.assertIn("motion:'Static'", self.html)
         self.assertIn('speed:34', self.html)
 

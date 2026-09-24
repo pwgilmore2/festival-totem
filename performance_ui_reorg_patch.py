@@ -8,7 +8,7 @@ _CSS = r'''
 .tabs button.runtimeOn:after,.tabs button.runtimeChaos:after{content:'';display:inline-block;width:7px;height:7px;margin-left:5px;border-radius:50%;vertical-align:middle;background:#5bebb0;box-shadow:0 0 7px #5bebb088}.tabs button.runtimeChaos:after{background:#ff77bd;box-shadow:0 0 7px #ff77bd88}.tabs button.beatHit:after{background:#fff;box-shadow:0 0 7px #fff}
 #tabLive,#tabLibrary,#tabEdit,#tabSetup{display:none!important}
 .vibeLaunch{background:radial-gradient(circle at 10% 0%,#00e5ff2c,transparent 34%),radial-gradient(circle at 95% 0%,#8b5cff30,transparent 38%),#ffffff12}.vibeLaunch h2{font-size:22px!important;margin-bottom:4px!important}.vibeLaunch .vibeSub{font-size:12px;opacity:.68;line-height:1.4;margin-bottom:12px}.vibeStart{width:100%;min-height:66px;font-size:18px;background:linear-gradient(135deg,#6c4cff,#00b8ff);box-shadow:0 8px 24px #0006}.vibeTransport{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.vibeTransport button{min-height:48px}
-.vibePresetBox{margin:12px 0;padding:12px;border-radius:14px;background:#ffffff0b;border:1px solid #ffffff14}.vibePresetHead{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}.vibePresetHead strong{font-size:14px}.vibePresetGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin-bottom:9px}.vibePresetGrid button{min-height:46px}.vibePresetGrid button.active{background:#7063d7}.vibePresetSave input{width:100%;background:#202029;color:#fff;border:1px solid #444456;border-radius:10px;padding:10px;font-size:16px}.vibePresetActions{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:8px}.vibePresetActions button{min-height:46px}.vibePresetStatus{font-size:12px;opacity:.75;min-height:18px;margin-top:8px}.vibePresetHelp{font-size:11px;opacity:.68;line-height:1.4;margin:7px 0}
+.vibePresetBox{margin:12px 0;padding:12px;border-radius:14px;background:#ffffff0b;border:1px solid #ffffff14}.vibePresetHead{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}.vibePresetHead strong{font-size:14px}.vibePresetGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin-bottom:9px}.vibePresetGrid button{min-height:46px}.vibePresetGrid button.active{background:#343442!important;box-shadow:none!important}.vibePresetGrid button.active:after,[data-overlay-audio].active:after{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:#65f2b6;margin-left:8px}.vibeChoose{background:radial-gradient(circle at 95% 5%,#ff4f9e25,transparent 50%),#ffffff12}.vibeEditor{background:radial-gradient(circle at 5% 0%,#734cff1c,transparent 43%),#ffffff12}.overlayAudio{margin-top:12px;padding:12px;background:#ffffff0b;border:1px solid #ffffff18;border-radius:13px}.overlayAudio [data-overlay-audio].active{background:#343442!important;box-shadow:none!important}.vibePresetSave input{width:100%;background:#202029;color:#fff;border:1px solid #444456;border-radius:10px;padding:10px;font-size:16px}.vibePresetActions{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:8px}.vibePresetActions button{min-height:46px}.vibePresetStatus{font-size:12px;opacity:.75;min-height:18px;margin-top:8px}.vibePresetHelp{font-size:11px;opacity:.68;line-height:1.4;margin:7px 0}
 .manageSwitcher{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin:2px 0 12px;position:sticky;top:62px;z-index:16;padding:7px;background:#101016ed;backdrop-filter:blur(10px);border-radius:13px}.manageSwitcher button{min-height:42px;font-size:13px}.manageSwitcher button.active{background:#7063d7}.manageHint{font-size:11px;opacity:.62;margin:-4px 0 8px;text-align:center}
 .batchTagBar{display:grid;grid-template-columns:auto 1fr auto;gap:7px;align-items:center;margin:4px 0 10px;padding:9px;background:#ffffff0b;border:1px solid #ffffff12;border-radius:12px}.batchTagBar input{min-width:0;background:#202029;color:#fff;border:1px solid #444456;border-radius:9px;padding:9px;font-size:15px}.batchTagBar button{min-height:40px;padding:7px 10px}.tile.batchSelected{border-color:#53e6a8!important;box-shadow:0 0 0 2px #53e6a855 inset}.batchCount{font-size:11px;opacity:.7;grid-column:1/-1}
 body.manageMode .manageSwitcher{display:grid}body:not(.manageMode) .manageSwitcher{display:none}
@@ -26,15 +26,12 @@ _VIBE_CARD = r'''
 '''
 
 _VIBE_PRESETS = r'''
-<div class="vibePresetBox">
-<div class="vibePresetHead"><strong>Vibe Presets</strong><span class="tiny">tap to play · edit below</span></div>
-<div id="myVibeButtons" class="vibePresetGrid"></div>
-<div class="vibePresetHelp">Adjust intensity and any mapping slider below, then save. Starting presets can also be renamed or deleted. Presets are saved in this browser.</div>
-<div class="vibePresetSave"><input id="vibePresetName" maxlength="32" placeholder="Preset name" aria-label="Preset name"></div>
-<div class="vibePresetActions"><button onclick="saveCurrentVibe()">Save Changes</button><button onclick="addCurrentVibe()">Add New</button><button class="warn" onclick="removeMyVibe()">Delete</button></div>
-<div id="vibePresetStatus" class="vibePresetStatus" role="status" aria-live="polite"></div>
-</div>
+<div class="card vibeChoose"><div class="vibePresetHead"><strong>Audio Presets</strong><span class="tiny">tap to play</span></div><div id="myVibeButtons" class="vibePresetGrid"></div></div>
 '''
+
+_VIBE_EDITOR = r'''<div class="card vibeEditor"><h2>Audio Preset Management</h2><div class="sectionHint">Choose a preset, adjust the sound mapping, then save, rename, add or delete it. Presets live in this browser.</div><div id="manageVibeButtons" class="vibePresetGrid"></div><div class="vibePresetSave"><input id="vibePresetName" maxlength="32" placeholder="Preset name" aria-label="Preset name"></div><div class="vibePresetActions"><button onclick="saveCurrentVibe()">Save Changes</button><button onclick="addCurrentVibe()">Add New</button><button class="warn" onclick="removeMyVibe()">Delete</button></div><div id="vibePresetStatus" class="vibePresetStatus" role="status" aria-live="polite"></div></div>'''
+
+_OVERLAY_AUDIO = r'''<div class="overlayAudio"><div class="vibePresetHead"><strong>Overlay Audio Reactivity</strong><span class="tiny">icons + text</span></div><div class="vibePresetActions"><button data-overlay-audio="Off" onclick="setOverlayAudio('Off')">Off</button><button data-overlay-audio="Subtle" onclick="setOverlayAudio('Subtle')">Subtle</button><button data-overlay-audio="Intense" onclick="setOverlayAudio('Intense')">Intense</button></div></div>'''
 
 _MANAGE_SWITCH = r'''
 <div class="manageSwitcher">
@@ -75,7 +72,7 @@ _JS = r'''
    const root=tabsRoot();if(!root)return;
    const audio=tab('tabAudio'),guest=tab('tabGuest'),icons=tab('tabIcons'),text=tab('tabText');
    if(audio)audio.textContent='Vibe';if(guest)guest.textContent='Chaos';if(icons)icons.textContent='Icons';if(text)text.textContent='Text';
-   [audio,icons,text,guest,tab('tabScenes')].filter(Boolean).forEach(el=>{el.classList.add('performancePrimary');root.appendChild(el)});
+   [audio,icons,text,guest].filter(Boolean).forEach(el=>{el.classList.add('performancePrimary');root.appendChild(el)});
    let manage=tab('tabManage');if(!manage){manage=document.createElement('button');manage.id='tabManage';manage.className='managementTab';manage.textContent='Manage';manage.onclick=()=>openManage(currentManage||'library')}root.appendChild(manage)
  }
  function setManageMode(on){document.body.classList.toggle('manageMode',!!on);const m=tab('tabManage');if(m)m.classList.toggle('active',!!on)}
@@ -175,12 +172,10 @@ _JS = r'''
    if(token===applyToken){applyingVibe=false;vibeStatus('Editing '+v.name+'. Change sliders, then Save Changes.')}
  }
  window.renderMyVibes=function(){
-   const box=tab('myVibeButtons');if(!box)return;
+   const boxes=[tab('myVibeButtons'),tab('manageVibeButtons')].filter(Boolean);if(!boxes.length)return;
    const presets=loadVibes(),signature=JSON.stringify(presets.map(p=>[p.id,p.name,selectedVibeId]));
    if(signature!==renderedVibes){
-     renderedVibes=signature;box.innerHTML='';
-     presets.forEach(p=>{const b=document.createElement('button');b.textContent=p.name;b.classList.toggle('active',p.id===selectedVibeId);b.onclick=()=>applyMyVibe(p.id);box.appendChild(b)});
-     if(!presets.length)box.innerHTML='<div class="muted" style="grid-column:1/-1">No presets. Name the current settings and tap Add New.</div>'
+     renderedVibes=signature;boxes.forEach(box=>{box.innerHTML='';presets.forEach(p=>{const b=document.createElement('button');b.textContent=p.name;b.classList.toggle('active',p.id===selectedVibeId);b.onclick=()=>applyMyVibe(p.id);box.appendChild(b)});if(!presets.length)box.innerHTML='<div class="muted" style="grid-column:1/-1">No presets. Name the current settings and tap Add New.</div>'})
    }
    if(renderedSelection!==selectedVibeId){renderedSelection=selectedVibeId;const input=tab('vibePresetName');if(input)input.value=selectedVibe()?.name||''}
  }
@@ -190,7 +185,10 @@ _JS = r'''
  window.applyBatchTag=async function(){const input=document.getElementById('batchTagInput'),tag=(input?.value||'').trim();if(!tag||!batchSelected.size)return;await cmd('batch_add_tag',{indices:[...batchSelected],tag});batchSelected.clear();if(input)input.value='';syncBatchUI()}
  function installBatchCapture(){const g=document.getElementById('gallery');if(!g||g.dataset.batchCapture==='1')return;g.dataset.batchCapture='1';g.addEventListener('click',e=>{if(!batchMode)return;const tile=e.target.closest('.tile[data-index]');if(!tile)return;e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();const i=parseInt(tile.dataset.index);if(batchSelected.has(i))batchSelected.delete(i);else batchSelected.add(i);syncBatchUI()},true)}
 
- function performanceNavTick(){ensurePerformanceNav();renderMyVibes();markManage(currentManage);installBatchCapture();syncBatchUI()}
+ window.setOverlayAudio=value=>{if(['Off','Subtle','Intense'].includes(value)){try{localStorage.setItem('festivalTotem.overlayAudio.v1',value)}catch(_){}cmd('overlay_audio_reactivity',value)}};
+ window.addEventListener('load',()=>{const saved=localStorage.getItem('festivalTotem.overlayAudio.v1');if(['Off','Subtle','Intense'].includes(saved))setOverlayAudio(saved)});
+ function syncOverlayAudio(){document.querySelectorAll('[data-overlay-audio]').forEach(b=>b.classList.toggle('active',b.dataset.overlayAudio===(state?.overlay_audio_reactivity||'Off')))}
+ function performanceNavTick(){syncOverlayAudio();ensurePerformanceNav();renderMyVibes();markManage(currentManage);installBatchCapture();syncBatchUI()}
  setInterval(performanceNavTick,250);
  window.addEventListener('load',()=>{ensurePerformanceNav();renderMyVibes();installBatchCapture();setTimeout(()=>{if(section('audio'))view('audio')},100)})
 })();
@@ -216,9 +214,17 @@ def apply(html):
     if audio_anchor in html:
         html = html.replace(audio_anchor, audio_anchor + _VIBE_CARD, 1)
 
+    # The runtime controls stay on Vibe; all editable mapping sliders live in Setup.
     preset_anchor = '<div id="presetButtons" class="presetGrid"></div>'
-    if preset_anchor in html:
-        html = html.replace(preset_anchor, _VIBE_PRESETS, 1)
+    html = html.replace(preset_anchor, '', 1)
+    mapping_start = html.find('<div class="card" id="reactiveMappingCard">')
+    if mapping_start >= 0:
+        mapping_end = html.find('</section>', mapping_start)
+        mapping = html[mapping_start:mapping_end]
+        html = html[:mapping_start] + html[mapping_end:]
+        html = html.replace('<div class="card"><h2>Quick Text Presets</h2>', _VIBE_EDITOR + mapping + '<div class="card"><h2>Quick Text Presets</h2>', 1)
+    html = html.replace(_VIBE_CARD, _VIBE_CARD + _VIBE_PRESETS, 1)
+    html = html.replace('<div id="beatLamp" class="pulseLamp"></div>', '<div id="beatLamp" class="pulseLamp"></div>' + _OVERLAY_AUDIO, 1)
 
     for section_id in ('live', 'edit'):
         html = _insert_after_section_start(html, section_id, _MANAGE_SWITCH)

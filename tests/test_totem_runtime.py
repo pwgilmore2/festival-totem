@@ -196,6 +196,38 @@ class TotemRuntimeTests(unittest.TestCase):
         self.assertEqual(runtime.displays["front"].get_pixel(0, 0), (int(original[0] * .65), 0, 0))
         self.assertEqual(runtime.displays["back"].get_pixel(0, 0), back_original)
 
+    def test_shared_overlay_background_controls_both_icons_and_text(self):
+        runtime, media = self.make_runtime()
+        runtime.handle_command({"command": "effect", "value": "Image"})
+        for frame in range(70):
+            runtime.step(.016, frame)
+        runtime.handle_command({"command": "icon_toggle", "value": "Alien"})
+        runtime.step(.016, 70)
+        dimmed = runtime.displays["front"].get_pixel(0, 0)[0]
+        runtime.handle_command({"command": "overlay_background", "value": "None"})
+        runtime.content_transitions["front"].active = False
+        runtime.step(.016, 71)
+        self.assertGreater(runtime.displays["front"].get_pixel(0, 0)[0], dimmed)
+        runtime.handle_command({"command": "overlay_background", "value": "Black"})
+        runtime.step(.016, 72)
+        self.assertTrue(runtime._media_suspended["front"])
+        self.assertEqual(runtime.controller_state()["overlay_background"], "Black")
+        runtime.handle_command({"command": "text_show", "value": {"message": "HEY", "background": "Dimmed GIF"}})
+        self.assertTrue(runtime._black_background("front"))
+        runtime.handle_command({"command": "overlay_background", "value": "None"})
+        runtime.step(.016, 73)
+        self.assertFalse(runtime._media_suspended["front"])
+
+    def test_overlay_audio_is_shared_and_text_payload_cannot_override_it(self):
+        runtime, _ = self.make_runtime()
+        runtime.handle_command({"command": "overlay_audio_reactivity", "value": "Intense"})
+        runtime.handle_command({"command": "text_show", "value": {"message": "HEY", "audio_reactivity": "Off"}})
+        self.assertEqual(runtime.controller_state()["overlay_audio_reactivity"], "Intense")
+        self.assertEqual(runtime.panels["front"]["text"]["audio_reactivity"], "Intense")
+        runtime.handle_command({"command": "overlay_audio_reactivity", "value": "Subtle"})
+        runtime.step(.016, 1)
+        self.assertEqual(runtime.panels["front"]["text"]["audio_reactivity"], "Subtle")
+
     def test_controller_state_preserves_phone_contract(self):
         runtime, _ = self.make_runtime()
         state = runtime.controller_state()
