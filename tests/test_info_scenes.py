@@ -2,7 +2,8 @@ import unittest
 from datetime import datetime, timezone
 
 from display import VirtualDisplay
-from info_scenes import InfoScenes, clean_schedule
+from info_scenes import InfoScenes, SCENES, clean_schedule
+from text import FONT
 
 
 class InfoScenesTests(unittest.TestCase):
@@ -27,6 +28,23 @@ class InfoScenesTests(unittest.TestCase):
         self.assertEqual((now.tm_hour, now.tm_min), (14, 44))
         self.assertFalse(scenes.sync_time({"epoch": epoch, "offset_seconds": 100000}))
 
+    def test_combined_clock_weather_background_and_large_colon(self):
+        self.assertEqual(SCENES, ("Clock", "Set Times", "Waveform"))
+        self.assertNotEqual(FONT[":"], FONT["?"])
+        scenes = InfoScenes(64, 32)
+        panel = VirtualDisplay()
+        scenes.set_weather({"temperature": "72", "condition": "Cloudy"})
+        for hour, expected in ((15, (12, 74, 128)), (19, (70, 27, 85)), (23, (3, 5, 21))):
+            epoch = datetime(2026, 10, 1, hour, 44, tzinfo=timezone.utc).timestamp()
+            scenes.sync_time({"epoch": epoch, "offset_seconds": 0})
+            scenes.render("Clock", panel, 0)
+            self.assertEqual(panel.get_pixel(0, 0), expected)
+        scenes.backgrounds["Clock"] = "Black"
+        scenes.render("Clock", panel, 0)
+        self.assertEqual(panel.get_pixel(0, 0), (0, 0, 0))
+        self.assertEqual(panel.get_pixel(31, 5), (245, 250, 255))
+        self.assertTrue(any(panel.get_pixel(x, 24) != (0, 0, 0) for x in range(64)))
+
     def test_schedule_sanitizes_and_weather_uses_manual_input(self):
         scenes = InfoScenes(64, 32)
         scenes.schedule = clean_schedule([{"time": "9:30 PM", "name": "Performer"}, {"name": "Missing"}])
@@ -34,7 +52,7 @@ class InfoScenesTests(unittest.TestCase):
         panel = VirtualDisplay()
         scenes.render("Set Times", panel, 0)
         scenes.set_weather({"temperature": "72", "condition": "Cloudy"})
-        scenes.render("Weather", panel, 0)
+        scenes.render("Clock", panel, 0)
         self.assertEqual(scenes.weather, {"temperature": "72", "condition": "Cloudy"})
         scenes.set_weather({"temperature": "999", "condition": "Unknown"})
         self.assertEqual(scenes.weather, {"temperature": "", "condition": "Clear"})

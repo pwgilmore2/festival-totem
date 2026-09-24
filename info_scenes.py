@@ -10,7 +10,7 @@ import time
 from text import FONT
 
 
-SCENES = ("Clock", "Weather", "Set Times", "Waveform")
+SCENES = ("Clock", "Set Times", "Waveform")
 CONDITIONS = ("Clear", "Cloudy", "Rain", "Snow", "Wind")
 FESTIVAL_DAYS = (("2026-09-30", "WED"), ("2026-10-01", "THU"),
                  ("2026-10-02", "FRI"), ("2026-10-03", "SAT"))
@@ -46,7 +46,7 @@ class InfoScenes:
         self.clock_at = 0.0
         self.clock_offset = 0
         self.weather = {"temperature": "", "condition": "Clear"}
-        self.backgrounds = {"Clock": "Black", "Weather": "Sky", "Set Times": "Black", "Waveform": "Black"}
+        self.backgrounds = {"Clock": "Sky", "Set Times": "Black", "Waveform": "Black"}
         self.schedule = []
         self.schedule_index = 0
         self.schedule_day = "Auto"
@@ -151,9 +151,9 @@ class InfoScenes:
         condition = str(value.get("condition", "Clear")).title()
         self.weather = {"temperature": temperature, "condition": condition if condition in CONDITIONS else "Clear"}
 
-    def draw_label(self, display, value, y, color, scale=1):
+    def draw_label(self, display, value, y, color, scale=1, spacing=2):
         value = str(value).upper()
-        width = len(value) * (5 * scale + 2) - 2
+        width = len(value) * (5 * scale + spacing) - spacing
         x = (display.width - width) // 2
         for char in value:
             for dy, row in enumerate(FONT.get(char, FONT["?"])):
@@ -162,37 +162,50 @@ class InfoScenes:
                         for py in range(scale):
                             for px in range(scale):
                                 display.set_pixel(x + dx * scale + px, y + dy * scale + py, color)
-            x += 5 * scale + 2
+            x += 5 * scale + spacing
 
     def _sky(self, display, now, t, condition="Clear"):
-        hour = now.tm_hour if now else 23
-        daylight = 7 <= hour < 19
-        dusk = 6 <= hour < 8 or 18 <= hour < 20
-        if daylight:
-            display.fill((2, 10, 17) if not dusk else (13, 5, 14))
-            if condition == "Clear":
-                x = int(display.width * (hour - 7) / 12)
-                y = 6 + int(2 * math.sin(t * 0.65))
-                for dx, dy in ((0, 0), (-1, 0), (1, 0), (0, -1), (0, 1)):
-                    display.set_pixel(x + dx, y + dy, (96, 70, 24) if dusk else (100, 82, 30))
+        hour = now.tm_hour + now.tm_min / 60 if now else 0
+        if 8 <= hour < 18:
+            phase = "day"
+            display.fill((12, 74, 128))
+            horizon = (25, 116, 151)
+        elif 6 <= hour < 8 or 18 <= hour < 20:
+            phase = "dusk"
+            display.fill((70, 27, 85))
+            horizon = (140, 55, 80)
         else:
-            display.fill((2, 3, 10))
-            for x, y in ((4, 5), (18, 3), (42, 7), (57, 4), (10, 15), (53, 18)):
-                display.set_pixel(x, y, (32 + int(10 * (1 + math.sin(t * 2 + x))), 37, 65))
+            phase = "night"
+            display.fill((3, 5, 21))
+            horizon = (12, 17, 42)
+        low_horizon = tuple(v // 2 for v in horizon)
+        for x in range(display.width):
+            display.set_pixel(x, 21, horizon)
+            if x % 3 != 0:
+                display.set_pixel(x, 20, low_horizon)
+        if phase == "night":
+            for x, y in ((3, 18), (25, 19), (43, 17), (59, 19)):
+                glow = int(30 + 20 * (1 + math.sin(t * 2 + x)))
+                display.set_pixel(x, y, (glow, glow, min(255, glow + 30)))
+        else:
+            # A tiny drifting sun keeps the sky active without obscuring the clock.
+            x = 5 + int(3 * math.sin(t * .4))
+            for dx, dy in ((0, 0), (-1, 0), (1, 0), (0, -1), (0, 1)):
+                display.set_pixel(x + dx, 18 + dy, (230, 103, 62) if phase == "dusk" else (240, 188, 78))
         if condition in ("Cloudy", "Rain", "Snow"):
-            for x in (8 + int(t * 2) % 8, 46 - int(t) % 9):
+            for x in (14 + int(t) % 8, 47 - int(t) % 9):
                 for dx, dy in ((0, 0), (1, 0), (2, 0), (1, -1)):
-                    display.set_pixel(x + dx, 5 + dy, (26, 41, 55))
+                    display.set_pixel(x + dx, 18 + dy, (81, 118, 149) if phase == "day" else (54, 64, 102))
         if condition in ("Rain", "Snow"):
-            for i in range(7):
-                x = (i * 23 + (int(t * 8) if condition == "Rain" else int(t * 2))) % display.width
-                y = (i * 11 + int(t * (12 if condition == "Rain" else 3))) % display.height
+            for i in range(4):
+                x = (i * 23 + int(t * (8 if condition == "Rain" else 2))) % display.width
+                y = 18 + (i * 3 + int(t * (12 if condition == "Rain" else 3))) % 5
                 display.set_pixel(x, y, (35, 65, 105) if condition == "Rain" else (70, 90, 105))
         elif condition == "Wind":
             for i in range(3):
                 x = (i * 22 + int(t * 6)) % display.width
-                display.set_pixel(x, 5 + i * 6, (35, 60, 85))
-                display.set_pixel(x + 1, 5 + i * 6, (35, 60, 85))
+                display.set_pixel(x, 18 + i, (80, 150, 170))
+                display.set_pixel(x + 1, 18 + i, (80, 150, 170))
 
     def render(self, mode, display, t, signals=None):
         display.clear()
@@ -213,17 +226,18 @@ class InfoScenes:
                 if energy > .18:
                     display.set_pixel(x, y + 1, tuple(c // 4 for c in color))
             return
-        if self.backgrounds.get(mode) == "Sky":
-            self._sky(display, now, t, self.weather["condition"] if mode == "Weather" else "Clear")
+        if self.backgrounds.get(mode) == "Sky" and (mode != "Clock" or now is not None):
+            self._sky(display, now, t, self.weather["condition"] if mode == "Clock" else "Clear")
         if mode == "Clock":
             if now is None:
-                self.draw_label(display, "SET TIME", 12, (140, 185, 225))
+                self.draw_label(display, "SET TIME", 6, (235, 243, 255))
             else:
-                self.draw_label(display, "%02d:%02d" % (now.tm_hour, now.tm_min), 12, (235, 243, 255))
-        elif mode == "Weather":
+                self.draw_label(display, "%02d:%02d" % (now.tm_hour, now.tm_min), 3, (245, 250, 255), 2)
             temperature = self.weather["temperature"]
-            self.draw_label(display, temperature + "F" if temperature else "--F", 3, (236, 243, 255), 2)
-            self.draw_label(display, self.weather["condition"] if temperature else "NO DATA", 23, (125, 190, 220))
+            label = (temperature + "F " + self.weather["condition"]) if temperature else "--F NO WX"
+            if len(label) > 10:
+                label = label[:10]
+            self.draw_label(display, label, 24, (235, 240, 255), spacing=1)
         elif mode == "Set Times":
             day = self.active_day(now)
             self.draw_label(display, dict(FESTIVAL_DAYS)[day], 1, (125, 190, 220))

@@ -123,11 +123,13 @@ class TotemRuntimeTests(unittest.TestCase):
 
     def test_info_scenes_release_gif_and_resume_on_return(self):
         runtime, media = self.make_runtime()
-        runtime.handle_command({"command": "info_scene", "value": "Weather"})
+        runtime.handle_command({"command": "info_scene", "value": "Clock"})
         self.assertEqual(media.suspended[-2:], ["front", "back"])
         runtime.step(.016, 1)
         self.assertEqual(media.rendered, [])
-        self.assertEqual(runtime.phone_panel("front")["info_scene"], "Weather")
+        self.assertEqual(runtime.phone_panel("front")["info_scene"], "Clock")
+        runtime.handle_command({"command": "scene_background", "value": {"scene": "Clock", "background": "Black"}})
+        self.assertEqual(runtime.info_scenes.backgrounds["Clock"], "Black")
         runtime.handle_command({"command": "info_scene", "value": None})
         runtime.step(.016, 2)
         self.assertIn("front", media.rendered)

@@ -70,7 +70,9 @@ class ControllerUICompositionTests(unittest.TestCase):
             self.assert_once(marker)
 
     def test_info_scenes_and_background_controls(self):
-        for marker in ('data-info-scene="Clock"', 'data-info-scene="Weather"',
+        self.assertNotIn('data-info-scene="Weather"', self.html)
+        self.assertIn('Clock + Weather', self.html)
+        for marker in ('data-info-scene="Clock"',
                        'data-info-scene="Set Times"', 'data-info-scene="Waveform"',
                        'id="sceneSetTimes"', 'id="mirrorButton"',
                        'data-text-bg="Black"', 'data-icon-bg="Black"',
