@@ -11,7 +11,8 @@ python3 tools/run_matrixportal_diagnostics.py
 ```
 
 This standard-library tool opens USB serial before rebooting the board so
-startup tracebacks are captured. It reads your current private `WIFI_PASSWORD`
+startup tracebacks are captured and explicitly asserts DTR, which CircuitPython
+requires for USB console output. It reads your current private `WIFI_PASSWORD`
 from `CIRCUITPY/code.py` without displaying it, installs the diagnostic module,
 creates the one-shot marker, and copies the current project `code.py` last to
 trigger CircuitPython auto-reload. It reconnects to the USB serial port, prints

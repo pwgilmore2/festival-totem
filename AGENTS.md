@@ -140,3 +140,13 @@ serial before copying `code.py`, streams bytes to the log as they arrive, and
 stops after 60 seconds of serial silence with a partial log. This revision
 awaits physical verification; a zero-length old-run file alone is not evidence
 of a specific board failure.
+
+The uploaded `totem-20260925-083350.log` is only 125 bytes: host start header
+and `# No board serial output for 60 seconds; keeping partial log`. No board
+lines or stage measurements were captured, while Patrick saw visuals continue
+after the Mac collector ended. CircuitPython 10.3 docs say the USB CDC console
+reports connected only when the host asserts DTR. The collector used raw
+`os.open()`/`termios` without explicitly asserting DTR, a likely cause of the
+silent serial port. It now uses `fcntl.ioctl(TIOCMBIS, TIOCM_DTR)` and clears
+hardware flow control. Physical confirmation is outstanding. A completed
+diagnostic run is still needed before drawing any performance conclusions.

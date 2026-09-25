@@ -5,7 +5,9 @@ import io
 import json
 import os
 from pathlib import Path
+import struct
 import tempfile
+import termios
 import threading
 import time
 import types
@@ -13,10 +15,27 @@ import unittest
 from unittest.mock import patch
 
 import matrixportal_diagnostics as diagnostic
-from tools.run_matrixportal_diagnostics import collect, private_program
+from tools.run_matrixportal_diagnostics import collect, open_serial, private_program
 
 
 class DiagnosticTests(unittest.TestCase):
+    @unittest.skipUnless(hasattr(os, 'openpty'), 'requires a Unix pseudoterminal')
+    def test_serial_connection_asserts_dtr(self):
+        master, slave = os.openpty()
+        path = os.ttyname(slave)
+        os.close(slave)
+        try:
+            with patch('tools.run_matrixportal_diagnostics.fcntl.ioctl') as ioctl, \
+                    contextlib.redirect_stdout(io.StringIO()):
+                descriptor = open_serial(path)
+            self.assertIsNotNone(descriptor)
+            os.close(descriptor)
+            self.assertEqual(ioctl.call_args.args[1], termios.TIOCMBIS)
+            self.assertEqual(ioctl.call_args.args[2],
+                             struct.pack('I', termios.TIOCM_DTR))
+        finally:
+            os.close(master)
+
     @unittest.skipUnless(hasattr(os, 'openpty'), 'requires a Unix pseudoterminal')
     def test_serial_capture_keeps_boot_lines_and_stages(self):
         master, slave = os.openpty()

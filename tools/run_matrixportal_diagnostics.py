@@ -8,6 +8,7 @@ on the host. No third-party Python packages or screen session are needed.
 import argparse
 import ast
 import datetime
+import fcntl
 import glob
 import hashlib
 import json
@@ -16,6 +17,7 @@ from pathlib import Path
 import re
 import select
 import shutil
+import struct
 import sys
 import termios
 import time
@@ -81,8 +83,15 @@ def open_serial(preferred_port):
             tty.setraw(fd)
             attributes = termios.tcgetattr(fd)
             attributes[4] = attributes[5] = termios.B115200
+            for flag in ('CRTSCTS', 'CCTS_OFLOW', 'CRTS_IFLOW'):
+                attributes[2] &= ~getattr(termios, flag, 0)
             termios.tcsetattr(fd, termios.TCSANOW, attributes)
-            print("Reading serial from", port, flush=True)
+            # CircuitPython regards USB CDC as connected only while the host
+            # asserts DTR. os.open + termios does not guarantee that state;
+            # pyserial and screen assert it when they connect.
+            fcntl.ioctl(fd, termios.TIOCMBIS,
+                        struct.pack('I', termios.TIOCM_DTR))
+            print("Reading serial from", port, '(DTR enabled)', flush=True)
             return fd
         except OSError:
             if 'fd' in locals():
