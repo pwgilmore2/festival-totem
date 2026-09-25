@@ -143,6 +143,18 @@ module before the new `code.py`, keep its private password, and copy backend
 and text_engine updates. Text FPS and the Bitmap buffer path require physical
 measurement before committing to a full effect-engine rewrite.
 
+The real board confirmed the Bitmap memoryview maps 4096 16-bit pixels in
+display order, with 2048 reads in 5.86 ms and writes in 10.50 ms. GIF ran
+27.79 FPS alone; a forced GC took ~119 ms and the longest frame interval was
+219 ms. Pixel-font text ran 13.42 FPS, with `render/text` averaging 39.43 ms.
+The next build uses the proven view in the Bitmap adapter, calls `dirty()`
+before refresh, restores the original Chaos engine, and accelerates its
+RGB565 color pipeline and zoom/shift with packed integer math and native
+`bitmaptools.rotozoom` respectively. These keep the original effect controls
+and math; visual and timing equivalence must be checked on the board. Forced
+five-second GC is skipped while RAM is over 300 KB. The startup probe also
+reports `ULAB:` availability; CircuitPython has only a subset of NumPy.
+
 When CIRCUITPY is mounted, compare the deployment directly against its real free space:
 
 ```bash

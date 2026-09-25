@@ -18,20 +18,36 @@ class _BitmapLinearBuffer:
         self.bitmap = bitmap
         self.stride = int(stride)
         self.swapped_storage = bool(swapped_storage)
+        # Verified on the physical S3: 128x32 Bitmap exposes exactly 4096
+        # writable 16-bit values in display order. Fall back to indexed Bitmap
+        # access on other builds if their buffer layout differs.
+        try:
+            pixels = memoryview(bitmap)
+            if len(pixels) != int(bitmap.width) * int(bitmap.height):
+                pixels = None
+        except (TypeError, ValueError):
+            pixels = None
+        self.pixels_view = pixels
         self.glyph_cache = {}
         self.glyph_order = []
+        self.spatial_bitmap = None
+        self.spatial_available = True
+        self.color_available = True
 
     def __getitem__(self, index):
         index = int(index)
-        value = self.bitmap[index % self.stride, index // self.stride]
+        value = (self.pixels_view[index] if self.pixels_view is not None
+                 else self.bitmap[index % self.stride, index // self.stride])
         return _swap16(value) if self.swapped_storage else value
 
     def __setitem__(self, index, value):
         index = int(index)
         value = int(value) & 0xFFFF
-        self.bitmap[index % self.stride, index // self.stride] = (
-            _swap16(value) if self.swapped_storage else value
-        )
+        stored = _swap16(value) if self.swapped_storage else value
+        if self.pixels_view is not None:
+            self.pixels_view[index] = stored
+        else:
+            self.bitmap[index % self.stride, index // self.stride] = stored
 
 
 def _swap16(value):
@@ -176,27 +192,105 @@ class MatrixPortalPanel:
         bitmaptools.fill_region(self.framebuffer.bitmap, self.x_offset + x1, y1,
                                 self.x_offset + x2, y2, value)
 
-    def fast_chaos(self, mode, amount, frame, signals):
-        """Bounded native shape effects over the GIF for responsive Chaos."""
-        if mode == "bassjostle" and not (signals.get("beat") or signals.get("bass", 0) > .12):
-            return
-        palette = ((255, 43, 151), (54, 224, 246), (249, 221, 67),
-                   (131, 82, 255), (49, 244, 128))
-        count = max(2, min(12, int(3 + amount * 9)))
-        vertical = mode in ("pixelmelt", "meltdown", "liquid", "rainbow")
-        squares = mode in ("jumble", "spark", "prism", "tunnel", "xyintent")
-        if mode == "boom":
-            count = 5
-        for i in range(count):
-            color = palette[(i + frame // 3) % len(palette)]
-            x = (i * 23 + frame * (2 + i % 3)) % self.width
-            y = (i * 11 + frame * (1 + i % 2)) % self.height
-            if vertical:
-                self.fill_rect(x, y, x + 2, y + 4 + int(amount * 8), color)
-            elif squares:
-                self.fill_rect(x, y, x + 2 + i % 3, y + 2 + i % 3, color)
-            else:
-                self.fill_rect(x, y, x + 4 + int(amount * 13), y + 1 + i % 2, color)
+    def native_color_pipeline(self, degrees, split_amount, brighten_amount):
+        """Apply the original hue/split/brightness math on packed Bitmap pixels."""
+        raw = self.framebuffer.pixels_view
+        if raw is None or self.rotation != 0 or not self.framebuffer.color_available:
+            return False
+        hue = abs(degrees) >= .5
+        split = split_amount > .02
+        mult = 1.0 + max(0.0, float(brighten_amount))
+        offset = max(1, int(round(split_amount * 5))) if split else 0
+        phase = (degrees % 360) / 120.0 if hue else 0.0
+        t = phase if phase < 1 else phase - 1 if phase < 2 else phase - 2
+        # Snapshot packed RGB565 before writing, retaining exactly the same
+        # source coordinates as the desktop color pipeline.
+        try:
+            source = array("H", raw)
+        except (TypeError, ValueError) as exc:
+            print("NATIVE COLORS unavailable:", str(exc))
+            self.framebuffer.color_available = False
+            return False
+        stride = self.stride
+        origin = self.x_offset
+        swapped = self.framebuffer.swapped_storage
+        for y in range(self.height):
+            row = y * stride + origin
+            for x in range(self.width):
+                i = row + x
+                ri = row + min(self.width - 1, x + offset)
+                bi = row + max(0, x - offset)
+                center = _swap16(source[i]) if swapped else source[i]
+                red = _swap16(source[ri]) if swapped else source[ri]
+                blue = _swap16(source[bi]) if swapped else source[bi]
+                r = (red >> 11) & 31
+                g = (center >> 5) & 63
+                b = blue & 31
+                r, g, b = (r << 3) | (r >> 2), (g << 2) | (g >> 4), (b << 3) | (b >> 2)
+                if hue:
+                    if split:
+                        rg = (red >> 5) & 63
+                        rb = red & 31
+                        br = (blue >> 11) & 31
+                        bg = (blue >> 5) & 63
+                        cr = (center >> 11) & 31
+                        cb = center & 31
+                        rg, bg = (rg << 2) | (rg >> 4), (bg << 2) | (bg >> 4)
+                        rb, cb = (rb << 3) | (rb >> 2), (cb << 3) | (cb >> 2)
+                        br, cr = (br << 3) | (br >> 2), (cr << 3) | (cr >> 2)
+                        if phase < 1:
+                            r, g, b = int(r*(1-t)+rg*t), int(g*(1-t)+cb*t), int(b*(1-t)+br*t)
+                        elif phase < 2:
+                            r, g, b = int(rg*(1-t)+rb*t), int(cb*(1-t)+cr*t), int(br*(1-t)+bg*t)
+                        else:
+                            r, g, b = int(rb*(1-t)+r*t), int(cr*(1-t)+g*t), int(bg*(1-t)+b*t)
+                    else:
+                        cr = (center >> 11) & 31
+                        cb = center & 31
+                        cr, cb = (cr << 3) | (cr >> 2), (cb << 3) | (cb >> 2)
+                        if phase < 1:
+                            r, g, b = int(cr*(1-t)+g*t), int(g*(1-t)+cb*t), int(cb*(1-t)+cr*t)
+                        elif phase < 2:
+                            r, g, b = int(g*(1-t)+cb*t), int(cb*(1-t)+cr*t), int(cr*(1-t)+g*t)
+                        else:
+                            r, g, b = int(cb*(1-t)+cr*t), int(cr*(1-t)+g*t), int(g*(1-t)+cb*t)
+                if brighten_amount > .001:
+                    r, g, b = min(255, int(r*mult)), min(255, int(g*mult)), min(255, int(b*mult))
+                value = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
+                raw[i] = _swap16(value) if swapped else value
+        return True
+
+    def native_spatial(self, zoom_amount, dx, dy):
+        """Zoom/translate the actual frame via C bitmaptools.rotozoom."""
+        if self.rotation != 0 or not self.framebuffer.spatial_available:
+            return False
+        import bitmaptools
+        import displayio
+        if not hasattr(bitmaptools, "rotozoom"):
+            self.framebuffer.spatial_available = False
+            return False
+        try:
+            source = self.framebuffer.spatial_bitmap
+            if source is None:
+                source = displayio.Bitmap(self.width, self.height, 65536)
+                self.framebuffer.spatial_bitmap = source
+            bitmaptools.blit(source, self.framebuffer.bitmap, 0, 0,
+                             x1=self.x_offset, y1=0,
+                             x2=self.x_offset + self.width, y2=self.height)
+            cx, cy = (self.width - 1) // 2, (self.height - 1) // 2
+            bitmaptools.rotozoom(
+                self.framebuffer.bitmap, source,
+                ox=self.x_offset + cx + dx, oy=cy + dy,
+                dest_clip0=(self.x_offset, 0),
+                dest_clip1=(self.x_offset + self.width, self.height),
+                px=cx, py=cy,
+                source_clip0=(0, 0), source_clip1=(self.width, self.height),
+                angle=0.0, scale=1.0 + zoom_amount, skip_index=None)
+            return True
+        except Exception as exc:
+            print("NATIVE SPATIAL unavailable:", str(exc))
+            self.framebuffer.spatial_available = False
+            return False
 
     def set_pixel565(self, x, y, value):
         if 0 <= x < self.width and 0 <= y < self.height:
@@ -426,6 +520,8 @@ class MatrixPortalDisplayBackend:
 
     def present(self):
         """Render the RGB565 Bitmap using the working displayio path."""
+        if self.framebuffer.pixels_view is not None:
+            self.bitmap.dirty()
         self.display.refresh()
 
     def set_brightness(self, value):

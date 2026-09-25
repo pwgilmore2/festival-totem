@@ -8,6 +8,11 @@ import time
 
 
 def run(bitmap):
+    try:
+        from ulab import numpy
+        print("ULAB: present; frombuffer", hasattr(numpy, "frombuffer"))
+    except ImportError:
+        print("ULAB: unavailable on this firmware")
     width, height = bitmap.width, bitmap.height
     first, last = bitmap[0, 0], bitmap[width - 1, height - 1]
     try:

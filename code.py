@@ -106,9 +106,12 @@ def launch():
             metrics.loop()
             metrics.add_timing("loop", time.monotonic() - loop_started)
             if metrics.due():
-                gc_started = time.monotonic()
-                gc.collect()
-                metrics.add_timing("gc", time.monotonic() - gc_started)
+                # A forced collection measured ~120 ms every five seconds,
+                # visibly interrupting otherwise steady GIF playback.
+                if gc.mem_free() < 300000:
+                    gc_started = time.monotonic()
+                    gc.collect()
+                    metrics.add_timing("gc", time.monotonic() - gc_started)
                 print("Performance:", metrics.take_report(free_ram=gc.mem_free()))
     finally:
         server.stop()

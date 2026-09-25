@@ -3,9 +3,12 @@
 import sys
 import types
 import unittest
+from array import array
 from unittest.mock import patch
 
-from matrixportal_backend import MatrixPortalDisplayBackend
+from matrixportal_backend import MatrixPortalDisplayBackend, MatrixPortalPanel, _BitmapLinearBuffer, rgb888_to_rgb565
+from display import VirtualDisplay
+from visual_engine import VisualLayerEngine
 
 
 class FakeRGBMatrix:
@@ -48,6 +51,63 @@ class FakeFrameBufferDisplay:
 
 
 class MatrixPortalBackendTests(unittest.TestCase):
+    def test_packed_color_pipeline_matches_original_rgb565_result(self):
+        class BufferedBitmap(array):
+            width = 8
+            height = 2
+            def __new__(cls):
+                return array.__new__(cls, "H", [0] * 16)
+        bitmap = BufferedBitmap()
+        raw = _BitmapLinearBuffer(bitmap, stride=8, swapped_storage=True)
+        panel = MatrixPortalPanel(raw, 8, 0, 4, 2)
+        baseline = VirtualDisplay(4, 2)
+        for y in range(2):
+            for x in range(4):
+                panel.set_pixel(x, y, (35+x*40, 25+y*90+x*15, 180-x*33))
+                baseline.set_pixel(x, y, panel.get_pixel(x, y))
+        for degrees, split, brighten in ((0, .5, 0), (75, 0, 0), (170, .4, .1)):
+            for y in range(2):
+                for x in range(4):
+                    panel.set_pixel(x, y, baseline.get_pixel(x, y))
+            expected = VirtualDisplay(4, 2)
+            for y in range(2):
+                for x in range(4):
+                    expected.set_pixel(x, y, baseline.get_pixel(x, y))
+            VisualLayerEngine(4, 2)._color_pipeline(expected, degrees, split, brighten)
+            self.assertTrue(panel.native_color_pipeline(degrees, split, brighten))
+            for y in range(2):
+                for x in range(4):
+                    self.assertEqual(panel.get_pixel565(x, y), rgb888_to_rgb565(expected.get_pixel(x, y)),
+                                     (degrees, split, brighten, x, y))
+
+    def test_verified_bitmap_buffer_uses_direct_pixels_in_display_order(self):
+        class BufferedBitmap(array):
+            width = 4
+            height = 2
+            def __new__(cls):
+                return array.__new__(cls, "H", [0] * 8)
+        bitmap = BufferedBitmap()
+        buffer = _BitmapLinearBuffer(bitmap, stride=4, swapped_storage=True)
+        self.assertIsNotNone(buffer.pixels_view)
+        buffer[5] = 0xF800
+        self.assertEqual(bitmap[5], 0x00F8)
+        self.assertEqual(buffer[5], 0xF800)
+
+    def test_native_spatial_uses_clipped_bitmaptools_transform(self):
+        bitmap = FakeBitmap(128, 32, 65536)
+        panel = MatrixPortalPanel(_BitmapLinearBuffer(bitmap, 128, True), 128, 0, 64, 32)
+        calls = []
+        tools = types.SimpleNamespace(
+            blit=lambda *args, **kwargs: calls.append(("copy", kwargs)),
+            rotozoom=lambda *args, **kwargs: calls.append(("transform", kwargs)),
+        )
+        with patch.dict(sys.modules, {"bitmaptools": tools,
+             "displayio": types.SimpleNamespace(Bitmap=FakeBitmap)}):
+            self.assertTrue(panel.native_spatial(.2, 2, -1))
+        self.assertEqual([call[0] for call in calls], ["copy", "transform"])
+        self.assertEqual(calls[1][1]["dest_clip1"], (64, 32))
+        self.assertEqual(calls[1][1]["scale"], 1.2)
+
     def test_both_panels_map_to_distinct_halves_and_back_can_rotate(self):
         board = types.SimpleNamespace(
             MTX_ADDRESS=(0, 1, 2, 3),
@@ -172,10 +232,6 @@ class MatrixPortalBackendTests(unittest.TestCase):
             self.assertEqual(back.get_pixel565(63, 0), 0xF800)
             self.assertEqual(back.get_pixel565(0, 1), 0x001F)
             self.assertEqual(len(calls), 3)
-            front.fast_chaos("chaos", 1.0, 5, {})
-            self.assertEqual(back.get_pixel565(0, 0), 0x001F)
-            self.assertTrue(any(front.get_pixel565(x, y) not in (0x001F, 0xF800)
-                                for y in range(32) for x in range(64)))
             front.blit_glyph("A", ("01010", "10001", "11111", "10001",
                                    "10001", "10001", "10001"), 5, 5, (255, 0, 0), 1)
             first_cache_size = len(backend.framebuffer.glyph_cache)

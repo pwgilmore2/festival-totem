@@ -289,6 +289,9 @@ class VisualLayerEngine:
         zoom_amount = max(0.0, float(zoom_amount))
         if zoom_amount <= .001 and dx == 0 and dy == 0:
             return
+        native_spatial = getattr(display, "native_spatial", None)
+        if native_spatial is not None and native_spatial(zoom_amount, dx, dy):
+            return
         src = copy_pixels(display)
         zoom = 1.0 + zoom_amount
         cx = (self.width - 1) / 2
@@ -312,6 +315,10 @@ class VisualLayerEngine:
         split_active = split_amount > .02
         brighten_active = brighten_amount > .001
         if not (hue_active or split_active or brighten_active):
+            return
+
+        native_colors = getattr(display, "native_color_pipeline", None)
+        if native_colors is not None and native_colors(degrees, split_amount, brighten_amount):
             return
 
         mult = 1.0 + max(0.0, float(brighten_amount))
