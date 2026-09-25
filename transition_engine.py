@@ -60,7 +60,6 @@ class TransitionManager(BaseTransitionManager):
 
         self._intense_target = None
         self._morph_pairs = None
-        self._morph_native = None
         self._shatter_tiles = None
 
     def apply(self, display):
@@ -73,12 +72,6 @@ class TransitionManager(BaseTransitionManager):
         target = self._intense_target
         p = self.progress
         if self.kind == "Morph":
-            native = getattr(display, "native_scene_morph", None)
-            if native is not None:
-                self._morph_native = native(self.source, target, p, self.seed,
-                                            self._morph_native)
-                if self._morph_native is not None:
-                    return
             self._morph(display, target, p)
         elif self.kind == "Spin":
             self._spin(display, target, p)

@@ -178,33 +178,6 @@ class MatrixPortalBackendTests(unittest.TestCase):
                 self.assertEqual(bitmap.data[y * 128 + 64:(y + 1) * 128],
                                  array('H', [0x4a4a] * 64))
 
-    def test_packed_scene_morph_reaches_destination_without_touching_other_panel(self):
-        from visual_engine import copy_pixels
-        class Bitmap:
-            width, height = 128, 32
-            def __init__(self):
-                self.data = array('H', [0x4a4a] * (128 * 32))
-        bitmap = Bitmap()
-        fb = _BitmapLinearBuffer(bitmap, 128, swapped_storage=True)
-        fb.pixels_view = memoryview(bitmap.data)
-        panel = MatrixPortalPanel(fb, 128, 0, 64, 32)
-        for y in range(32):
-            for x in range(64):
-                fb[y * 128 + x] = rgb888_to_rgb565((x * 3, y * 7, 40))
-        src = copy_pixels(panel)
-        for y in range(32):
-            for x in range(64):
-                fb[y * 128 + x] = rgb888_to_rgb565((y * 7, x * 3, 180))
-        dest = copy_pixels(panel)
-        prepared = panel.native_scene_morph(src, dest, .5, 417, None)
-        self.assertIsNotNone(prepared)
-        panel.native_scene_morph(src, dest, 1, 417, prepared)
-        for y in range(32):
-            for x in range(64):
-                self.assertEqual(panel.get_pixel565(x, y), dest[y]._values[x])
-            self.assertEqual(bitmap.data[y * 128 + 64:(y + 1) * 128],
-                             array('H', [0x4a4a] * 64))
-
     def test_packed_remaps_and_dim_preserve_back_panel(self):
         class Bitmap:
             width, height = 128, 32

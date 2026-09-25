@@ -35,9 +35,13 @@ transition frame), other content transitions (~0.8–2.6 seconds per active
 frame), non-Pixel text (5–10 FPS), Clock and Set Times (7–8 FPS), and
 Dimmed GIF (~7 FPS). The next build applies packed RGB565 transitions and
 Morph, native glyph bitmaps for all text fonts and info labels, and a native
-bitmapfilter dim pass with a packed fallback. Its physical frame rates and
-appearance still require a complete board tour; the diagnostic command
-installs the changed runtime modules automatically.
+bitmapfilter dim pass with a packed fallback. The 10:21 board tour measured
+faster content transitions through stage 25, then stopped printing serial
+output for 60 seconds at the first Morph frame, without a Python traceback.
+The packed Morph implementation has been removed from the next build. Morph
+uses the earlier slow but completed rendering path until a bounded replacement
+can be measured separately. The remaining font, info, and dim changes still
+need a complete board tour; the diagnostic command installs changed modules.
 
 When the last stage ends, the board displays **DONE** in green using the normal
 text overlay. It waits for two displayed frames and at least three seconds
