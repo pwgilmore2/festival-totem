@@ -33,7 +33,8 @@ def run():
         raise RuntimeError("Profile build has no GIFs")
 
     print("Bitmap profile: starting display", gc.mem_free())
-    backend = MatrixPortalDisplayBackend(bit_depth=1, doublebuffer=False)
+    backend = MatrixPortalDisplayBackend(bit_depth=1, doublebuffer=False,
+                                          swapped_storage=True)
     front, back = backend.displays["front"], backend.displays["back"]
     backend.set_brightness(0.25)
     print("Bitmap profile: display ready", gc.mem_free())

@@ -48,7 +48,11 @@ Wi-Fi. Copy `matrixportal_profile_build/media/`, its `manifest.json` and
 `matrixportal_backend.py` to CIRCUITPY, then copy its `code.py` last. The board
 prints GIF index, RAM, FPS and worst decode/copy/present times. Use `--count 1`
 if the second file will not fit. The profile is a diagnostic, not a replacement
-for the full app, and has not been physically tested yet.
+for the full app. Its first physical run reported ~2 FPS because the Python
+per-pixel GIF copy took up to 508 ms; decode and refresh were only 4 and 8 ms.
+The revised profile opts into an optional RGB565_SWAPPED storage mode with
+native `bitmaptools.blit` and needs a hardware test for speed, color and
+stability. The backend default remains the previously verified RGB565 path.
 
 When CIRCUITPY is mounted, compare the deployment directly against its real free space:
 

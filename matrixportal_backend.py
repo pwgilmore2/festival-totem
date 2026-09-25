@@ -14,17 +14,22 @@ SIDES = ("front", "back")
 class _BitmapLinearBuffer:
     """Expose Bitmap pixels through the renderer's linear RGB565 indexing."""
 
-    def __init__(self, bitmap, stride):
+    def __init__(self, bitmap, stride, swapped_storage=False):
         self.bitmap = bitmap
         self.stride = int(stride)
+        self.swapped_storage = bool(swapped_storage)
 
     def __getitem__(self, index):
         index = int(index)
-        return self.bitmap[index % self.stride, index // self.stride]
+        value = self.bitmap[index % self.stride, index // self.stride]
+        return _swap16(value) if self.swapped_storage else value
 
     def __setitem__(self, index, value):
         index = int(index)
-        self.bitmap[index % self.stride, index // self.stride] = int(value) & 0xFFFF
+        value = int(value) & 0xFFFF
+        self.bitmap[index % self.stride, index // self.stride] = (
+            _swap16(value) if self.swapped_storage else value
+        )
 
 
 def _swap16(value):
@@ -166,6 +171,12 @@ class MatrixPortalPanel:
 
     def blit_rgb565_swapped(self, source_bitmap):
         """Copy a gifio RGB565_SWAPPED bitmap into the native RGB565 buffer."""
+        if self.rotation == 0 and self.framebuffer.swapped_storage:
+            # gifio's Bitmap already stores RGB565_SWAPPED. Native C blit
+            # moves the whole frame without 2048 Python pixel assignments.
+            import bitmaptools
+            bitmaptools.blit(self.framebuffer.bitmap, source_bitmap, self.x_offset, 0)
+            return
         width = min(self.width, int(source_bitmap.width))
         height = min(self.height, int(source_bitmap.height))
         for y in range(height):
@@ -189,6 +200,7 @@ class MatrixPortalDisplayBackend:
         front_rotation=0,
         back_rotation=0,
         doublebuffer=False,
+        swapped_storage=False,
     ):
         try:
             import board
@@ -205,6 +217,7 @@ class MatrixPortalDisplayBackend:
         self.total_width = self.width * 2
         self.bit_depth = int(bit_depth)
         self.doublebuffer = bool(doublebuffer)
+        self.swapped_storage = bool(swapped_storage)
 
         displayio.release_displays()
         # Physical panels show RBG when RGB is requested. Correct the wiring
@@ -229,11 +242,14 @@ class MatrixPortalDisplayBackend:
         )
         self.display = framebufferio.FramebufferDisplay(self.matrix, auto_refresh=False)
         self.bitmap = displayio.Bitmap(self.total_width, self.height, 65536)
-        shader = displayio.ColorConverter(input_colorspace=displayio.Colorspace.RGB565)
+        colorspace = (displayio.Colorspace.RGB565_SWAPPED if self.swapped_storage
+                      else displayio.Colorspace.RGB565)
+        shader = displayio.ColorConverter(input_colorspace=colorspace)
         root = displayio.Group()
         root.append(displayio.TileGrid(self.bitmap, pixel_shader=shader))
         self.display.root_group = root
-        self.framebuffer = _BitmapLinearBuffer(self.bitmap, self.total_width)
+        self.framebuffer = _BitmapLinearBuffer(self.bitmap, self.total_width,
+                                                self.swapped_storage)
 
         self.displays = {
             "front": MatrixPortalPanel(

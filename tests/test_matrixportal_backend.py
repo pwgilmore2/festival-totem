@@ -24,6 +24,7 @@ class FakeBitmap:
     def __init__(self, width, height, value_count):
         self.data = [0] * (width * height)
         self.width = width
+        self.height = height
 
     def __getitem__(self, xy):
         x, y = xy
@@ -83,6 +84,46 @@ class MatrixPortalBackendTests(unittest.TestCase):
         self.assertEqual(backend.framebuffer[31 * 128 + 127], 0xF800)
         backend.present()
         self.assertEqual(backend.matrix.refresh_count, 2)
+
+    def test_swapped_storage_native_blit_preserves_logical_colors(self):
+        board = types.SimpleNamespace(
+            MTX_ADDRESS=(0, 1, 2, 3),
+            MTX_COMMON={"rgb_pins": (0, 1, 2, 3, 4, 5)},
+        )
+        colors = []
+        displayio = types.SimpleNamespace(
+            release_displays=lambda: None, Bitmap=FakeBitmap,
+            ColorConverter=lambda **kwargs: colors.append(kwargs) or None,
+            Colorspace=types.SimpleNamespace(RGB565=1, RGB565_SWAPPED=2),
+            Group=list, TileGrid=lambda bitmap, pixel_shader: bitmap,
+        )
+        copied = []
+
+        def blit(dest, source, x, y):
+            copied.append((x, y))
+            for py in range(source.height):
+                for px in range(source.width):
+                    dest[x + px, y + py] = source[px, py]
+
+        with patch.dict(sys.modules, {
+            "board": board, "displayio": displayio,
+            "rgbmatrix": types.SimpleNamespace(RGBMatrix=FakeRGBMatrix),
+            "framebufferio": types.SimpleNamespace(FramebufferDisplay=FakeFrameBufferDisplay),
+            "bitmaptools": types.SimpleNamespace(blit=blit),
+        }):
+            backend = MatrixPortalDisplayBackend(swapped_storage=True)
+            frame = FakeBitmap(64, 32, 65536)
+            frame[0, 0] = 0x00F8
+            backend.get("front").blit_rgb565_swapped(frame)
+            backend.get("back").blit_rgb565_swapped(frame)
+
+        self.assertEqual(colors[0]["input_colorspace"], 2)
+        self.assertEqual(copied, [(0, 0), (64, 0)])
+        self.assertEqual(backend.bitmap[0, 0], 0x00F8)
+        self.assertEqual(backend.get("front").get_pixel565(0, 0), 0xF800)
+        self.assertEqual(backend.get("back").get_pixel(0, 0), (255, 0, 0))
+        backend.get("front").set_pixel(1, 1, (0, 0, 255))
+        self.assertEqual(backend.bitmap[1, 1], 0x1F00)
 
 
 if __name__ == "__main__":
