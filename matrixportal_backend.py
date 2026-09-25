@@ -201,6 +201,40 @@ class MatrixPortalPanel:
             for x in range(width):
                 self.set_pixel565(x, y, _swap16(source_bitmap[x, y]))
 
+    def blit_icon(self, asset, x, y):
+        """Cache an icon as RGB565 and draw its opaque pixels in native code."""
+        if self.rotation != 0:
+            return False
+        import bitmaptools
+        import displayio
+        bitmap = getattr(asset, "_board_bitmap", None)
+        if bitmap is None:
+            rows = asset.pixels
+            height = len(rows)
+            width = len(rows[0]) if height else 0
+            if not width:
+                return True
+            bitmap = displayio.Bitmap(width, height, 65536)
+            # Reserve one RGB565 value for transparency. If an opaque icon
+            # pixel matches it, choose the adjacent near-black value.
+            for py, row in enumerate(rows):
+                for px, (r, g, b, alpha) in enumerate(row):
+                    color = rgb888_to_rgb565((r, g, b)) if alpha else 1
+                    if alpha and color == 1:
+                        color = 2
+                    bitmap[px, py] = _swap16(color) if self.framebuffer.swapped_storage else color
+            asset._board_bitmap = bitmap
+        x1, y1 = max(0, -x), max(0, -y)
+        x2 = min(bitmap.width, self.width - x)
+        y2 = min(bitmap.height, self.height - y)
+        if x2 > x1 and y2 > y1:
+            skip = 0x0100 if self.framebuffer.swapped_storage else 1
+            bitmaptools.blit(self.framebuffer.bitmap, bitmap,
+                             self.x_offset + x + x1, y + y1,
+                             x1=x1, y1=y1, x2=x2, y2=y2,
+                             skip_source_index=skip)
+        return True
+
 
 class MatrixPortalDisplayBackend:
     """Direct framebuffer backend for two chained MatrixPortal S3 panels.

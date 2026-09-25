@@ -129,6 +129,39 @@ class MatrixPortalBackendTests(unittest.TestCase):
         self.assertEqual(backend.get("front").get_pixel565(1, 1), 0x000F)
         self.assertEqual(backend.get("back").get_pixel565(0, 0), 0xF800)
 
+    def test_native_icon_blit_preserves_transparency_and_panel_boundary(self):
+        board = types.SimpleNamespace(MTX_ADDRESS=(0, 1, 2, 3),
+            MTX_COMMON={"rgb_pins": (0, 1, 2, 3, 4, 5)})
+        displayio = types.SimpleNamespace(release_displays=lambda: None,
+            Bitmap=FakeBitmap, ColorConverter=lambda **kwargs: None,
+            Colorspace=types.SimpleNamespace(RGB565_SWAPPED=2),
+            Group=list, TileGrid=lambda bitmap, pixel_shader: bitmap)
+        calls = []
+        def blit(dest, source, x, y, **kwargs):
+            calls.append((x, y, kwargs))
+            for py in range(kwargs["y1"], kwargs["y2"]):
+                for px in range(kwargs["x1"], kwargs["x2"]):
+                    value = source[px, py]
+                    if value != kwargs["skip_source_index"]:
+                        dest[x + px - kwargs["x1"], y + py - kwargs["y1"]] = value
+        with patch.dict(sys.modules, {"board": board, "displayio": displayio,
+             "bitmaptools": types.SimpleNamespace(blit=blit),
+             "rgbmatrix": types.SimpleNamespace(RGBMatrix=FakeRGBMatrix),
+             "framebufferio": types.SimpleNamespace(FramebufferDisplay=FakeFrameBufferDisplay)}):
+            backend = MatrixPortalDisplayBackend(swapped_storage=True)
+            front = backend.get("front")
+            back = backend.get("back")
+            front.fill((0, 0, 255))
+            back.fill((0, 255, 0))
+            asset = types.SimpleNamespace(pixels=(((255, 0, 0, 255), (0, 0, 0, 0)),))
+            self.assertTrue(front.blit_icon(asset, 63, 0))
+            self.assertEqual(front.get_pixel565(63, 0), 0xF800)
+            self.assertEqual(back.get_pixel(0, 0), (0, 255, 0))
+            self.assertTrue(front.blit_icon(asset, -1, 1))
+            self.assertEqual(front.get_pixel565(0, 1), 0x001F)
+            self.assertEqual(len(calls), 2)
+            self.assertIs(asset._board_bitmap, asset._board_bitmap)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -96,6 +96,15 @@ The phone may restore `Dimmed` from localStorage when its page opens: choose
 When updating `code.py`, retain its existing private AP password; the
 project-root template deliberately has an empty password.
 
+With that setting the user measured 28.09 FPS without the phone and 23.87 FPS
+with the phone, but only 3.44 FPS with an icon. Each icon draw cost ~102.5 ms
+per panel, while native display present remained ~7.6 ms. The next candidate
+caches icons as RGB565 Bitmaps and uses native transparent `bitmaptools.blit`
+for steady icons. Copy `matrixportal_backend.py` and `overlay_engine.py` from
+the project root to the board; leave the existing private-password `code.py`
+and GIF media in place. A fade or reactive-brightness frame still follows the
+slower Python path; physical FPS for the native path is still unverified.
+
 When CIRCUITPY is mounted, compare the deployment directly against its real free space:
 
 ```bash

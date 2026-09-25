@@ -110,6 +110,13 @@ class OverlayRenderer:
         _, reveal = self._transition(state, seed)
 
         brightness = audio_brightness(text_settings.get("audio_reactivity", "Off"), signals)
+        # The MatrixPortal backend can composite a cached transparent Bitmap
+        # in native code. Keep the existing per-pixel path for fades, audio
+        # brightness changes, desktop rendering, and rotated panels.
+        if reveal is None and brightness == 1.0:
+            blit_icon = getattr(display, "blit_icon", None)
+            if blit_icon is not None and blit_icon(asset, x0, y0):
+                return
         if reveal is not None:
             display = DissolveDisplay(display, reveal, seed)
         for sy, row in enumerate(rgba):
