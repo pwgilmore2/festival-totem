@@ -55,11 +55,11 @@ def apply(framebuffer, origin, width, height, degrees, split_amount,
         # alpha blending at factor2=1 would erase the previous channels.
         bitmaptools.alphablend(center, center, red,
                                displayio.Colorspace.RGB565_SWAPPED,
-                               factor1=1.0, factor2=1.0,
+                               1.0, 1.0,
                                blendmode=bitmaptools.BlendMode.Screen)
         bitmaptools.alphablend(center, center, blue,
                                displayio.Colorspace.RGB565_SWAPPED,
-                               factor1=1.0, factor2=1.0,
+                               1.0, 1.0,
                                blendmode=bitmaptools.BlendMode.Screen)
     if hue:
         weights = hue_weights(degrees)

@@ -197,6 +197,15 @@ every five seconds of color processing. Copy the updated native module first
 and backend second, leave private `code.py`/media intact, and collect the
 `COLOR PATH:` line plus any `NATIVE COLORS unavailable` line with performance.
 
+Physical follow-up showed `COLOR PATH: native bitmapfilter`, then
+`NATIVE COLORS unavailable; using ulab: TypeError unexpected keyword argument
+'factor1'`. CircuitPython 10.3.1's `bitmaptools.alphablend` binding takes two
+alpha factors as positional arguments, with `blendmode` keyword-only. The
+module now uses this exact signature. **This fix has not been timed on board.**
+Copy only the updated `matrixportal_native_colors.py`, reset so the native
+path is reenabled, and collect a sustained Chaos window and `COLOR PATH:` line.
+The reported 13.58 FPS was a mixed window with only three active Chaos frames.
+
 When CIRCUITPY is mounted, compare the deployment directly against its real free space:
 
 ```bash

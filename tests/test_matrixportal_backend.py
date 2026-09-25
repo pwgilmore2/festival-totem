@@ -68,8 +68,9 @@ class MatrixPortalBackendTests(unittest.TestCase):
                                             native_color_bitmaps=None)
         def blit(*args, **kwargs):
             calls.append(("blit", args, kwargs))
-        def blend(*args, **kwargs):
-            calls.append(("blend", args, kwargs))
+        def blend(dest, source1, source2, colorspace, factor1, factor2, *, blendmode):
+            calls.append(("blend", (dest, source1, source2, colorspace,
+                                     factor1, factor2), {"blendmode": blendmode}))
         filters = types.SimpleNamespace(
             mix=lambda *args: calls.append(("mix", args, {})),
             ChannelScale=lambda *weights: weights,
@@ -84,6 +85,10 @@ class MatrixPortalBackendTests(unittest.TestCase):
                                       "displayio": displayio}):
             self.assertTrue(apply(framebuffer, 64, 64, 32, 0, .5, 0))
             self.assertEqual(sum(call[0] == "blend" for call in calls), 2)
+            for operation, args, kwargs in calls:
+                if operation == "blend":
+                    self.assertEqual(args[4:], (1.0, 1.0))
+                    self.assertEqual(kwargs, {"blendmode": "screen"})
             self.assertEqual([call[1][1] for call in calls if call[0] == "mix"],
                              [(1, 0, 0), (0, 0, 1), (0, 1, 0)])
             self.assertEqual(calls[0][2]["x1"], 64)
