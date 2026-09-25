@@ -78,7 +78,8 @@ fault even at bit depth 1 without doublebuffer. The verified display path uses
 a 16-bit `displayio.Bitmap` and `framebufferio.FramebufferDisplay`, which left
 2,037,824 bytes of free RAM after canvas allocation. The backend now maps
 logical panel pixel indices to this bitmap and calls `display.refresh()`. Its
-runtime adapter must still pass the on-device check before measuring FPS.
+runtime adapter passed its first on-device color-square check on 2026-09-25;
+the full renderer, frame-rate and GIF/effects combinations still need tests.
 
 ## Measuring real S3 performance
 
