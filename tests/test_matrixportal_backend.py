@@ -51,6 +51,45 @@ class FakeFrameBufferDisplay:
 
 
 class MatrixPortalBackendTests(unittest.TestCase):
+    def test_native_color_matrix_matches_hue_rotation_and_split_edges(self):
+        from matrixportal_native_colors import apply, hue_weights
+
+        self.assertEqual(hue_weights(0), (1, 0, 0, 0, 1, 0, 0, 0, 1))
+        self.assertEqual(hue_weights(120), (0, 1, 0, 0, 0, 1, 0, 0, 1))
+        self.assertEqual(hue_weights(240), (0, 0, 1, 1, 0, 0, 0, 1, 0))
+
+        # The native compositor must sample one face, clamp the shifted edge,
+        # blend all three isolated channels, then commit only to that face.
+        calls = []
+        class Bitmap:
+            def __init__(self, width, height, colors):
+                self.width, self.height = width, height
+        framebuffer = types.SimpleNamespace(bitmap=Bitmap(128, 32, 65536),
+                                            native_color_bitmaps=None)
+        def blit(*args, **kwargs):
+            calls.append(("blit", args, kwargs))
+        def blend(*args, **kwargs):
+            calls.append(("blend", args, kwargs))
+        filters = types.SimpleNamespace(
+            mix=lambda *args: calls.append(("mix", args, {})),
+            ChannelScale=lambda *weights: weights,
+            ChannelMixer=lambda *weights: weights,
+        )
+        tools = types.SimpleNamespace(blit=blit, alphablend=blend,
+                                      BlendMode=types.SimpleNamespace(Screen="screen"))
+        displayio = types.SimpleNamespace(Bitmap=Bitmap,
+                             Colorspace=types.SimpleNamespace(RGB565_SWAPPED="swapped"))
+        with patch.dict(sys.modules, {"bitmaptools": tools,
+                                      "bitmapfilter": filters,
+                                      "displayio": displayio}):
+            self.assertTrue(apply(framebuffer, 64, 64, 32, 0, .5, 0))
+            self.assertEqual(sum(call[0] == "blend" for call in calls), 2)
+            self.assertEqual([call[1][1] for call in calls if call[0] == "mix"],
+                             [(1, 0, 0), (0, 0, 1), (0, 1, 0)])
+            self.assertEqual(calls[0][2]["x1"], 64)
+            self.assertEqual(calls[-1][1][1:], (framebuffer.native_color_bitmaps[0], 64, 0))
+            self.assertFalse(apply(framebuffer, 0, 64, 32, 75, .5, 0))
+
     def test_vector_colors_preserve_chaos_pipeline_and_other_face(self):
         try:
             import numpy

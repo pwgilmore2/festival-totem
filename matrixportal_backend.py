@@ -34,6 +34,8 @@ class _BitmapLinearBuffer:
         self.spatial_available = True
         self.color_available = True
         self.vector_color_available = True
+        self.native_filter_available = True
+        self.native_color_bitmaps = None
 
     def __getitem__(self, index):
         index = int(index)
@@ -198,6 +200,17 @@ class MatrixPortalPanel:
         raw = self.framebuffer.pixels_view
         if raw is None or self.rotation != 0 or not self.framebuffer.color_available:
             return False
+        if self.framebuffer.swapped_storage and self.framebuffer.native_filter_available:
+            try:
+                from matrixportal_native_colors import apply as native_apply
+                if native_apply(self.framebuffer, self.x_offset, self.width,
+                                self.height, degrees, split_amount,
+                                brighten_amount):
+                    return True
+            except Exception as exc:
+                print("NATIVE COLORS unavailable; using ulab:",
+                      type(exc).__name__, str(exc))
+                self.framebuffer.native_filter_available = False
         if self.framebuffer.vector_color_available:
             try:
                 from ulab import numpy as np

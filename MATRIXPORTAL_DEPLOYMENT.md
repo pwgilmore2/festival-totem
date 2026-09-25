@@ -175,6 +175,18 @@ copy `matrixportal_ulab_colors.py` to CIRCUITPY **before** replacing
 media, library and `bit_depth=1`. Select Chaos and capture the full next
 `Performance:` report, together with any `ULAB COLORS unavailable` line.
 
+The vector path ran but still delivered only ~0.99 FPS: hue ~372 ms, split
+~384 ms, Chaos render ~796 ms, present ~7 ms. The next board candidate uses
+native `bitmapfilter.mix` for hue and channel isolation, native Bitmap blits
+for spatial split, and native `bitmaptools.alphablend` Screen to combine the
+isolated channels. It draws into cached 64x32 Bitmaps and commits only after
+all native operations succeed. Copy `matrixportal_native_colors.py` first,
+then the updated `matrixportal_backend.py`; do not replace the existing
+private-password `code.py` or media. The old ulab color path remains a fallback
+with a one-time `NATIVE COLORS unavailable` diagnostic. Collect a complete
+Chaos performance report and visually check colors and split edges. **Native
+color speed and fidelity have not yet been measured on this physical board.**
+
 When CIRCUITPY is mounted, compare the deployment directly against its real free space:
 
 ```bash
