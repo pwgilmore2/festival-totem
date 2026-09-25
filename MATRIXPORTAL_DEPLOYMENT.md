@@ -187,6 +187,16 @@ with a one-time `NATIVE COLORS unavailable` diagnostic. Collect a complete
 Chaos performance report and visually check colors and split edges. **Native
 color speed and fidelity have not yet been measured on this physical board.**
 
+The first native candidate reported essentially unchanged ~1.04 FPS,
+`chaos/hue` ~375 ms and `chaos/rgb_split` ~394 ms. The report did not contain
+the native fallback diagnostic, so the active path is unknown. The native
+module's `**options` function-call unpack was removed because CircuitPython
+previously rejected another `**` unpack at parse time. The backend now prints
+`COLOR PATH: native bitmapfilter`, `ulab`, or `packed Python` at first use and
+every five seconds of color processing. Copy the updated native module first
+and backend second, leave private `code.py`/media intact, and collect the
+`COLOR PATH:` line plus any `NATIVE COLORS unavailable` line with performance.
+
 When CIRCUITPY is mounted, compare the deployment directly against its real free space:
 
 ```bash

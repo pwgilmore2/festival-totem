@@ -53,14 +53,20 @@ def apply(framebuffer, origin, width, height, degrees, split_amount,
         bitmapfilter.mix(center, bitmapfilter.ChannelScale(0, 1, 0))
         # Full opacity Screen adds disjoint red/green/blue channels. Normal
         # alpha blending at factor2=1 would erase the previous channels.
-        options = dict(factor1=1.0, factor2=1.0,
-                       blendmode=bitmaptools.BlendMode.Screen)
         bitmaptools.alphablend(center, center, red,
-                               displayio.Colorspace.RGB565_SWAPPED, **options)
+                               displayio.Colorspace.RGB565_SWAPPED,
+                               factor1=1.0, factor2=1.0,
+                               blendmode=bitmaptools.BlendMode.Screen)
         bitmaptools.alphablend(center, center, blue,
-                               displayio.Colorspace.RGB565_SWAPPED, **options)
+                               displayio.Colorspace.RGB565_SWAPPED,
+                               factor1=1.0, factor2=1.0,
+                               blendmode=bitmaptools.BlendMode.Screen)
     if hue:
-        bitmapfilter.mix(center, bitmapfilter.ChannelMixer(*hue_weights(degrees)))
+        weights = hue_weights(degrees)
+        bitmapfilter.mix(center, bitmapfilter.ChannelMixer(
+            weights[0], weights[1], weights[2],
+            weights[3], weights[4], weights[5],
+            weights[6], weights[7], weights[8]))
     if brighten_amount > .001:
         scale = 1.0 + max(0.0, float(brighten_amount))
         bitmapfilter.mix(center, bitmapfilter.ChannelScale(scale, scale, scale))

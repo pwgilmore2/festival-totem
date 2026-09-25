@@ -36,6 +36,8 @@ class _BitmapLinearBuffer:
         self.vector_color_available = True
         self.native_filter_available = True
         self.native_color_bitmaps = None
+        self.color_path = None
+        self.next_color_path_report = 0.0
 
     def __getitem__(self, index):
         index = int(index)
@@ -56,6 +58,16 @@ class _BitmapLinearBuffer:
 def _swap16(value):
     value = int(value) & 0xFFFF
     return ((value & 0xFF) << 8) | (value >> 8)
+
+
+def _report_color_path(framebuffer, path):
+    # Periodic diagnostic survives a missing startup line in serial capture.
+    import time
+    now = time.monotonic()
+    if path != framebuffer.color_path or now >= framebuffer.next_color_path_report:
+        print("COLOR PATH:", path)
+        framebuffer.next_color_path_report = now + 5.0
+    framebuffer.color_path = path
 
 
 def rgb888_to_rgb565(color):
@@ -206,6 +218,7 @@ class MatrixPortalPanel:
                 if native_apply(self.framebuffer, self.x_offset, self.width,
                                 self.height, degrees, split_amount,
                                 brighten_amount):
+                    _report_color_path(self.framebuffer, "native bitmapfilter")
                     return True
             except Exception as exc:
                 print("NATIVE COLORS unavailable; using ulab:",
@@ -218,6 +231,7 @@ class MatrixPortalPanel:
                 apply(raw, self.stride, self.x_offset, self.width, self.height,
                       self.framebuffer.swapped_storage, degrees, split_amount,
                       brighten_amount, np)
+                _report_color_path(self.framebuffer, "ulab")
                 return True
             except Exception as exc:
                 print("ULAB COLORS unavailable; using original colors:",
@@ -238,6 +252,7 @@ class MatrixPortalPanel:
             self.framebuffer.color_available = False
             return False
         stride = self.stride
+        _report_color_path(self.framebuffer, "packed Python")
         origin = self.x_offset
         swapped = self.framebuffer.swapped_storage
         for y in range(self.height):
