@@ -1,6 +1,9 @@
 import unittest
 from datetime import datetime, timezone
+from types import SimpleNamespace
+from unittest.mock import patch
 
+import info_scenes
 from display import VirtualDisplay
 from info_scenes import InfoScenes, SCENES, clean_schedule
 from text import FONT
@@ -27,6 +30,20 @@ class InfoScenesTests(unittest.TestCase):
         now = scenes.local_time()
         self.assertEqual((now.tm_hour, now.tm_min), (14, 44))
         self.assertFalse(scenes.sync_time({"epoch": epoch, "offset_seconds": 100000}))
+
+    def test_clock_works_with_circuitpython_time_without_gmtime(self):
+        scenes = InfoScenes(64, 32)
+        epoch = datetime(2026, 10, 1, 19, 44, tzinfo=timezone.utc).timestamp()
+        converted = []
+        board_time = SimpleNamespace(
+            monotonic=lambda: 100.0,
+            localtime=lambda seconds: converted.append(seconds) or datetime.fromtimestamp(seconds, timezone.utc).timetuple(),
+        )
+        with patch.object(info_scenes, "time", board_time):
+            self.assertTrue(scenes.sync_time({"epoch": epoch, "offset_seconds": -5 * 3600}))
+            now = scenes.local_time()
+        self.assertEqual(converted, [int(epoch - 5 * 3600)])
+        self.assertEqual((now.tm_hour, now.tm_min), (14, 44))
 
     def test_combined_clock_weather_background_and_large_colon(self):
         self.assertEqual(SCENES, ("Clock", "Set Times", "Waveform"))

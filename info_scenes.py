@@ -72,7 +72,12 @@ class InfoScenes:
     def local_time(self):
         if self.clock_epoch is None:
             return None
-        return time.gmtime(int(self.clock_epoch + self.clock_offset + time.monotonic() - self.clock_at))
+        # CircuitPython exposes localtime(seconds), but not gmtime(). Its
+        # epoch conversion has no host timezone; the phone supplies the
+        # festival offset above. Keep gmtime on desktop where localtime may
+        # use the computer's own timezone.
+        converter = getattr(time, "gmtime", time.localtime)
+        return converter(int(self.clock_epoch + self.clock_offset + time.monotonic() - self.clock_at))
 
     def active_day(self, now=None):
         if self.schedule_day != "Auto":

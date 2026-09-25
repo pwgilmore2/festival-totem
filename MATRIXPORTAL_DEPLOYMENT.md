@@ -73,6 +73,12 @@ The loop had scheduled its next frame after render/present; a follow-up code
 change schedules the 50 ms period from frame start. That change has not yet
 been measured on hardware.
 
+On the first phone connection, state publication reached `InfoScenes.local_time()`
+and raised because CircuitPython 10.3.1 lacks `time.gmtime`. The board clock
+now falls back to `time.localtime(seconds)` after applying the phone-supplied
+festival offset. Copy only the project-root `info_scenes.py` to CIRCUITPY,
+reset, and retry with serial attached. This change awaits a physical retest.
+
 When CIRCUITPY is mounted, compare the deployment directly against its real free space:
 
 ```bash
