@@ -51,6 +51,8 @@ class InfoScenesTests(unittest.TestCase):
         scenes = InfoScenes(64, 32)
         panel = VirtualDisplay()
         scenes.set_weather({"temperature": "72", "condition": "Cloudy"})
+        scenes.set_weather({"temperature": "72", "condition": "cloudy"})
+        self.assertEqual(scenes.weather["condition"], "Cloudy")
         for hour, expected in ((15, (12, 74, 128)), (19, (70, 27, 85)), (23, (3, 5, 21))):
             epoch = datetime(2026, 10, 1, hour, 44, tzinfo=timezone.utc).timestamp()
             scenes.sync_time({"epoch": epoch, "offset_seconds": 0})

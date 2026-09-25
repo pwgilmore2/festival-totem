@@ -134,11 +134,12 @@ class TransitionManager:
     def _ripple(self, display, target, p):
         cx = (self.width - 1) / 2.0
         cy = (self.height - 1) / 2.0
-        max_r = math.hypot(cx, cy)
+        max_r = math.sqrt(cx * cx + cy * cy)
         radius = p * (max_r + 8)
         for y in range(self.height):
             for x in range(self.width):
-                d = math.hypot(x - cx, y - cy)
+                dx, dy = x - cx, y - cy
+                d = math.sqrt(dx * dx + dy * dy)
                 wave = 2.2 * math.sin((d - radius) * 1.25) * (1.0 - p)
                 if d <= radius:
                     sx = int(round(cx + (x - cx) * (1.0 - wave * 0.018)))

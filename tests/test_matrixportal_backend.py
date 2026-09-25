@@ -6,7 +6,7 @@ import unittest
 from array import array
 from unittest.mock import patch
 
-from matrixportal_backend import MatrixPortalDisplayBackend, MatrixPortalPanel, _BitmapLinearBuffer, rgb888_to_rgb565
+from matrixportal_backend import MatrixPortalDisplayBackend, MatrixPortalPanel, _BitmapLinearBuffer, _swap16, rgb888_to_rgb565, rgb565_to_rgb888
 from display import VirtualDisplay
 from visual_engine import VisualLayerEngine
 from runtime_random import _SeededRandom
@@ -52,6 +52,63 @@ class FakeFrameBufferDisplay:
 
 
 class MatrixPortalBackendTests(unittest.TestCase):
+    def test_packed_remaps_and_dim_preserve_back_panel(self):
+        class Bitmap:
+            width, height = 128, 32
+            def __init__(self):
+                self.data = array('H', [0] * (128 * 32))
+        bitmap = Bitmap()
+        fb = _BitmapLinearBuffer(bitmap, 128, swapped_storage=True)
+        fb.pixels_view = memoryview(bitmap.data)
+        panel = MatrixPortalPanel(fb, 128, 0, 64, 32)
+        for y in range(32):
+            for x in range(64):
+                bitmap.data[y * 128 + x] = _swap16((x << 5) | y)
+                bitmap.data[y * 128 + 64 + x] = 0x4a4a
+        self.assertTrue(panel.native_pixel_melt([2] * 64))
+        self.assertEqual(bitmap.data[3 * 128 + 4], _swap16((4 << 5) | 1))
+        self.assertTrue(panel.native_jumble(list(reversed(range(128))), 4, 16, 8))
+        self.assertEqual(bitmap.data[0], _swap16((60 << 5) | 26))
+        panel.dim(.5)
+        self.assertEqual(bitmap.data[64], 0x4a4a)
+        self.assertEqual(bitmap.data[31 * 128 + 127], 0x4a4a)
+
+    def test_packed_effects_match_original_colors_and_only_write_one_panel(self):
+        import matrixportal_effects as effects
+        from runtime_random import _SeededRandom
+
+        class Bitmap:
+            width, height = 128, 32
+            def __init__(self):
+                self.data = array('H', [0x4a4a] * (self.width * self.height))
+            def __setitem__(self, xy, value):
+                x, y = xy
+                self.data[y * self.width + x] = value
+
+        def fill_region(bitmap, x1, y1, x2, y2, value):
+            for y in range(y1, y2):
+                for x in range(x1, x2):
+                    bitmap[x, y] = value
+
+        for name, render in effects.EFFECTS.items():
+            bitmap = Bitmap()
+            fb = _BitmapLinearBuffer(bitmap, 128, swapped_storage=True)
+            fb.pixels_view = memoryview(bitmap.data)
+            front = MatrixPortalPanel(fb, 128, 0, 64, 32)
+            original = VirtualDisplay()
+            with patch.dict(sys.modules, {'bitmaptools': types.SimpleNamespace(fill_region=fill_region)}), \
+                    patch.object(effects.random, 'Random', _SeededRandom):
+                render(original, 1.5)
+                render(front, 1.5)
+            for y in range(32):
+                for x in range(64):
+                    actual = rgb565_to_rgb888(_swap16(bitmap.data[y * 128 + x]))
+                    expected = original.get_pixel(x, y)
+                    self.assertLessEqual(max(abs(a - b) for a, b in zip(actual, expected)),
+                                         18, (name, x, y, actual, expected))
+                self.assertEqual(bitmap.data[y * 128 + 64:(y + 1) * 128],
+                                 array('H', [0x4a4a] * 64))
+
     def test_native_row_wave_shifts_each_row_with_clamped_edges(self):
         import math
         class Bitmap:

@@ -15,10 +15,22 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 import matrixportal_diagnostics as diagnostic
-from tools.run_matrixportal_diagnostics import collect, open_serial, private_program, probe_serial
+from tools.run_matrixportal_diagnostics import collect, open_serial, private_program, probe_serial, changed_modules, BOARD_MODULES
 
 
 class DiagnosticTests(unittest.TestCase):
+    def test_incremental_deploy_lists_only_differing_runtime_modules(self):
+        from tools.run_matrixportal_diagnostics import ROOT
+        with tempfile.TemporaryDirectory() as temp:
+            target = Path(temp)
+            for name in BOARD_MODULES:
+                (target / name).write_bytes((ROOT / name).read_bytes())
+            self.assertEqual(changed_modules(target), [])
+            (target / "chaos_engine.py").write_bytes(b"old")
+            changes = changed_modules(target)
+            self.assertEqual([destination.name for destination, _ in changes], ["chaos_engine.py"])
+            self.assertEqual(changes[0][1], (ROOT / "chaos_engine.py").read_bytes())
+
     @unittest.skipUnless(hasattr(os, 'openpty'), 'requires a Unix pseudoterminal')
     def test_probe_requires_board_bytes_before_deploy(self):
         master, slave = os.openpty()

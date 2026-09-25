@@ -233,21 +233,26 @@ class ChaosEngine:
                 display.set_pixel(x, y, (r, g, b))
 
     def _pixel_melt(self, display, amount, frame):
-        src = copy_pixels(display)
         elapsed = max(0.0, time.monotonic() - self.started)
         strength = min(1.0, elapsed * 0.30) * amount
         rng = random.Random(4107)
+        shifts = []
         for x in range(display.width):
             speed = 0.35 + rng.random() * 0.9
             drop = int(strength * speed * (display.height + 6))
             wobble = int(math.sin(frame * 0.055 + x * 0.7) * amount)
+            shifts.append(drop + wobble)
+        native = getattr(display, "native_pixel_melt", None)
+        if native is not None and native(shifts):
+            return
+        src = copy_pixels(display)
+        for x, shift in enumerate(shifts):
             for y in range(display.height):
-                sy = y - drop - wobble
+                sy = y - shift
                 sy = max(0, min(display.height - 1, sy))
                 display.set_pixel(x, y, src[sy][x])
 
     def _jumble(self, display, amount, frame):
-        src = copy_pixels(display)
         block = 4
         cols = max(1, display.width // block)
         rows = max(1, display.height // block)
@@ -258,6 +263,10 @@ class ChaosEngine:
             a = rng.randrange(len(mapping))
             b = rng.randrange(len(mapping))
             mapping[a], mapping[b] = mapping[b], mapping[a]
+        native = getattr(display, "native_jumble", None)
+        if native is not None and native(mapping, block, cols, rows):
+            return
+        src = copy_pixels(display)
         for by in range(rows):
             for bx in range(cols):
                 src_index = mapping[by * cols + bx]

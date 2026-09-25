@@ -25,12 +25,16 @@ def hsv(h, saturation=1.0, value=1.0):
 
 
 def rainbow(display, t):
+    if getattr(display, "native_effect", None) and display.native_effect("Rainbow", t):
+        return
     for y in range(display.height):
         for x in range(display.width):
             display.set_pixel(x, y, hsv(x * 360 / display.width + t * 80))
 
 
 def waves(display, t):
+    if getattr(display, "native_effect", None) and display.native_effect("Waves", t):
+        return
     for y in range(display.height):
         for x in range(display.width):
             wave = (math.sin(x * .25 + y * .15 + t * 4) + 1) / 2
@@ -38,6 +42,8 @@ def waves(display, t):
 
 
 def plasma(display, t):
+    if getattr(display, "native_effect", None) and display.native_effect("Plasma", t):
+        return
     for y in range(display.height):
         for x in range(display.width):
             value = (math.sin(x * .15 + t * 2) + math.sin(y * .2 + t * 1.5)
@@ -46,6 +52,8 @@ def plasma(display, t):
 
 
 def stars(display, t):
+    if getattr(display, "native_effect", None) and display.native_effect("Stars", t):
+        return
     display.clear()
     rng = random.Random(42)
     for i in range(80):

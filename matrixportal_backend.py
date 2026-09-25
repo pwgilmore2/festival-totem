@@ -40,6 +40,8 @@ class _BitmapLinearBuffer:
         self.wave_available = True
         self.color_path = None
         self.next_color_path_report = 0.0
+        self.effect_palettes = None
+        self.dim_tables = {}
 
     def __getitem__(self, index):
         index = int(index)
@@ -167,6 +169,121 @@ class MatrixPortalPanel:
     def clear(self):
         self.fill((0, 0, 0))
 
+    def native_effect(self, name, t):
+        """Render procedural backgrounds as packed Bitmap pixels.
+
+        Compute each sine term once per row/column/diagonal and look up
+        RGB565 colors; avoid HSV conversion and Bitmap methods per pixel.
+        The shared framebuffer is only written in this panel's 64x32 region.
+        """
+        raw = self.framebuffer.pixels_view
+        if raw is None or self.rotation != 0 or not self.framebuffer.swapped_storage:
+            return False
+        import math
+        palettes = self.framebuffer.effect_palettes
+        if palettes is None:
+            palettes = {}
+            self.framebuffer.effect_palettes = palettes
+        if name not in palettes:
+            from matrixportal_effects import hsv
+            if name == "Waves":
+                palettes[name] = tuple(_swap16(rgb888_to_rgb565(
+                    hsv(180 + (i / 255) * 80, 1, .2 + (i / 255) * .8)))
+                    for i in range(256))
+            elif name in ("Rainbow", "Plasma"):
+                palettes[name] = tuple(_swap16(rgb888_to_rgb565(hsv(h)))
+                                       for h in range(360))
+            elif name == "Stars":
+                palettes[name] = tuple(_swap16(rgb888_to_rgb565((i, i, i)))
+                                       for i in range(256))
+            else:
+                return False
+        colors = palettes[name]
+        stride, origin = self.stride, self.x_offset
+        width, height = self.width, self.height
+        if name == "Rainbow":
+            row = [colors[int(x * 360 / width + t * 80) % 360]
+                   for x in range(width)]
+            for y in range(height):
+                offset = y * stride + origin
+                for x in range(width):
+                    raw[offset + x] = row[x]
+        elif name == "Waves":
+            phase = t * 4
+            sin_x = [math.sin(x * .25 + phase) for x in range(width)]
+            cos_x = [math.cos(x * .25 + phase) for x in range(width)]
+            sin_y = [math.sin(y * .15) for y in range(height)]
+            cos_y = [math.cos(y * .15) for y in range(height)]
+            for y in range(height):
+                offset = y * stride + origin
+                sy, cy = sin_y[y], cos_y[y]
+                for x in range(width):
+                    level = int((sin_x[x] * cy + cos_x[x] * sy + 1) * 127.5)
+                    raw[offset + x] = colors[max(0, min(255, level))]
+        elif name == "Plasma":
+            sin_x = [math.sin(x * .15 + t * 2) for x in range(width)]
+            sin_y = [math.sin(y * .2 + t * 1.5) for y in range(height)]
+            diagonal = [math.sin(i * .1 + t * 2)
+                        for i in range(width + height - 1)]
+            for y in range(height):
+                offset = y * stride + origin
+                sy = sin_y[y] + 3
+                for x in range(width):
+                    hue = int((sin_x[x] + sy + diagonal[x + y]) * 60)
+                    raw[offset + x] = colors[max(0, min(359, hue))]
+        elif name == "Stars":
+            self.clear()
+            # Deterministic LCG matches runtime_random._SeededRandom on board.
+            state = 42
+            for i in range(80):
+                level = int(255 * (.1 + .9 * (math.sin(t * 3 + i) + 1) / 2))
+                state = (1664525 * state + 1013904223) & 0xFFFFFFFF
+                x = (state * width) >> 32
+                state = (1664525 * state + 1013904223) & 0xFFFFFFFF
+                y = (state * height) >> 32
+                raw[y * stride + origin + x] = colors[level]
+        else:
+            return False
+        return True
+
+    def native_pixel_melt(self, shifts):
+        """Remap all columns from one packed frame snapshot."""
+        raw = self.framebuffer.pixels_view
+        if raw is None or self.rotation != 0 or len(shifts) != self.width:
+            return False
+        source = array("H", raw)
+        stride, origin, height = self.stride, self.x_offset, self.height
+        for x, shift in enumerate(shifts):
+            col = origin + x
+            for y in range(height):
+                sy = max(0, min(height - 1, y - shift))
+                raw[y * stride + col] = source[sy * stride + col]
+        return True
+
+    def native_jumble(self, mapping, block, cols, rows):
+        """Remap 4x4 blocks with packed colors, including clipped edge blocks."""
+        raw = self.framebuffer.pixels_view
+        if raw is None or self.rotation != 0:
+            return False
+        source = array("H", raw)
+        stride, origin = self.stride, self.x_offset
+        for by in range(rows):
+            for bx in range(cols):
+                src_index = mapping[by * cols + bx]
+                sx0 = (src_index % cols) * block
+                sy0 = (src_index // cols) * block
+                for oy in range(block):
+                    y = by * block + oy
+                    if y >= self.height:
+                        continue
+                    sy = min(self.height - 1, sy0 + oy)
+                    for ox in range(block):
+                        x = bx * block + ox
+                        if x < self.width:
+                            sx = min(self.width - 1, sx0 + ox)
+                            raw[y * stride + origin + x] = source[sy * stride + origin + sx]
+        return True
+
     def native_sparkles(self, amount, seed):
         """Write original seeded white sparkle points through Bitmap memory."""
         raw = self.framebuffer.pixels_view
@@ -240,6 +357,26 @@ class MatrixPortalPanel:
     def dim(self, brightness):
         """Dim RGB565 in place without converting each pixel to an RGB tuple."""
         scale = max(0, min(256, int(float(brightness) * 256)))
+        raw = self.framebuffer.pixels_view
+        if raw is not None and self.rotation == 0:
+            tables = self.framebuffer.dim_tables.get(scale)
+            if tables is None:
+                tables = (tuple((v * scale >> 8) << 11 for v in range(32)),
+                          tuple((v * scale >> 8) << 5 for v in range(64)),
+                          tuple(v * scale >> 8 for v in range(32)))
+                self.framebuffer.dim_tables[scale] = tables
+            reds, greens, blues = tables
+            swapped = self.framebuffer.swapped_storage
+            for y in range(self.height):
+                offset = y * self.stride + self.x_offset
+                for x in range(self.width):
+                    index = offset + x
+                    value = raw[index]
+                    if swapped:
+                        value = _swap16(value)
+                    value = reds[value >> 11] | greens[(value >> 5) & 63] | blues[value & 31]
+                    raw[index] = _swap16(value) if swapped else value
+            return
         bitmap = self.framebuffer.bitmap
         swapped = self.framebuffer.swapped_storage
         for y in range(self.height):

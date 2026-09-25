@@ -153,7 +153,12 @@ class InfoScenes:
         temperature = str(value.get("temperature", "")).strip()[:6]
         if temperature and not (temperature.lstrip("-+").isdigit() and -99 <= int(temperature) <= 130):
             temperature = ""
-        condition = str(value.get("condition", "Clear")).title()
+        requested = str(value.get("condition", "Clear")).strip().lower()
+        condition = "Clear"
+        for name in CONDITIONS:
+            if name.lower() == requested:
+                condition = name
+                break
         self.weather = {"temperature": temperature, "condition": condition if condition in CONDITIONS else "Clear"}
 
     def draw_label(self, display, value, y, color, scale=1, spacing=2):

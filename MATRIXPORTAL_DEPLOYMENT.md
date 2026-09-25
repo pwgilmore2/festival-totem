@@ -14,10 +14,12 @@ This standard-library tool opens USB serial before rebooting the board so
 startup tracebacks are captured and attempts to assert DTR, which CircuitPython
 requires for USB console output. It reads your current private `WIFI_PASSWORD`
 from `CIRCUITPY/code.py` without displaying it, installs the diagnostic module,
-creates the one-shot marker, and copies the current project `code.py` last to
+copies only runtime modules that differ from the checkout, creates the one-shot
+marker, and copies the current project `code.py` last to
 trigger CircuitPython auto-reload. It reconnects to the USB serial port, prints
 progress, and saves the **full raw serial log** to `diagnostics/totem-*.log` on
-your Mac. Upload that log for performance analysis. Do not eject or disconnect
+your Mac. Upload that log for performance analysis. It preserves media and the
+board's Wi-Fi password. Do not eject or disconnect
 the board until `DIAG_DONE`. On success, the collector removes the diagnostic
 trigger, so the next reset starts the normal app. If a stage crashes, the log
 still contains completed stages; upload the partial log. The trigger remains

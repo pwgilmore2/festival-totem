@@ -220,7 +220,7 @@ class TransitionManager(BaseTransitionManager):
                     tcy = gy * tile + tile / 2
                     vx = tcx - cx + rng.uniform(-8, 8)
                     vy = tcy - cy + rng.uniform(-5, 5)
-                    mag = max(1.0, math.hypot(vx, vy))
+                    mag = max(1.0, math.sqrt(vx * vx + vy * vy))
                     speed = rng.uniform(11, 24)
                     data.append((gx, gy, vx / mag * speed, vy / mag * speed, rng.uniform(-.8, .8)))
             self._shatter_tiles = data
@@ -249,7 +249,7 @@ class TransitionManager(BaseTransitionManager):
             for x in range(self.width):
                 dx = x - cx
                 dy = y - cy
-                r = math.hypot(dx, dy)
+                r = math.sqrt(dx * dx + dy * dy)
                 if p < .5:
                     local = p * 2
                     twist = local * (2.8 + (1 - min(1, r / max(self.width, self.height))) * 4.2)
@@ -274,7 +274,7 @@ class TransitionManager(BaseTransitionManager):
                 for x in range(self.width):
                     dx = x - cx
                     dy = y - cy
-                    d = math.hypot(dx, dy)
+                    d = math.sqrt(dx * dx + dy * dy)
                     scale = max(.04, 1.0 - local * .96)
                     c = _sample(self.source, cx + dx / scale, cy + dy / scale, self.width, self.height)
                     dim = max(0.0, 1.0 - local * .75)

@@ -27,6 +27,10 @@ import tty
 
 ROOT = Path(__file__).resolve().parents[1]
 PASSWORD_LINE = re.compile(r'^WIFI_PASSWORD\s*=\s*(.*)$', re.MULTILINE)
+BOARD_MODULES = (
+    "matrixportal_backend.py", "matrixportal_effects.py", "chaos_engine.py", "info_scenes.py",
+    "visual_engine.py", "transition_engine.py", "matrixportal_diagnostics.py",
+)
 
 
 def private_program(template, deployed):
@@ -54,6 +58,19 @@ def checked_write(destination, content):
         raise OSError("Board copy verification failed: " + str(destination))
 
 
+def changed_modules(target):
+    """Stage only differing runtime modules, preserving board media and Wi-Fi."""
+    changes = []
+    for name in BOARD_MODULES:
+        destination = target / name
+        if destination.exists() and not destination.is_file():
+            raise ValueError("Expected a file on CIRCUITPY: " + str(destination))
+        content = (ROOT / name).read_bytes()
+        if not destination.exists() or hashlib.sha256(destination.read_bytes()).digest() != hashlib.sha256(content).digest():
+            changes.append((destination, content))
+    return changes
+
+
 def deploy(target):
     if not target.is_dir() or not os.path.ismount(target):
         raise ValueError("Mount CIRCUITPY first: " + str(target))
@@ -61,11 +78,13 @@ def deploy(target):
     if not deployed.is_file():
         raise ValueError("Existing CIRCUITPY/code.py is required to preserve your private password")
     program = private_program((ROOT / "code.py").read_text(), deployed.read_text())
-    module = (ROOT / "matrixportal_diagnostics.py").read_bytes()
-    if shutil.disk_usage(target).free < len(program.encode()) + len(module) + 32768:
-        raise ValueError("CIRCUITPY needs at least 32 KiB plus the two files")
-    print("Installing diagnostic module and trigger; copying code.py last.", flush=True)
-    checked_write(target / "matrixportal_diagnostics.py", module)
+    changes = changed_modules(target)
+    if shutil.disk_usage(target).free < len(program.encode()) + sum(len(data) for _, data in changes) + 32768:
+        raise ValueError("CIRCUITPY needs 32 KiB plus the program and changed runtime modules")
+    print("Installing %d changed runtime modules and trigger; copying code.py last." % len(changes), flush=True)
+    for destination, content in changes:
+        print("Updating", destination.name, flush=True)
+        checked_write(destination, content)
     checked_write(target / "totem_diagnostics.flag", b"one-shot serial diagnostic\n")
     checked_write(deployed, program.encode())  # CircuitPython auto-reloads here.
     os.sync()
