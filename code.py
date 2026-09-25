@@ -26,7 +26,11 @@ WIFI_PASSWORD = ""  # Set a private WPA password of at least eight characters.
 
 
 def launch():
-    backend = MatrixPortalDisplayBackend(bit_depth=1, doublebuffer=False)
+    # On-device profile: native bitmaptools.blit reduced mirrored GIF copy
+    # from ~508 ms to ~4 ms, at bit depth 1. Keep pixel-layer writes logical
+    # RGB565 through the backend's swapped-storage adapter.
+    backend = MatrixPortalDisplayBackend(bit_depth=1, doublebuffer=False,
+                                          swapped_storage=True)
     media = MatrixPortalMediaAdapter()
     if not len(media):
         raise RuntimeError("Add prepared GIFs to assets/images and rebuild the manifest")
