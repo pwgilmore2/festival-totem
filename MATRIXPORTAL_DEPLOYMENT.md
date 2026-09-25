@@ -1,5 +1,39 @@
 # MatrixPortal S3 deployment model
 
+## One-command performance tour (macOS)
+
+With the working integrated build already on CIRCUITPY, its USB cable connected,
+and your GIFs still installed, close any `screen` session and run from the
+project root after `git pull`:
+
+```bash
+python3 tools/run_matrixportal_diagnostics.py
+```
+
+This standard-library tool reads your current private `WIFI_PASSWORD` from
+`CIRCUITPY/code.py` without displaying it, installs the new diagnostic module,
+creates the one-shot marker, and copies the current project `code.py` last to
+trigger CircuitPython auto-reload. It reconnects to the USB serial port, prints
+progress, and saves the **full raw serial log** to `diagnostics/totem-*.log` on
+your Mac. Upload that log for performance analysis. Do not eject or disconnect
+the board until `DIAG_DONE`. The marker makes diagnostics run again on a future
+reset; once you've saved the log, remove the marker with
+`rm /Volumes/CIRCUITPY/totem_diagnostics.flag` to restore normal boot behavior.
+If a stage crashes, the log still contains completed stages; upload the partial
+log. The timeout defaults to 15 minutes and can be changed with `--timeout`.
+
+The tour runs each prepared GIF, each base effect, every Chaos mode, each
+content and intense scene transition, Clock/Set Times/Waveform, every text
+font and installed icon, overlay backgrounds and motion, audio presets,
+named scene presets, synthetic reactive input, slideshow, and independent panel
+mode. Each stage records an initial switching window and a steady window,
+with achieved FPS, 95th percentile and longest frame interval, gap counts,
+minimum free RAM, and named render/HTTP/effect timings. `PASS` means a steady
+27+ FPS, 95th percentile frame interval <=40 ms, and no >100 ms gap. The
+automated tour does not exercise the phone's browser microphone, actual Wi-Fi
+client traffic, or verify panel colors visually. No log is written to the
+CIRCUITPY FAT volume.
+
 The Mac is the authoring environment. The MatrixPortal S3 is the playback/runtime environment.
 
 ## Build contract

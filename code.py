@@ -4,6 +4,7 @@ This is the first integrated hardware candidate; read MATRIXPORTAL_DEPLOYMENT.md
 """
 
 import gc
+import os
 import time
 
 import socketpool
@@ -54,9 +55,21 @@ def launch():
     print("Controller:", server.start())
 
     metrics = RuntimeMetrics(REPORT_SECONDS)
-    runtime.profile_render = metrics.add_timing
-    runtime.layer_engine.profile = metrics.add_timing
-    runtime.chaos_engine.profile = metrics.add_timing
+    diagnostics = None
+    if "totem_diagnostics.flag" in os.listdir("/"):
+        from matrixportal_diagnostics import BoardDiagnostics
+        diagnostics = BoardDiagnostics(runtime, media, backend)
+
+    if diagnostics is None:
+        record = metrics.add_timing
+    else:
+        def record(label, elapsed):
+            metrics.add_timing(label, elapsed)
+            diagnostics.profile(label, elapsed)
+
+    runtime.profile_render = record
+    runtime.layer_engine.profile = record
+    runtime.chaos_engine.profile = record
     last_frame = time.monotonic()
     next_frame = last_frame
     next_state = last_frame
@@ -65,35 +78,46 @@ def launch():
         server.update_state(runtime.controller_state())
         while True:
             loop_started = time.monotonic()
+            if diagnostics is not None:
+                diagnostics.tick(loop_started)
             started = loop_started
             server.poll()
-            metrics.add_timing("http", time.monotonic() - started)
+            record("http", time.monotonic() - started)
 
             for command in server.get_commands():
                 started = time.monotonic()
                 runtime.handle_command(command)
-                metrics.add_timing("command", time.monotonic() - started)
+                record("command", time.monotonic() - started)
 
             started = time.monotonic()
             media.advance(started, max_decodes=1)
-            metrics.add_timing("decode/check", time.monotonic() - started)
+            record("decode/check", time.monotonic() - started)
 
             now = time.monotonic()
             if now >= next_frame:
-                metrics.add_timing("frame/interval", now - last_frame)
-                metrics.add_timing("frame/lateness", max(0.0, now - next_frame))
+                record("frame/interval", now - last_frame)
+                record("frame/lateness", max(0.0, now - next_frame))
                 dt = min(.25, now - last_frame)
                 last_frame = now
                 started = time.monotonic()
                 runtime.update(dt)
-                metrics.add_timing("update", time.monotonic() - started)
+                record("update", time.monotonic() - started)
                 started = time.monotonic()
-                runtime.render(frame_number)
-                metrics.add_timing("render", time.monotonic() - started)
+                if diagnostics is not None and not diagnostics.done:
+                    try:
+                        runtime.render(frame_number)
+                    except Exception as exc:
+                        diagnostics.skip_current(exc)
+                        continue
+                else:
+                    runtime.render(frame_number)
+                record("render", time.monotonic() - started)
                 started = time.monotonic()
                 backend.present()
-                metrics.add_timing("present", time.monotonic() - started)
+                record("present", time.monotonic() - started)
                 metrics.frame()
+                if diagnostics is not None:
+                    diagnostics.frame(time.monotonic())
                 frame_number += 1
                 # Frame period starts at the scheduled frame, not after its
                 # render/present work. Otherwise 50 ms + ~14 ms yields ~15 FPS.
@@ -103,17 +127,17 @@ def launch():
             if now >= next_state:
                 started = now
                 server.update_state(runtime.controller_state())
-                metrics.add_timing("state", time.monotonic() - started)
+                record("state", time.monotonic() - started)
                 next_state = time.monotonic() + .5
             metrics.loop()
-            metrics.add_timing("loop", time.monotonic() - loop_started)
+            record("loop", time.monotonic() - loop_started)
             if metrics.due():
                 # A forced collection measured ~120 ms every five seconds,
                 # visibly interrupting otherwise steady GIF playback.
                 if gc.mem_free() < 300000:
                     gc_started = time.monotonic()
                     gc.collect()
-                    metrics.add_timing("gc", time.monotonic() - gc_started)
+                    record("gc", time.monotonic() - gc_started)
                 report = metrics.take_report(free_ram=gc.mem_free())
                 report["chaos_mode"] = runtime.chaos_engine.mode
                 print("Performance:", report)

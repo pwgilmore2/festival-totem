@@ -9,6 +9,7 @@ assets/images/*
 
 # Generated hardware deployment bundle
 matrixportal_build/
+diagnostics/
 
 # Local HTTPS certificates and private keys
 certs/

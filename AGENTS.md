@@ -117,3 +117,18 @@ The intended parts also include a main fuse (8–10 A was proposed, **not a vali
 ## Maintenance rule for future AI work
 
 Before each meaningful push: compare this handoff to code and the two detailed docs; update decisions, verified hardware measurements, implemented versus planned status, and remaining blockers in the same change. Preserve user-tested choices; when a new decision supersedes an older one, update the older document too. Do not claim future conversations or pushes will be updated automatically unless the assistant is actually making that push.
+# Automated hardware profiling candidate (September 25)
+
+`matrixportal_diagnostics.py` and `tools/run_matrixportal_diagnostics.py` add
+a USB serial performance tour over prepared GIFs, effects, Chaos modes,
+transitions, info scenes, fonts, installed icons, synthetic audio, slideshow,
+and independent panel mode. Each stage reports switching/steady FPS, gap
+distribution and named timings as `DIAG_STAGE` JSON; completion emits
+`DIAG_DONE`. The Mac collector deploys the diagnostic module and current
+project `code.py`, preserving the password from the board's existing code,
+and records the raw log under ignored `diagnostics/`. The flag
+`/Volumes/CIRCUITPY/totem_diagnostics.flag` enables the tour; remove it after
+the run to return to normal startup. These scripts have desktop validation
+only until Patrick runs the next board test. Do not claim all effects sustain
+30 FPS on hardware yet. Browser microphone, actual Wi-Fi load and visual color
+inspection are outside this automated test.

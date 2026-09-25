@@ -34,7 +34,7 @@ from tools.build_controller_asset import build as build_controller_asset
 DEVICE_MODULES = (
     "code.py", "matrixportal_backend.py", "matrixportal_native_colors.py", "matrixportal_ulab_colors.py", "matrixportal_bitmap_buffer_probe.py", "matrixportal_effects.py", "runtime_random.py",
     "matrixportal_colorsys.py", "matrixportal_library.py", "matrixportal_media.py",
-    "matrixportal_server.py", "control_bus.py", "runtime_metrics.py",
+    "matrixportal_server.py", "matrixportal_diagnostics.py", "control_bus.py", "runtime_metrics.py",
     "runtime_io.py", "display.py", "totem_runtime.py", "controller.py",
     "chaos_engine.py", "info_scenes.py", "particles.py", "text_engine.py",
     "text.py", "transition_engine.py", "visual_engine.py", "overlay_engine.py",
