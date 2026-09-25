@@ -52,6 +52,59 @@ class FakeFrameBufferDisplay:
 
 
 class MatrixPortalBackendTests(unittest.TestCase):
+    def test_native_fade_reuses_source_and_keeps_other_face(self):
+        from visual_engine import copy_pixels
+        class Bitmap:
+            def __init__(self, width, height, colors=65536):
+                self.width, self.height = width, height
+                self.data = array('H', [0] * (width * height))
+            def __getitem__(self, xy):
+                x, y = xy
+                return self.data[y * self.width + x]
+            def __setitem__(self, xy, value):
+                x, y = xy
+                self.data[y * self.width + x] = value
+        def blit(dst, src, dx, dy, *, x1=0, y1=0, x2=None, y2=None):
+            for sy in range(y1, src.height if y2 is None else y2):
+                for sx in range(x1, src.width if x2 is None else x2):
+                    dst[dx + sx - x1, dy + sy - y1] = src[sx, sy]
+        calls = []
+        def alphablend(dst, src1, src2, colorspace, factor1, factor2):
+            calls.append((colorspace, factor1, factor2))
+            for y in range(dst.height):
+                for x in range(dst.width):
+                    a, b = _swap16(src1[x, y]), _swap16(src2[x, y])
+                    ar, ag, ab = rgb565_to_rgb888(a)
+                    br, bg, bb = rgb565_to_rgb888(b)
+                    dst[x, y] = _swap16(rgb888_to_rgb565((
+                        int(ar * factor1 + br * factor2),
+                        int(ag * factor1 + bg * factor2),
+                        int(ab * factor1 + bb * factor2))))
+        bitmap = Bitmap(128, 32)
+        fb = _BitmapLinearBuffer(bitmap, 128, swapped_storage=True)
+        fb.pixels_view = memoryview(bitmap.data)
+        panel = MatrixPortalPanel(fb, 128, 0, 64, 32)
+        for y in range(32):
+            for x in range(64):
+                fb[y * 128 + x] = 0xF800
+                fb[y * 128 + x + 64] = 0x001F
+        source = copy_pixels(panel)
+        for y in range(32):
+            for x in range(64):
+                fb[y * 128 + x] = 0x07E0
+        with patch.dict(sys.modules, {
+            'bitmaptools': types.SimpleNamespace(blit=blit, alphablend=alphablend),
+            'displayio': types.SimpleNamespace(Bitmap=Bitmap, Colorspace=types.SimpleNamespace(RGB565_SWAPPED=1)),
+        }):
+            self.assertTrue(panel.native_content_transition('Fade', source, .5, 12))
+            source_bitmap = fb.fade_bitmaps[0]
+            self.assertTrue(panel.native_content_transition('Fade', source, .75, 12))
+        self.assertIs(fb.fade_bitmaps[0], source_bitmap)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[0], (1, .5, .5))
+        self.assertEqual(panel.get_pixel565(64, 0), 0)
+        self.assertEqual(fb[64], 0x001F)
+
     def test_native_dim_filters_only_selected_face(self):
         class Bitmap:
             def __init__(self, width, height, colors=65536):

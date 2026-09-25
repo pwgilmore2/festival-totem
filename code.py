@@ -22,6 +22,7 @@ from totem_runtime import TotemRuntime
 
 
 FPS = 30  # Target; physical display/HTTP timings decide the delivered rate.
+PANEL_BRIGHTNESS_CAP = 0.35  # Temporary physical LED limit; phone slider can dim further.
 REPORT_SECONDS = 5
 BITMAP_BUFFER_PROBE = True  # One-shot startup measurement; no live renderer changes.
 WIFI_SSID = "Festival-Totem"
@@ -34,6 +35,8 @@ def launch():
     # RGB565 through the backend's swapped-storage adapter.
     backend = MatrixPortalDisplayBackend(bit_depth=1, doublebuffer=False,
                                           swapped_storage=True)
+    backend.set_brightness(PANEL_BRIGHTNESS_CAP)
+    applied_brightness = PANEL_BRIGHTNESS_CAP
     if BITMAP_BUFFER_PROBE:
         probe_bitmap_buffer(backend.bitmap)
     media = MatrixPortalMediaAdapter()
@@ -112,6 +115,16 @@ def launch():
                 else:
                     runtime.render(frame_number)
                 record("render", time.monotonic() - started)
+                if runtime.mirrored:
+                    requested_brightness = runtime.controllers["front"].brightness
+                else:
+                    # One RGBMatrix brightness setting controls both faces.
+                    requested_brightness = min(controller.brightness
+                                               for controller in runtime.controllers.values())
+                physical_brightness = PANEL_BRIGHTNESS_CAP * requested_brightness
+                if physical_brightness != applied_brightness:
+                    backend.set_brightness(physical_brightness)
+                    applied_brightness = physical_brightness
                 started = time.monotonic()
                 backend.present()
                 record("present", time.monotonic() - started)

@@ -44,6 +44,10 @@ class _BitmapLinearBuffer:
         self.dim_tables = {}
         self.dim_bitmap = None
         self.dim_native_available = True
+        self.fade_bitmaps = None
+        self.fade_source_ref = None
+        self.fade_source_offset = None
+        self.fade_native_available = True
 
     def __getitem__(self, index):
         index = int(index)
@@ -298,6 +302,38 @@ class MatrixPortalPanel:
         rows = [getattr(row, "_values", None) for row in source]
         if any(row is None for row in rows):
             return False
+        if (kind == "Fade" and self.framebuffer.swapped_storage
+                and self.framebuffer.fade_native_available):
+            try:
+                import bitmaptools
+                import displayio
+                bitmaps = self.framebuffer.fade_bitmaps
+                if bitmaps is None:
+                    bitmaps = (displayio.Bitmap(self.width, self.height, 65536),
+                               displayio.Bitmap(self.width, self.height, 65536))
+                    self.framebuffer.fade_bitmaps = bitmaps
+                previous, current = bitmaps
+                if (self.framebuffer.fade_source_ref is not source
+                        or self.framebuffer.fade_source_offset != self.x_offset):
+                    for y, row in enumerate(rows):
+                        for x, value in enumerate(row):
+                            previous[x, y] = _swap16(value)
+                    self.framebuffer.fade_source_ref = source
+                    self.framebuffer.fade_source_offset = self.x_offset
+                bitmaptools.blit(current, self.framebuffer.bitmap, 0, 0,
+                                 x1=self.x_offset, y1=0,
+                                 x2=self.x_offset + self.width, y2=self.height)
+                # CircuitPython 10.3.x takes blend factors as positional args.
+                bitmaptools.alphablend(current, previous, current,
+                                       displayio.Colorspace.RGB565_SWAPPED,
+                                       1.0 - p, p)
+                bitmaptools.blit(self.framebuffer.bitmap, current,
+                                 self.x_offset, 0)
+                return True
+            except Exception as exc:
+                print("NATIVE FADE unavailable; using packed pixels:",
+                      type(exc).__name__, str(exc))
+                self.framebuffer.fade_native_available = False
         import math
         import runtime_random as random
         width, height = self.width, self.height
