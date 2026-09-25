@@ -55,6 +55,8 @@ def launch():
 
     metrics = RuntimeMetrics(REPORT_SECONDS)
     runtime.profile_render = metrics.add_timing
+    runtime.layer_engine.profile = metrics.add_timing
+    runtime.chaos_engine.profile = metrics.add_timing
     last_frame = time.monotonic()
     next_frame = last_frame
     next_state = last_frame
@@ -112,7 +114,9 @@ def launch():
                     gc_started = time.monotonic()
                     gc.collect()
                     metrics.add_timing("gc", time.monotonic() - gc_started)
-                print("Performance:", metrics.take_report(free_ram=gc.mem_free()))
+                report = metrics.take_report(free_ram=gc.mem_free())
+                report["chaos_mode"] = runtime.chaos_engine.mode
+                print("Performance:", report)
     finally:
         server.stop()
         media.close()

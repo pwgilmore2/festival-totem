@@ -155,6 +155,15 @@ and math; visual and timing equivalence must be checked on the board. Forced
 five-second GC is skipped while RAM is over 300 KB. The startup probe also
 reports `ULAB:` availability; CircuitPython has only a subset of NumPy.
 
+Physical retest: `ulab` and `numpy.frombuffer` are present. GIF ran ~28.0 FPS
+and Pixel-font text ~19–20 FPS with `render/text` ~18.5 ms; no forced GC was
+reported, but HTTP stalls reached ~125 ms. The original Chaos effect still
+took ~2.81 seconds per frame. The next diagnostic build reports `chaos_mode`,
+times component zoom/split/hue/wave passes across Chaos modes, and benchmarks a
+2048-value ulab mask/shift at startup if supported. It does not replace the
+original effects. Collect the ULAB line and a complete active-Chaos report
+before deciding which pass to vectorize or move into native code.
+
 When CIRCUITPY is mounted, compare the deployment directly against its real free space:
 
 ```bash

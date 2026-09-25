@@ -1,4 +1,5 @@
 import math
+import time
 import runtime_random as random
 
 
@@ -182,6 +183,15 @@ class VisualLayerEngine:
     def __init__(self, width, height):
         self.width = width
         self.height = height
+        self.profile = None
+
+    def _timed(self, label, operation, *args):
+        if self.profile is None:
+            return operation(*args)
+        started = time.monotonic()
+        result = operation(*args)
+        self.profile("chaos/" + label, time.monotonic() - started)
+        return result
 
     def default_layers(self):
         return {
@@ -268,21 +278,21 @@ class VisualLayerEngine:
     def guest_burst(self, display, kind, amount, frame_number=0):
         amount = clamp01(amount)
         if kind == "boom":
-            self._zoom(display, amount * .38)
-            self._flash(display, amount * .45)
+            self._timed("zoom", self._zoom, display, amount * .38)
+            self._timed("flash", self._flash, display, amount * .45)
         elif kind == "glitch":
-            self._rgb_split(display, .3 + amount * .7)
-            self._shift(display, int(math.sin(frame_number * 2.7) * amount * 8), 0)
+            self._timed("rgb_split", self._rgb_split, display, .3 + amount * .7)
+            self._timed("shift", self._shift, display, int(math.sin(frame_number * 2.7) * amount * 8), 0)
         elif kind == "spark":
             self._sparkles(display, amount, frame_number * 19)
         elif kind == "rainbow":
-            self._hue(display, (frame_number * 8) % 360)
-            self._brighten(display, amount * .15)
+            self._timed("hue", self._hue, display, (frame_number * 8) % 360)
+            self._timed("brighten", self._brighten, display, amount * .15)
         elif kind == "chaos":
-            self._zoom(display, amount * .25)
-            self._rgb_split(display, amount * .8)
-            self._hue(display, frame_number * 11)
-            self._sparkles(display, amount, frame_number * 31)
+            self._timed("zoom", self._zoom, display, amount * .25)
+            self._timed("rgb_split", self._rgb_split, display, amount * .8)
+            self._timed("hue", self._hue, display, frame_number * 11)
+            self._timed("sparkles", self._sparkles, display, amount, frame_number * 31)
 
     def _spatial(self, display, zoom_amount, dx, dy):
         """Apply the normal zoom-then-shift chain with one source snapshot."""

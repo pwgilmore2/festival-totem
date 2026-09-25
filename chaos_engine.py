@@ -18,6 +18,7 @@ CHILL_MODES = {"trance", "liquid", "tunnel", "warp", "prism", "rainbow"}
 class ChaosEngine:
     def __init__(self, layer_engine):
         self.layer_engine = layer_engine
+        self.profile = None
         self.mode = None
         self.strength = 0.0
         self.started = 0.0
@@ -26,6 +27,14 @@ class ChaosEngine:
         self.release_duration = 0.0
         self.locked = False
         self.xy = {"x": 0.5, "y": 0.5, "velocity": 0.0}
+
+    def _timed(self, label, operation, *args, **kwargs):
+        if self.profile is None:
+            return operation(*args, **kwargs)
+        started = time.monotonic()
+        result = operation(*args, **kwargs)
+        self.profile("chaos/" + label, time.monotonic() - started)
+        return result
 
     @staticmethod
     def _clamp01(value):
@@ -160,49 +169,49 @@ class ChaosEngine:
         if mode in ("glitch", "chaos"):
             layer.guest_burst(display, mode, amount, frame_number)
         elif mode == "rainbow":
-            layer._hue(display, math.sin(frame_number * 0.022) * 150 * amount)
-            layer._brighten(display, amount * 0.10)
+            self._timed("hue", layer._hue, display, math.sin(frame_number * 0.022) * 150 * amount)
+            self._timed("brighten", layer._brighten, display, amount * 0.10)
         elif mode == "pixelmelt":
-            self._pixel_melt(display, amount, frame_number)
+            self._timed("pixel_melt", self._pixel_melt, display, amount, frame_number)
         elif mode == "meltdown":
-            self._pixel_melt(display, amount * 0.88, frame_number)
-            layer._hue(display, math.sin(frame_number * 0.030) * 42 * amount)
+            self._timed("pixel_melt", self._pixel_melt, display, amount * 0.88, frame_number)
+            self._timed("hue", layer._hue, display, math.sin(frame_number * 0.030) * 42 * amount)
         elif mode == "jumble":
-            self._jumble(display, amount, frame_number)
+            self._timed("jumble", self._jumble, display, amount, frame_number)
         elif mode == "bassjostle":
             bass = self._clamp01(signals.get("bass", 0.0))
             hit = 1.0 if signals.get("beat") else 0.0
             power = amount * min(1.0, bass * 1.45 + hit * 0.45)
-            layer._shift(display, int(math.sin(frame_number * 1.9) * power * 9), int(math.cos(frame_number * 1.45) * power * 6))
-            layer._rgb_split(display, power * 0.5)
+            self._timed("shift", layer._shift, display, int(math.sin(frame_number * 1.9) * power * 9), int(math.cos(frame_number * 1.45) * power * 6))
+            self._timed("rgb_split", layer._rgb_split, display, power * 0.5)
             if hit:
-                layer._zoom(display, power * 0.16)
+                self._timed("zoom", layer._zoom, display, power * 0.16)
         elif mode == "trance":
             wave = 0.5 + 0.5 * math.sin(frame_number * 0.035)
-            layer._zoom(display, (0.05 + wave * 0.10) * amount)
-            self._row_wave(display, (0.30 + wave * 0.38) * amount, frame_number, "teal", speed=0.032)
-            layer._rgb_split(display, (0.05 + wave * 0.13) * amount)
+            self._timed("zoom", layer._zoom, display, (0.05 + wave * 0.10) * amount)
+            self._timed("row_wave", self._row_wave, display, (0.30 + wave * 0.38) * amount, frame_number, "teal", speed=0.032)
+            self._timed("rgb_split", layer._rgb_split, display, (0.05 + wave * 0.13) * amount)
         elif mode == "liquid":
             wave = 0.5 + 0.5 * math.sin(frame_number * 0.030)
-            self._row_wave(display, (0.28 + wave * 0.38) * amount, frame_number, speed=0.028, frequency=0.31)
-            layer._hue(display, math.sin(frame_number * 0.024) * 72 * amount)
+            self._timed("row_wave", self._row_wave, display, (0.28 + wave * 0.38) * amount, frame_number, speed=0.028, frequency=0.31)
+            self._timed("hue", layer._hue, display, math.sin(frame_number * 0.024) * 72 * amount)
         elif mode == "warp":
             wave = 0.5 + 0.5 * math.sin(frame_number * 0.030)
-            layer._zoom(display, (0.065 + wave * 0.17) * amount)
-            layer._shift(display, int(math.sin(frame_number * 0.045) * amount * 3), int(math.cos(frame_number * 0.036) * amount * 2))
-            layer._hue(display, math.sin(frame_number * 0.020) * 95 * amount)
+            self._timed("zoom", layer._zoom, display, (0.065 + wave * 0.17) * amount)
+            self._timed("shift", layer._shift, display, int(math.sin(frame_number * 0.045) * amount * 3), int(math.cos(frame_number * 0.036) * amount * 2))
+            self._timed("hue", layer._hue, display, math.sin(frame_number * 0.020) * 95 * amount)
         elif mode == "prism":
             wave = 0.5 + 0.5 * math.sin(frame_number * 0.032)
-            layer._rgb_split(display, (0.14 + wave * 0.46) * amount)
-            layer._hue(display, math.sin(frame_number * 0.022) * 80 * amount)
-            layer._sparkles(display, amount * 0.16, frame_number * 9)
+            self._timed("rgb_split", layer._rgb_split, display, (0.14 + wave * 0.46) * amount)
+            self._timed("hue", layer._hue, display, math.sin(frame_number * 0.022) * 80 * amount)
+            self._timed("sparkles", layer._sparkles, display, amount * 0.16, frame_number * 9)
         elif mode == "tunnel":
             wave = 0.5 + 0.5 * math.sin(frame_number * 0.035)
-            layer._zoom(display, (0.075 + 0.23 * wave) * amount)
-            layer._rgb_split(display, (0.055 + 0.18 * (1 - wave)) * amount)
-            layer._hue(display, math.sin(frame_number * 0.020) * 100 * amount)
+            self._timed("zoom", layer._zoom, display, (0.075 + 0.23 * wave) * amount)
+            self._timed("rgb_split", layer._rgb_split, display, (0.055 + 0.18 * (1 - wave)) * amount)
+            self._timed("hue", layer._hue, display, math.sin(frame_number * 0.020) * 100 * amount)
         elif mode == "xyintent":
-            self._apply_xy(display, amount, frame_number)
+            self._timed("xy", self._apply_xy, display, amount, frame_number)
         else:
             layer.guest_burst(display, mode, amount, frame_number)
 

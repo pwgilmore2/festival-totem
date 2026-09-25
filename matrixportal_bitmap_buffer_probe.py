@@ -11,8 +11,25 @@ def run(bitmap):
     try:
         from ulab import numpy
         print("ULAB: present; frombuffer", hasattr(numpy, "frombuffer"))
+        if hasattr(numpy, "frombuffer"):
+            pixels = numpy.frombuffer(memoryview(bitmap), dtype=numpy.uint16)
+            print("ULAB: Bitmap view length", len(pixels),
+                  "bitwise_and", hasattr(numpy, "bitwise_and"),
+                  "right_shift", hasattr(numpy, "right_shift"))
+            if (len(pixels) == bitmap.width * bitmap.height
+                    and hasattr(numpy, "bitwise_and")
+                    and hasattr(numpy, "right_shift")):
+                values = numpy.array(range(2048), dtype=numpy.uint16)
+                mask = numpy.array([0xF800], dtype=numpy.uint16)
+                shift = numpy.array([11], dtype=numpy.uint16)
+                started = time.monotonic()
+                red = numpy.right_shift(numpy.bitwise_and(values, mask), shift)
+                print("ULAB: 2048 mask/shift ms", (time.monotonic() - started) * 1000,
+                      "last", red[2047])
     except ImportError:
         print("ULAB: unavailable on this firmware")
+    except Exception as exc:
+        print("ULAB: Bitmap operation unavailable", type(exc).__name__, str(exc))
     width, height = bitmap.width, bitmap.height
     first, last = bitmap[0, 0], bitmap[width - 1, height - 1]
     try:
