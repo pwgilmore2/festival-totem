@@ -108,11 +108,30 @@ def collect(log_path, preferred_port, timeout, initial_fd=None, idle_timeout=60)
     captured_done = False
     last_bytes_at = time.monotonic()
     last_notice_at = last_bytes_at
+    last_probe_at = last_bytes_at
+    probe_index = 0
     with log_path.open("w", encoding="utf-8") as log:
         log.write("# MatrixPortal serial capture started; waiting for board output\n")
+        log.write("# candidate ports: %s\n" % (port_candidates(preferred_port),))
+        log.write("# connected port: %s\n" %
+                  (os.ttyname(fd) if fd is not None else "none",))
         log.flush()
         while time.monotonic() < deadline and not captured_done:
             idle = time.monotonic() - last_bytes_at
+            if idle >= 20 and time.monotonic() - last_probe_at >= 20 and not preferred_port:
+                alternatives = [port for port in port_candidates(None)
+                                if fd is None or port != os.ttyname(fd)]
+                if alternatives:
+                    alternative = alternatives[probe_index % len(alternatives)]
+                    probe_index += 1
+                    last_probe_at = time.monotonic()
+                    replacement = open_serial(alternative)
+                    if replacement is not None:
+                        if fd is not None:
+                            os.close(fd)
+                        fd = replacement
+                        log.write("# switched to serial port: %s\n" % alternative)
+                        log.flush()
             if idle >= idle_timeout:
                 message = "No board serial output for %d seconds; keeping partial log" % idle_timeout
                 print(message, flush=True)
@@ -168,7 +187,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--target", default="/Volumes/CIRCUITPY")
     parser.add_argument("--port", help="USB serial device, if more than one is plugged in")
-    parser.add_argument("--timeout", type=int, default=900, help="Maximum collection seconds")
+    parser.add_argument("--timeout", type=int, default=1800, help="Maximum collection seconds")
     parser.add_argument("--idle-timeout", type=int, default=60,
                         help="Seconds without any board serial output before stopping")
     args = parser.parse_args()

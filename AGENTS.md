@@ -150,3 +150,15 @@ reports connected only when the host asserts DTR. The collector used raw
 silent serial port. It now uses `fcntl.ioctl(TIOCMBIS, TIOCM_DTR)` and clears
 hardware flow control. Physical confirmation is outstanding. A completed
 diagnostic run is still needed before drawing any performance conclusions.
+
+The second uploaded log `totem-20260925-084443.log` is again 125 bytes with
+only the host capture header and 60-second silence message; no stage feedback
+is available. The timing of that run relative to the DTR change is uncertain.
+User reports the visual tour continued after the Mac script exited, and only
+one GIF is currently installed. The board tour now waits at least five seconds
+and for completed `backend.present()` calls, with a per-stage time cap; for
+single-GIF content/scene transitions it presents a Rainbow source for at least
+two frames before activating a Rainbow-to-GIF transition. Single-GIF slideshow
+and independent panel tests are labeled as lacking a distinct second image.
+The host overall timeout was increased to 30 minutes. These changes still need
+on-device verification; do not infer FPS from either uploaded silent log.

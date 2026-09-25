@@ -89,14 +89,17 @@ def stage_catalog(runtime, media):
 
 
 class BoardDiagnostics:
-    def __init__(self, runtime, media, backend, stage_seconds=3.0,
+    def __init__(self, runtime, media, backend, stage_seconds=5.0,
                  startup_seconds=7.0):
         self.runtime = runtime
         self.media = media
         self.backend = backend
         self.stages = stage_catalog(runtime, media)
         self.stage_seconds = stage_seconds
-        self.warmup_seconds = min(.9, stage_seconds * .4)
+        self.warmup_seconds = min(1.25, stage_seconds * .4)
+        self.min_frames = min(40, int(stage_seconds * 8))
+        self.min_steady_frames = min(20, int(stage_seconds * 4))
+        self.max_stage_seconds = max(stage_seconds * 2.4, stage_seconds + 2)
         self.ready_at = time.monotonic() + startup_seconds
         self.index = -1
         self.current_started = 0.0
@@ -105,10 +108,15 @@ class BoardDiagnostics:
         self.failures = []
         self.done = False
         self._last_index = 0
-        print("DIAG_READY stages", len(self.stages), "starts_in_seconds", startup_seconds)
+        self.pending = None
+        self.prepare_started = 0.0
+        self.prepare_frames = 0
+        self.force_advance = False
+        print("DIAG_READY stages", len(self.stages), "gifs", len(media),
+              "starts_in_seconds", startup_seconds)
 
     def profile(self, label, seconds):
-        if self.index < 0 or self.done:
+        if self.index < 0 or self.done or self.pending:
             return
         now = time.monotonic()
         active = self.early if now - self.current_started < self.warmup_seconds else self.steady
@@ -117,24 +125,60 @@ class BoardDiagnostics:
     def frame(self, now):
         if self.index < 0 or self.done:
             return
+        if self.pending:
+            self.prepare_frames += 1
+            return
         active = self.early if now - self.current_started < self.warmup_seconds else self.steady
         active.frame(now)
 
     def tick(self, now):
         if self.done or now < self.ready_at:
             return
-        if self.index >= 0 and now - self.current_started < self.stage_seconds:
+        if self.pending:
+            if now - self.prepare_started < .9 or self.prepare_frames < 2:
+                if now - self.prepare_started >= 18:
+                    self.skip_current(RuntimeError("No two source frames presented in 18 seconds"))
+                else:
+                    return
+            if self.force_advance:
+                return
+            kind, value = self.pending
+            self.pending = None
+            self.early = PhaseStats()
+            self.steady = PhaseStats()
+            self.current_started = time.monotonic()
+            print("DIAG_BEGIN", self.index + 1, "/", len(self.stages),
+                  self.stages[self.index][1], "prepared_frames", self.prepare_frames)
+            try:
+                self._activate_transition(kind, value)
+            except Exception as exc:
+                self.skip_current(exc)
             return
+        if self.index >= 0:
+            elapsed = now - self.current_started
+            total_frames = self.early.frames + self.steady.frames
+            enough = (elapsed >= self.stage_seconds and total_frames >= self.min_frames
+                      and self.steady.frames >= self.min_steady_frames)
+            if (not self.force_advance and not enough
+                    and (elapsed < self.max_stage_seconds or total_frames < 2)
+                    and elapsed < max(25, self.max_stage_seconds)):
+                return
         if self.index >= 0:
             label = self.stages[self.index][1]
             early = self.early.report(self.warmup_seconds)
             steady = self.steady.report(max(.001, now - self.current_started - self.warmup_seconds))
             steady_ok = (steady["fps"] >= 27 and steady["p95_ms"] is not None
                          and steady["p95_ms"] <= 40 and steady["gaps_over_100"] == 0)
-            if not steady_ok:
+            if not steady_ok and not self.force_advance:
                 self.failures.append((label, steady["fps"], steady["p95_ms"]))
-            print("DIAG_STAGE", json.dumps({"name": label, "status": "PASS" if steady_ok else "SLOW",
-                                           "transition": early, "steady": steady}))
+            status = "ERROR" if self.force_advance else ("PASS" if steady_ok else "SLOW")
+            result = {"name": label, "status": status,
+                      "transition": early, "steady": steady}
+            if len(self.media) == 1 and self.stages[self.index][0] in ("slideshow", "independent"):
+                result["note"] = "Single GIF: no distinct second image"
+            elif len(self.media) == 1 and self.stages[self.index][0] in ("transition", "intense"):
+                result["note"] = "Rainbow source to only GIF"
+            print("DIAG_STAGE", json.dumps(result))
         self.index += 1
         if self.index >= len(self.stages):
             self.done = True
@@ -147,19 +191,25 @@ class BoardDiagnostics:
         self.early = PhaseStats()
         self.steady = PhaseStats()
         self.current_started = time.monotonic()
-        print("DIAG_BEGIN", self.index + 1, "/", len(self.stages), label)
+        self.force_advance = False
         try:
             self._enter(kind, value)
+            if self.pending:
+                print("DIAG_PREP", self.index + 1, "/", len(self.stages),
+                      label, "waiting_for_visible_source")
+            else:
+                print("DIAG_BEGIN", self.index + 1, "/", len(self.stages), label)
         except Exception as exc:
             print("DIAG_ERROR", label, type(exc).__name__, str(exc))
             self.failures.append((label, "error", str(exc)))
-            self.current_started = now - self.stage_seconds
+            self.force_advance = True
 
     def skip_current(self, exc):
         label = self.stages[self.index][1]
         print("DIAG_ERROR", label, type(exc).__name__, str(exc))
         self.failures.append((label, "error", str(exc)))
-        self.current_started = time.monotonic() - self.stage_seconds
+        self.force_advance = True
+        self.pending = None
 
     def _reset(self):
         rt = self.runtime
@@ -196,17 +246,22 @@ class BoardDiagnostics:
                 rt.chaos_engine.update_xy({"x": .85, "y": .72, "velocity": .7})
         elif kind == "transition":
             rt.set_effect("Image")
-            rt.set_transition({"kind": value, "duration": .65})
-            if len(self.media) > 1:
-                self._last_index = (rt.panels["front"]["image_index"] + 1) % len(self.media)
-                rt.select_image(self._last_index)
-            else:
+            if len(self.media) == 1:
                 rt.set_effect("Rainbow")
-                rt.set_effect("Image")
+                self.pending = (kind, value)
+                self.prepare_started = time.monotonic()
+                self.prepare_frames = 0
+            else:
+                self._activate_transition(kind, value)
         elif kind == "intense":
-            rt.set_effect("Image")
-            rt.intense_transition_next({"kind": value, "duration": .65,
-                                       "indices": list(range(len(self.media)))})
+            if len(self.media) == 1:
+                rt.set_effect("Rainbow")
+                self.pending = (kind, value)
+                self.prepare_started = time.monotonic()
+                self.prepare_frames = 0
+            else:
+                rt.set_effect("Image")
+                self._activate_transition(kind, value)
         elif kind == "info":
             rt.info_scenes.sync_time({"epoch": 1790380000, "offset_seconds": -18000})
             rt.info_scenes.set_weather({"temperature": "72", "condition": "Clear"})
@@ -252,6 +307,19 @@ class BoardDiagnostics:
             rt.set_effect("Image")
             rt.select_image(min(1, len(self.media) - 1))
             rt.set_target("both")
+
+    def _activate_transition(self, kind, value):
+        rt = self.runtime
+        if kind == "transition":
+            rt.set_transition({"kind": value, "duration": .65})
+            if len(self.media) > 1:
+                self._last_index = (rt.panels["front"]["image_index"] + 1) % len(self.media)
+                rt.select_image(self._last_index)
+            else:
+                rt.set_effect("Image")
+        else:
+            rt.intense_transition_next({"kind": value, "duration": .65,
+                                       "indices": list(range(len(self.media)))})
 
     def _restore(self):
         self._reset()

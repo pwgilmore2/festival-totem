@@ -12,13 +12,55 @@ import threading
 import time
 import types
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import matrixportal_diagnostics as diagnostic
 from tools.run_matrixportal_diagnostics import collect, open_serial, private_program
 
 
 class DiagnosticTests(unittest.TestCase):
+    def test_one_gif_transition_waits_for_presented_source_frames(self):
+        rt = MagicMock()
+        rt.base_effects = {'Rainbow': None}
+        rt.icon_library.names.return_value = []
+        rt.scenes = {}
+        rt.panels = {'front': {'image_index': 0}, 'back': {'image_index': 0}}
+        with patch.object(diagnostic.gc, 'mem_free', return_value=900000, create=True), \
+                contextlib.redirect_stdout(io.StringIO()):
+            tour = diagnostic.BoardDiagnostics(rt, [0], None, startup_seconds=0)
+            tour.index = next(i for i, stage in enumerate(tour.stages) if stage[1] == 'Content/Fade')
+            tour._enter('transition', 'Fade')
+            self.assertEqual(tour.pending, ('transition', 'Fade'))
+            self.assertEqual(rt.set_effect.call_args.args, ('Rainbow',))
+            tour.tick(tour.prepare_started + 1)
+            self.assertEqual(tour.pending, ('transition', 'Fade'))
+            tour.frame(tour.prepare_started + 1)
+            tour.frame(tour.prepare_started + 1.1)
+            tour.tick(tour.prepare_started + 1.2)
+        self.assertIsNone(tour.pending)
+        self.assertEqual(rt.set_effect.call_args.args, ('Image',))
+        rt.set_transition.assert_any_call({'kind': 'Fade', 'duration': .65})
+        self.assertEqual(tour.early.frames + tour.steady.frames, 0)
+
+    def test_slow_stage_waits_for_frames_before_switching(self):
+        rt = MagicMock()
+        rt.base_effects = {'Rainbow': None}
+        rt.icon_library.names.return_value = []
+        rt.scenes = {}
+        with patch.object(diagnostic.gc, 'mem_free', return_value=900000, create=True), \
+                contextlib.redirect_stdout(io.StringIO()):
+            tour = diagnostic.BoardDiagnostics(rt, [0], None, startup_seconds=0)
+            tour.index = 0
+            tour.current_started = time.monotonic()
+            tour.early = diagnostic.PhaseStats()
+            tour.steady = diagnostic.PhaseStats()
+            tour.frame(tour.current_started + 2)
+            tour.tick(tour.current_started + 6)
+            self.assertEqual(tour.index, 0)
+            tour.frame(tour.current_started + 7)
+            tour.tick(tour.current_started + 13)
+            self.assertEqual(tour.index, 1)
+
     @unittest.skipUnless(hasattr(os, 'openpty'), 'requires a Unix pseudoterminal')
     def test_serial_connection_asserts_dtr(self):
         master, slave = os.openpty()

@@ -22,14 +22,20 @@ the board until `DIAG_DONE`. On success, the collector removes the diagnostic
 trigger, so the next reset starts the normal app. If a stage crashes, the log
 still contains completed stages; upload the partial log. The trigger remains
 in place after an incomplete run to permit a restart. The timeout defaults to
-15 minutes and can be changed with `--timeout`; 60 seconds with no serial output
-ends the run with a partial log instead of waiting the full 15 minutes.
+30 minutes and can be changed with `--timeout`; 60 seconds with no serial output
+ends the run with a partial log instead of waiting the full timeout.
 
 The tour runs each prepared GIF, each base effect, every Chaos mode, each
 content and intense scene transition, Clock/Set Times/Waveform, every text
 font and installed icon, overlay backgrounds and motion, audio presets,
 named scene presets, synthetic reactive input, slideshow, and independent panel
-mode. Each stage records an initial switching window and a steady window,
+mode. Each stage lasts at least five seconds and waits for completed
+`backend.present()` calls to measure the display, up to about 12 seconds for
+slow modes; fewer than two presented frames can extend this to 25 seconds.
+With a single GIF, content and intense transitions show a Rainbow source for
+at least two presented frames before transitioning to that GIF. A one-GIF
+slideshow or independent mode cannot validate switching between distinct
+GIFs and is marked accordingly. Each stage records a switching and steady window,
 with achieved FPS, 95th percentile and longest frame interval, gap counts,
 minimum free RAM, and named render/HTTP/effect timings. `PASS` means a steady
 27+ FPS, 95th percentile frame interval <=40 ms, and no >100 ms gap. The
