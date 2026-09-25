@@ -52,6 +52,159 @@ class FakeFrameBufferDisplay:
 
 
 class MatrixPortalBackendTests(unittest.TestCase):
+    def test_native_dim_filters_only_selected_face(self):
+        class Bitmap:
+            def __init__(self, width, height, colors=65536):
+                self.width, self.height = width, height
+                self.data = array('H', [0] * (width * height))
+            def __getitem__(self, xy):
+                x, y = xy
+                return self.data[y * self.width + x]
+            def __setitem__(self, xy, value):
+                x, y = xy
+                self.data[y * self.width + x] = value
+        def blit(dst, src, dx, dy, *, x1=0, y1=0, x2=None, y2=None):
+            for sy in range(y1, src.height if y2 is None else y2):
+                for sx in range(x1, src.width if x2 is None else x2):
+                    dst[dx + sx - x1, dy + sy - y1] = src[sx, sy]
+        mix_calls = []
+        def mix(bitmap, weights):
+            mix_calls.append(weights)
+            for index, value in enumerate(bitmap.data):
+                color = _swap16(value)
+                scale = int(weights[0] * 256)
+                result = ((((color >> 11) & 31) * scale >> 8) << 11
+                          | ((((color >> 5) & 63) * scale >> 8) << 5)
+                          | ((color & 31) * scale >> 8))
+                bitmap.data[index] = _swap16(result)
+        bmp = Bitmap(128, 32)
+        fb = _BitmapLinearBuffer(bmp, 128, swapped_storage=True)
+        fb.pixels_view = memoryview(bmp.data)
+        front = MatrixPortalPanel(fb, 128, 0, 64, 32)
+        for y in range(32):
+            for x in range(128):
+                bmp[x, y] = _swap16(0xF81F)
+        with patch.dict(sys.modules, {
+            'bitmaptools': types.SimpleNamespace(blit=blit),
+            'bitmapfilter': types.SimpleNamespace(ChannelScale=lambda *args: args, mix=mix),
+            'displayio': types.SimpleNamespace(Bitmap=Bitmap),
+        }):
+            front.dim(.5)
+        self.assertEqual(mix_calls, [(.5, .5, .5)])
+        self.assertEqual(front.get_pixel565(0, 0), 0x780F)
+        self.assertEqual(bmp[64, 0], _swap16(0xF81F))
+
+    def test_styled_glyphs_match_desktop_shapes_with_cached_native_blits(self):
+        from text_engine import TextRenderer
+        from text import FONT
+        class Bitmap:
+            def __init__(self, width, height, colors=65536):
+                self.width, self.height = width, height
+                self.data = array('H', [0] * (width * height))
+            def __getitem__(self, xy):
+                x, y = xy
+                return self.data[y * self.width + x]
+            def __setitem__(self, xy, value):
+                x, y = xy
+                self.data[y * self.width + x] = value
+            def fill(self, value):
+                self.data[:] = array('H', [value] * len(self.data))
+        def blit(dst, src, dx, dy, *, x1, y1, x2, y2, skip_source_index):
+            for sy in range(y1, y2):
+                for sx in range(x1, x2):
+                    value = src[sx, sy]
+                    if value != skip_source_index:
+                        dst[dx + sx - x1, dy + sy - y1] = value
+        fb_bitmap = Bitmap(128, 32)
+        fb = _BitmapLinearBuffer(fb_bitmap, 128, swapped_storage=True)
+        fb.pixels_view = memoryview(fb_bitmap.data)
+        panel = MatrixPortalPanel(fb, 128, 0, 64, 32)
+        renderer = TextRenderer(64, 32)
+        with patch.dict(sys.modules, {
+            'displayio': types.SimpleNamespace(Bitmap=Bitmap),
+            'bitmaptools': types.SimpleNamespace(blit=blit),
+        }):
+            for font in ('Block', 'Thin', 'Arcade', 'Quest'):
+                reference = VirtualDisplay()
+                fb_bitmap.fill(0)
+                renderer._draw_glyph(reference, 'R', 8, 4, (121, 200, 86), 2, font)
+                renderer._draw_glyph(panel, 'R', 8, 4, (121, 200, 86), 2, font)
+                count = len(fb.glyph_cache)
+                renderer._draw_glyph(panel, 'R', 8, 4, (121, 200, 86), 2, font)
+                self.assertEqual(len(fb.glyph_cache), count)
+                for y in range(20):
+                    for x in range(24):
+                        actual = panel.get_pixel(x, y)
+                        expected = reference.get_pixel(x, y)
+                        self.assertLessEqual(max(abs(a - b) for a, b in zip(actual, expected)),
+                                             7, (font, x, y, actual, expected))
+
+    def test_packed_content_transitions_match_rgb_reference(self):
+        from transition_engine import TransitionManager
+
+        class Bitmap:
+            width, height = 128, 32
+            def __init__(self):
+                self.data = array('H', [0x4a4a] * (128 * 32))
+        for kind in ("Fade", "Melt", "Dissolve", "Glitch", "Ripple", "Zoom", "Wipe"):
+            bitmap = Bitmap()
+            fb = _BitmapLinearBuffer(bitmap, 128, swapped_storage=True)
+            fb.pixels_view = memoryview(bitmap.data)
+            panel = MatrixPortalPanel(fb, 128, 0, 64, 32)
+            reference = VirtualDisplay()
+            for y in range(32):
+                for x in range(64):
+                    value = ((x * 4) % 256, (y * 7) % 256, ((x + y) * 3) % 256)
+                    reference.set_pixel(x, y, value)
+                    fb[y * 128 + x] = rgb888_to_rgb565(value)
+            native_manager = TransitionManager(64, 32)
+            rgb_manager = TransitionManager(64, 32)
+            native_manager.begin(panel, kind, 1)
+            rgb_manager.begin(reference, kind, 1)
+            native_manager.seed = rgb_manager.seed = 127
+            native_manager.elapsed = rgb_manager.elapsed = .42
+            for y in range(32):
+                for x in range(64):
+                    value = (((x + y) * 5) % 256, (x * 3) % 256, (y * 8) % 256)
+                    reference.set_pixel(x, y, value)
+                    fb[y * 128 + x] = rgb888_to_rgb565(value)
+            native_manager.apply(panel)
+            rgb_manager.apply(reference)
+            for y in range(32):
+                for x in range(64):
+                    expected, actual = reference.get_pixel(x, y), panel.get_pixel(x, y)
+                    self.assertLessEqual(max(abs(a - b) for a, b in zip(expected, actual)),
+                                         18, (kind, x, y, actual, expected))
+                self.assertEqual(bitmap.data[y * 128 + 64:(y + 1) * 128],
+                                 array('H', [0x4a4a] * 64))
+
+    def test_packed_scene_morph_reaches_destination_without_touching_other_panel(self):
+        from visual_engine import copy_pixels
+        class Bitmap:
+            width, height = 128, 32
+            def __init__(self):
+                self.data = array('H', [0x4a4a] * (128 * 32))
+        bitmap = Bitmap()
+        fb = _BitmapLinearBuffer(bitmap, 128, swapped_storage=True)
+        fb.pixels_view = memoryview(bitmap.data)
+        panel = MatrixPortalPanel(fb, 128, 0, 64, 32)
+        for y in range(32):
+            for x in range(64):
+                fb[y * 128 + x] = rgb888_to_rgb565((x * 3, y * 7, 40))
+        src = copy_pixels(panel)
+        for y in range(32):
+            for x in range(64):
+                fb[y * 128 + x] = rgb888_to_rgb565((y * 7, x * 3, 180))
+        dest = copy_pixels(panel)
+        prepared = panel.native_scene_morph(src, dest, .5, 417, None)
+        self.assertIsNotNone(prepared)
+        panel.native_scene_morph(src, dest, 1, 417, prepared)
+        for y in range(32):
+            for x in range(64):
+                self.assertEqual(panel.get_pixel565(x, y), dest[y]._values[x])
+            self.assertEqual(bitmap.data[y * 128 + 64:(y + 1) * 128],
+                             array('H', [0x4a4a] * 64))
+
     def test_packed_remaps_and_dim_preserve_back_panel(self):
         class Bitmap:
             width, height = 128, 32

@@ -29,7 +29,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PASSWORD_LINE = re.compile(r'^WIFI_PASSWORD\s*=\s*(.*)$', re.MULTILINE)
 BOARD_MODULES = (
     "matrixportal_backend.py", "matrixportal_effects.py", "chaos_engine.py", "info_scenes.py",
-    "visual_engine.py", "transition_engine.py", "matrixportal_diagnostics.py",
+    "visual_engine.py", "transition_engine.py", "text_engine.py", "matrixportal_diagnostics.py",
 )
 
 

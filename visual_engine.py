@@ -73,6 +73,9 @@ class TransitionManager:
     def apply(self, display):
         if not self.active or self.source is None:
             return
+        native = getattr(display, "native_content_transition", None)
+        if native is not None and native(self.kind, self.source, self.progress, self.seed):
+            return
         target = copy_pixels(display)
         p = self.progress
         if self.kind == "Fade":

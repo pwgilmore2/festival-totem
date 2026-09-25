@@ -27,6 +27,18 @@ in place after an incomplete run to permit a restart. The timeout defaults to
 30 minutes and can be changed with `--timeout`; 60 seconds with no serial output
 ends the run with a partial log instead of waiting the full timeout.
 
+The September 25 10:04 serial tour completed all 67 stages with no Python
+tracebacks. Packed Waves and Plasma improved from about 0.5 FPS to 12.6 and
+12.4 FPS; pixelmelt, meltdown and jumble improved from about 1.3 FPS to
+10–12 FPS. Remaining measured bottlenecks include Morph (~10 seconds per
+transition frame), other content transitions (~0.8–2.6 seconds per active
+frame), non-Pixel text (5–10 FPS), Clock and Set Times (7–8 FPS), and
+Dimmed GIF (~7 FPS). The next build applies packed RGB565 transitions and
+Morph, native glyph bitmaps for all text fonts and info labels, and a native
+bitmapfilter dim pass with a packed fallback. Its physical frame rates and
+appearance still require a complete board tour; the diagnostic command
+installs the changed runtime modules automatically.
+
 When the last stage ends, the board displays **DONE** in green using the normal
 text overlay. It waits for two displayed frames and at least three seconds
 before emitting `DIAG_DONE`; the Mac collector keeps the serial connection

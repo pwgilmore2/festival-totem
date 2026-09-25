@@ -165,8 +165,14 @@ class InfoScenes:
         value = str(value).upper()
         width = len(value) * (5 * scale + spacing) - spacing
         x = (display.width - width) // 2
+        blit = getattr(display, "blit_glyph", None)
         for char in value:
-            for dy, row in enumerate(FONT.get(char, FONT["?"])):
+            pattern = FONT.get(char, FONT["?"])
+            if blit is not None:
+                blit(char, pattern, x, y, color, scale)
+                x += 5 * scale + spacing
+                continue
+            for dy, row in enumerate(pattern):
                 for dx, point in enumerate(row):
                     if point == "1":
                         for py in range(scale):

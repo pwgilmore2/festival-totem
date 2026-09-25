@@ -201,7 +201,7 @@ class TextRenderer:
     def _draw_text(self, display, text, x, y, base_color, scale, font, color_mode, t, pulse):
         cursor = x
         spacing = self._spacing(scale, font)
-        if font == "Pixel" and color_mode == "Rainbow" and hasattr(display, "blit_glyph"):
+        if color_mode == "Rainbow" and hasattr(display, "blit_glyph"):
             # Keep four smooth color steps per second on the hardware so
             # neighboring frames can reuse the same native glyph Bitmaps.
             t = int(t * 4) / 4.0
@@ -219,6 +219,10 @@ class TextRenderer:
         blit_glyph = getattr(display, "blit_glyph", None)
         if font == "Pixel" and blit_glyph is not None:
             blit_glyph(ch, pattern, x, y, color, scale)
+            return
+        styled = getattr(display, "blit_styled_glyph", None)
+        if font != "Pixel" and styled is not None:
+            styled(ch, pattern, x, y, color, scale, font)
             return
         if font == "Quest":
             shadow = tuple(max(0, int(c * .28)) for c in color)

@@ -42,6 +42,8 @@ class _BitmapLinearBuffer:
         self.next_color_path_report = 0.0
         self.effect_palettes = None
         self.dim_tables = {}
+        self.dim_bitmap = None
+        self.dim_native_available = True
 
     def __getitem__(self, index):
         index = int(index)
@@ -284,6 +286,191 @@ class MatrixPortalPanel:
                             raw[y * stride + origin + x] = source[sy * stride + origin + sx]
         return True
 
+    def native_content_transition(self, kind, source, p, seed):
+        """Compose content transitions directly on RGB565 Bitmap memory.
+
+        TransitionManager's FrozenRow snapshots already contain packed source
+        pixels; avoid expanding both entire frames to Python RGB tuples.
+        """
+        raw = self.framebuffer.pixels_view
+        if raw is None or self.rotation != 0 or len(source) != self.height:
+            return False
+        rows = [getattr(row, "_values", None) for row in source]
+        if any(row is None for row in rows):
+            return False
+        import math
+        import runtime_random as random
+        width, height = self.width, self.height
+        stride, origin = self.stride, self.x_offset
+        swapped = self.framebuffer.swapped_storage
+        def get_target(x, y):
+            value = raw[y * stride + origin + x]
+            return _swap16(value) if swapped else value
+        def put(x, y, value):
+            raw[y * stride + origin + x] = _swap16(value) if swapped else value
+        def mix(old, new, fraction):
+            w = int(max(0, min(256, fraction * 256)))
+            return (((((old >> 11) & 31) * (256 - w) + ((new >> 11) & 31) * w + 128) >> 8) << 11
+                    | (((((old >> 5) & 63) * (256 - w) + ((new >> 5) & 63) * w + 128) >> 8) << 5)
+                    | (((old & 31) * (256 - w) + (new & 31) * w + 128) >> 8))
+        if kind == "Fade":
+            for y in range(height):
+                row = rows[y]
+                for x in range(width):
+                    put(x, y, mix(row[x], get_target(x, y), p))
+        elif kind == "Dissolve":
+            rng = random.Random(seed)
+            for y in range(height):
+                row = rows[y]
+                for x in range(width):
+                    if rng.random() > p:
+                        put(x, y, row[x])
+        elif kind == "Glitch":
+            rng = random.Random(seed + int(p * 30))
+            old_weight = max(0.0, 1.0 - p)
+            for y in range(height):
+                band = rng.random() < (0.22 + old_weight * 0.38)
+                shift = rng.randint(-10, 10) if band else 0
+                row = rows[y]
+                for x in range(width):
+                    if rng.random() >= p:
+                        put(x, y, row[max(0, min(width - 1, x + shift))])
+        elif kind == "Wipe":
+            edge = int(p * (width + 12)) - 6
+            for y in range(height):
+                wobble = int(math.sin(y * 0.55 + seed) * 3)
+                row = rows[y]
+                for x in range(width):
+                    local = x - (edge + wobble)
+                    if local > 2:
+                        put(x, y, row[x])
+                    elif local >= -2:
+                        put(x, y, mix(get_target(x, y), row[x],
+                                      max(0.0, min(1.0, (local + 2) / 4.0))))
+        elif kind == "Melt":
+            rng = random.Random(seed)
+            offsets = [rng.uniform(0.0, 0.55) for _ in range(width)]
+            for x in range(width):
+                local = max(0.0, min(1.0, (p - offsets[x]) / max(0.08, 1.0 - offsets[x])))
+                drop = int((local ** 1.6) * (height + 8))
+                edge = min(1.0, local * 1.25) * 0.45
+                for y in range(height):
+                    sy = y - drop
+                    if sy >= 0 and local < 0.98:
+                        put(x, y, mix(rows[sy][x], get_target(x, y), edge))
+        elif kind in ("Ripple", "Zoom"):
+            # These modes resample the target, so snapshot its packed pixels.
+            target = array("H", raw)
+            def sample(x, y):
+                x = max(0, min(width - 1, x))
+                y = max(0, min(height - 1, y))
+                value = target[y * stride + origin + x]
+                return _swap16(value) if swapped else value
+            cx, cy = (width - 1) / 2.0, (height - 1) / 2.0
+            if kind == "Ripple":
+                max_r = math.sqrt(cx * cx + cy * cy)
+                radius = p * (max_r + 8)
+                for y in range(height):
+                    for x in range(width):
+                        dx, dy = x - cx, y - cy
+                        d = math.sqrt(dx * dx + dy * dy)
+                        if d > radius:
+                            put(x, y, rows[y][x])
+                        else:
+                            wave = 2.2 * math.sin((d - radius) * 1.25) * (1.0 - p)
+                            sx = int(round(cx + dx * (1.0 - wave * 0.018)))
+                            sy = int(round(cy + dy * (1.0 - wave * 0.018)))
+                            edge = max(0.0, min(1.0, (radius - d + 3) / 6.0))
+                            put(x, y, mix(rows[y][x], sample(sx, sy), edge))
+            else:
+                old_zoom = 1.0 + p * 1.5
+                new_zoom = 1.85 - p * 0.85
+                for y in range(height):
+                    for x in range(width):
+                        osx = max(0, min(width - 1, int(round(cx + (x - cx) / old_zoom))))
+                        osy = max(0, min(height - 1, int(round(cy + (y - cy) / old_zoom))))
+                        nsx = int(round(cx + (x - cx) / new_zoom))
+                        nsy = int(round(cy + (y - cy) / new_zoom))
+                        put(x, y, mix(rows[osy][osx], sample(nsx, nsy), p))
+        else:
+            return False
+        return True
+
+    def native_scene_morph(self, source, target, p, seed, prepared):
+        """Color-rank and move packed pixels without unpacking RGB tuples."""
+        raw = self.framebuffer.pixels_view
+        if raw is None or self.rotation != 0:
+            return None
+        src_rows = [getattr(row, "_values", None) for row in source]
+        dst_rows = [getattr(row, "_values", None) for row in target]
+        if any(row is None for row in src_rows + dst_rows):
+            return None
+        import math
+        width, height = self.width, self.height
+        size = width * height
+        stride, origin = self.stride, self.x_offset
+        if prepared is None:
+            def rank(rows, i):
+                c = rows[i // width][i % width]
+                r, g, b = (c >> 11) & 31, (c >> 5) & 63, c & 31
+                # Original ordering uses expanded RGB888 brightness/saturation.
+                r, g, b = (r << 3) | (r >> 2), (g << 2) | (g >> 4), (b << 3) | (b >> 2)
+                return (r + g + b, max(r, g, b) - min(r, g, b), i)
+            src_order = array("H", sorted(range(size), key=lambda i: rank(src_rows, i)))
+            dst_order = array("H", sorted(range(size), key=lambda i: rank(dst_rows, i)))
+            wobble_x = array("h", (int(math.sin(i * .73 + seed * .001) * 256)
+                                   for i in range(size)))
+            wobble_y = array("h", (int(math.cos(i * .51 + seed * .002) * 256)
+                                   for i in range(size)))
+            def bright(c):
+                return (c >> 11) > 2 or ((c >> 5) & 63) > 4 or (c & 31) > 2
+            visible = array("B", (1 if (bright(src_rows[si // width][si % width])
+                                        or bright(dst_rows[di // width][di % width]))
+                                   else 0 for si, di in zip(src_order, dst_order)))
+            prepared = src_order, dst_order, wobble_x, wobble_y, visible
+        src_order, dst_order, wobble_x, wobble_y, visible = prepared
+        swapped = self.framebuffer.swapped_storage
+        bg = p * p * .32
+        for y in range(height):
+            row = dst_rows[y]
+            base = y * stride + origin
+            for x in range(width):
+                c = row[x]
+                dimmed = ((int(((c >> 11) & 31) * bg) << 11)
+                           | (int(((c >> 5) & 63) * bg) << 5)
+                           | int((c & 31) * bg))
+                raw[base + x] = _swap16(dimmed) if swapped else dimmed
+        arc = math.sin(math.pi * p)
+        weight = int(p * 256)
+        for i in range(size):
+            si, di = src_order[i], dst_order[i]
+            sx, sy = si % width, si // width
+            dx, dy = di % width, di // width
+            old, new = src_rows[sy][sx], dst_rows[dy][dx]
+            if p < .78 and not visible[i]:
+                continue
+            mx = sx + (dx - sx) * p + wobble_x[i] * arc * (2.4 / 256)
+            my = sy + (dy - sy) * p + wobble_y[i] * arc * (1.5 / 256)
+            xi, yi = int(round(mx)), int(round(my))
+            if 0 <= xi < width and 0 <= yi < height:
+                c = ((((((old >> 11) & 31) * (256 - weight) + ((new >> 11) & 31) * weight) >> 8) << 11)
+                     | (((((old >> 5) & 63) * (256 - weight) + ((new >> 5) & 63) * weight) >> 8) << 5)
+                     | (((old & 31) * (256 - weight) + (new & 31) * weight) >> 8))
+                raw[yi * stride + origin + xi] = _swap16(c) if swapped else c
+        if p > .82:
+            weight = int(min(256, (p - .82) / .18 * 256))
+            for y in range(height):
+                base = y * stride + origin
+                for x in range(width):
+                    index = base + x
+                    old = _swap16(raw[index]) if swapped else raw[index]
+                    new = dst_rows[y][x]
+                    c = ((((((old >> 11) & 31) * (256 - weight) + ((new >> 11) & 31) * weight) >> 8) << 11)
+                         | (((((old >> 5) & 63) * (256 - weight) + ((new >> 5) & 63) * weight) >> 8) << 5)
+                         | (((old & 31) * (256 - weight) + (new & 31) * weight) >> 8))
+                    raw[index] = _swap16(c) if swapped else c
+        return prepared
+
     def native_sparkles(self, amount, seed):
         """Write original seeded white sparkle points through Bitmap memory."""
         raw = self.framebuffer.pixels_view
@@ -357,6 +544,28 @@ class MatrixPortalPanel:
     def dim(self, brightness):
         """Dim RGB565 in place without converting each pixel to an RGB tuple."""
         scale = max(0, min(256, int(float(brightness) * 256)))
+        if (self.rotation == 0 and self.framebuffer.swapped_storage
+                and self.framebuffer.dim_native_available):
+            try:
+                import bitmaptools
+                import bitmapfilter
+                import displayio
+                temp = self.framebuffer.dim_bitmap
+                if temp is None:
+                    temp = displayio.Bitmap(self.width, self.height, 65536)
+                    self.framebuffer.dim_bitmap = temp
+                bitmaptools.blit(temp, self.framebuffer.bitmap, 0, 0,
+                                 x1=self.x_offset, y1=0,
+                                 x2=self.x_offset + self.width, y2=self.height)
+                bitmapfilter.mix(temp, bitmapfilter.ChannelScale(
+                    scale / 256.0, scale / 256.0, scale / 256.0))
+                bitmaptools.blit(self.framebuffer.bitmap, temp,
+                                 self.x_offset, 0)
+                return
+            except Exception as exc:
+                print("NATIVE DIM unavailable; using packed pixels:",
+                      type(exc).__name__, str(exc))
+                self.framebuffer.dim_native_available = False
         raw = self.framebuffer.pixels_view
         if raw is not None and self.rotation == 0:
             tables = self.framebuffer.dim_tables.get(scale)
@@ -681,6 +890,68 @@ class MatrixPortalPanel:
                              self.x_offset + x + x1, y + y1,
                              x1=x1, y1=y1, x2=x2, y2=y2,
                              skip_source_index=0x0100 if self.framebuffer.swapped_storage else 1)
+
+    def blit_styled_glyph(self, ch, pattern, x, y, color, scale, font):
+        """Cache Block, Thin, Arcade and Quest glyph geometry on board."""
+        if self.rotation != 0:
+            return False
+        import bitmaptools
+        import displayio
+        packed = rgb888_to_rgb565(color)
+        key = (ch, scale, packed, font)
+        cache = self.framebuffer.glyph_cache
+        bitmap = cache.get(key)
+        if bitmap is None:
+            width = 5 * scale + (1 if font in ("Block", "Quest") else 0)
+            height = 7 * scale + (1 if font == "Quest" else 0)
+            bitmap = displayio.Bitmap(width, height, 65536)
+            blank = 0x0100 if self.framebuffer.swapped_storage else 1
+            bitmap.fill(blank)
+            def put(px, py, rgb):
+                if 0 <= px < width and 0 <= py < height:
+                    value = rgb888_to_rgb565(rgb)
+                    if value == 1:
+                        value = 2
+                    bitmap[px, py] = _swap16(value) if self.framebuffer.swapped_storage else value
+            if font == "Quest":
+                shadow = tuple(max(0, int(c * .28)) for c in color)
+                for row, line in enumerate(pattern):
+                    for col, pixel in enumerate(line):
+                        if pixel == "1":
+                            put(col * scale + 1, row * scale + 1, shadow)
+            bright = tuple(min(255, int(c * 1.18)) for c in color)
+            accent = tuple(min(255, int(c * 1.20)) for c in color)
+            for row, line in enumerate(pattern):
+                for col, pixel in enumerate(line):
+                    if pixel != "1":
+                        continue
+                    px, py = col * scale, row * scale
+                    if font == "Thin":
+                        put(px, py, color)
+                        if scale > 1:
+                            put(px + scale - 1, py + scale - 1, color)
+                        continue
+                    for sy in range(scale):
+                        for sx in range(scale):
+                            put(px + sx, py + sy, color)
+                    if font == "Block":
+                        put(px + scale, py, color)
+                    elif font == "Arcade" and (row + col) % 2 == 0:
+                        put(px, py, bright)
+                    elif font == "Quest" and row in (0, 6) and col in (0, 4):
+                        put(px, py, accent)
+            if len(self.framebuffer.glyph_order) >= 128:
+                del cache[self.framebuffer.glyph_order.pop(0)]
+            cache[key] = bitmap
+            self.framebuffer.glyph_order.append(key)
+        x1, y1 = max(0, -x), max(0, -y)
+        x2, y2 = min(bitmap.width, self.width - x), min(bitmap.height, self.height - y)
+        if x2 > x1 and y2 > y1:
+            bitmaptools.blit(self.framebuffer.bitmap, bitmap,
+                             self.x_offset + x + x1, y + y1,
+                             x1=x1, y1=y1, x2=x2, y2=y2,
+                             skip_source_index=0x0100 if self.framebuffer.swapped_storage else 1)
+        return True
 
 
 class MatrixPortalDisplayBackend:
