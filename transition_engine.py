@@ -5,7 +5,7 @@ transition timing and pixels; importing it has no side effects or monkeypatches.
 """
 
 import math
-import random
+import runtime_random as random
 
 from visual_engine import TransitionManager as BaseTransitionManager
 from visual_engine import blend_color, clamp01, copy_pixels, write_pixels

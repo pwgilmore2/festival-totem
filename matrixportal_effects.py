@@ -1,7 +1,7 @@
 """Small CircuitPython-safe counterparts to the desktop's base effects."""
 
 import math
-import random
+import runtime_random as random
 
 
 def hsv(h, saturation=1.0, value=1.0):

@@ -5,7 +5,7 @@ The runtime owns state, command routing and render ordering. Desktop concerns
 WiFi polling) stay in their platform shells/adapters.
 """
 
-import random
+import runtime_random as random
 import time
 
 from chaos_engine import ChaosEngine

@@ -3,7 +3,7 @@ try:
 except ImportError:  # CircuitPython does not ship CPython's colorsys module.
     from matrixportal_colorsys import colorsys
 import math
-import random
+import runtime_random as random
 
 from text import FONT
 

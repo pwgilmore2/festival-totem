@@ -1,5 +1,5 @@
 import math
-import random
+import runtime_random as random
 
 
 class Particle:

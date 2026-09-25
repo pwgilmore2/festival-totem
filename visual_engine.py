@@ -1,5 +1,5 @@
 import math
-import random
+import runtime_random as random
 
 
 TRANSITIONS = ["Fade", "Melt", "Dissolve", "Glitch", "Ripple", "Zoom", "Wipe", "None"]

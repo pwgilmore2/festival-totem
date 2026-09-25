@@ -6,7 +6,7 @@ transitions. Importing this module has no side effects or monkeypatches.
 """
 
 import math
-import random
+import runtime_random as random
 import time
 
 from visual_engine import copy_pixels

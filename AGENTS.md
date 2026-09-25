@@ -10,6 +10,8 @@ First integrated boot failed before display setup: CircuitPython 10.3.1 lacks `b
 
 Next board boot hit `SyntaxError` at `totem_runtime.py:1163`: CircuitPython rejects dictionary literal unpacking (`**reference`). Replaced this and the analogous `runtime_io.py` dictionary unpack with `dict.update()`. Desktop suite still passes (47 tests). This second fix awaits an on-device boot.
 
+After loading corrected files, the board got to `TotemRuntime.__init__`, then failed because CircuitPython `random` lacks `shuffle`. The runtime visual modules now import `runtime_random.py`, which provides `shuffle`, `choice`, `uniform`, and seeded `Random` where the board omits them. This compatibility fix passed 47 desktop tests and a staging build; it still awaits a board retry. Rebuild or copy `runtime_random.py` alongside the updated imports.
+
 ## Physical board bring-up: confirmed September 25
 
 - CircuitPython **10.3.1** runs on the user's Adafruit MatrixPortal S3. Two opposite-facing logical **64×32** panels are chained as one 128×32 HUB75 display and powered separately by the 5 V distribution; the board was powered/programmed from Mac USB during tests.
