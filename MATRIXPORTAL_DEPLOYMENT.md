@@ -44,6 +44,8 @@ Do not use the advertised flash-chip capacity as the deployment budget. CircuitP
 ```text
 manifest.json
 large_icon_data.py
+board_icon_index.py
+board_icons/*.rgba
 BUILD_REPORT.txt
 build_report.json
 media/
@@ -80,6 +82,11 @@ further changes. Test icon RAM and frame timing on hardware.
 `BUILD_REPORT.txt` is meant for humans and lists the largest GIFs first so oversized assets are easy to spot.
 
 The build report itself is not part of the required device payload.
+
+The icon data copied to the board is the raw `board_icons/*.rgba` set and its
+`board_icon_index.py`. On the 10.3.1 board, the authoring modules' `base64`
+and `zlib` imports are unavailable. Copy the entire regenerated build, not just
+`code.py`, after each icon rebuild.
 
 ## Runtime media model
 

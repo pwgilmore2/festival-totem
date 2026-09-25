@@ -5,8 +5,19 @@ continue loading editable PNGs through icon_assets.IconLibrary, while the shared
 renderer only depends on the small names()/get() contract implemented here.
 """
 
-from overlay_exact_assets import EXACT_SPRITES, sprite_rgba
-from large_icon_data import DATA as LARGE_ICONS, sprite_rgba as large_sprite_rgba
+try:
+    from board_icon_index import ICONS as BOARD_ICONS
+except ImportError:
+    BOARD_ICONS = None
+
+
+def _board_rows(path, width, height):
+    with open(path, "rb") as handle:
+        raw = handle.read()
+    if len(raw) != width * height * 4:
+        raise ValueError("Invalid RGBA icon file: " + path)
+    return tuple(tuple(tuple(raw[(y * width + x) * 4:(y * width + x + 1) * 4])
+                       for x in range(width)) for y in range(height))
 
 
 class EmbeddedIconAsset:
@@ -27,6 +38,20 @@ class EmbeddedIconLibrary:
         self.assets = []
         self.by_name = {}
         self.errors = []
+        if BOARD_ICONS is not None:
+            for name, width, height, path in BOARD_ICONS:
+                try:
+                    asset = EmbeddedIconAsset(name, _board_rows(path, width, height))
+                    self.assets.append(asset)
+                    self.by_name[name] = asset
+                except Exception as exc:
+                    self.errors.append("%s: %s" % (name, exc))
+            return self
+
+        # Desktop fallback; the board build uses raw RGBA files and never imports
+        # the base85/zlib authoring modules.
+        from overlay_exact_assets import EXACT_SPRITES, sprite_rgba
+        from large_icon_data import DATA as LARGE_ICONS, sprite_rgba as large_sprite_rgba
         for name in EXACT_SPRITES:
             try:
                 rows = tuple(
