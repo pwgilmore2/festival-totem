@@ -74,26 +74,46 @@ def port_candidates(preferred):
     return sorted(glob.glob("/dev/cu.usbmodem*"))
 
 
-def collect(log_path, preferred_port, timeout):
+def open_serial(preferred_port):
+    for port in port_candidates(preferred_port):
+        try:
+            fd = os.open(port, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
+            tty.setraw(fd)
+            attributes = termios.tcgetattr(fd)
+            attributes[4] = attributes[5] = termios.B115200
+            termios.tcsetattr(fd, termios.TCSANOW, attributes)
+            print("Reading serial from", port, flush=True)
+            return fd
+        except OSError:
+            if 'fd' in locals():
+                os.close(fd)
+                del fd
+    return None
+
+
+def collect(log_path, preferred_port, timeout, initial_fd=None, idle_timeout=60):
     deadline = time.monotonic() + timeout
-    fd = None
+    fd = initial_fd
     buffer = b""
     stage_count = 0
     captured_done = False
+    last_bytes_at = time.monotonic()
+    last_notice_at = last_bytes_at
     with log_path.open("w", encoding="utf-8") as log:
+        log.write("# MatrixPortal serial capture started; waiting for board output\n")
+        log.flush()
         while time.monotonic() < deadline and not captured_done:
+            idle = time.monotonic() - last_bytes_at
+            if idle >= idle_timeout:
+                message = "No board serial output for %d seconds; keeping partial log" % idle_timeout
+                print(message, flush=True)
+                log.write("# " + message + "\n")
+                break
+            if idle >= 15 and time.monotonic() - last_notice_at >= 15:
+                print("Waiting for board serial output (%d seconds)..." % int(idle), flush=True)
+                last_notice_at = time.monotonic()
             if fd is None:
-                for port in port_candidates(preferred_port):
-                    try:
-                        fd = os.open(port, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
-                        tty.setraw(fd)
-                        attributes = termios.tcgetattr(fd)
-                        attributes[4] = attributes[5] = termios.B115200
-                        termios.tcsetattr(fd, termios.TCSANOW, attributes)
-                        print("Reading serial from", port, flush=True)
-                        break
-                    except OSError:
-                        fd = None
+                fd = open_serial(preferred_port)
                 if fd is None:
                     time.sleep(.25)
                     continue
@@ -104,12 +124,13 @@ def collect(log_path, preferred_port, timeout):
                 chunk = os.read(fd, 8192)
                 if not chunk:
                     raise OSError("Serial device disconnected")
+                last_bytes_at = time.monotonic()
+                log.write(chunk.decode("utf-8", "replace"))
+                log.flush()
                 buffer += chunk
                 while b"\n" in buffer:
                     raw, buffer = buffer.split(b"\n", 1)
                     line = raw.decode("utf-8", "replace").rstrip("\r")
-                    log.write(line + "\n")
-                    log.flush()
                     if line.startswith("DIAG_BEGIN") or line.startswith("DIAG_ERROR"):
                         print(line, flush=True)
                     if line.startswith("DIAG_STAGE "):
@@ -129,8 +150,6 @@ def collect(log_path, preferred_port, timeout):
                 os.close(fd)
                 fd = None
                 buffer = b""
-        if buffer:
-            log.write(buffer.decode("utf-8", "replace"))
     if fd is not None:
         os.close(fd)
     return captured_done, stage_count
@@ -141,15 +160,23 @@ def main():
     parser.add_argument("--target", default="/Volumes/CIRCUITPY")
     parser.add_argument("--port", help="USB serial device, if more than one is plugged in")
     parser.add_argument("--timeout", type=int, default=900, help="Maximum collection seconds")
+    parser.add_argument("--idle-timeout", type=int, default=60,
+                        help="Seconds without any board serial output before stopping")
     args = parser.parse_args()
     if sys.platform != "darwin":
         parser.error("The collector expects macOS and /dev/cu.usbmodem* serial ports")
-    deploy(Path(args.target))
     logs = ROOT / "diagnostics"
     logs.mkdir(exist_ok=True)
     log_path = logs / ("totem-" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + ".log")
+    fd = open_serial(args.port)
+    try:
+        deploy(Path(args.target))
+    except Exception:
+        if fd is not None:
+            os.close(fd)
+        raise
     print("The full serial log is being saved to", log_path, flush=True)
-    complete, count = collect(log_path, args.port, args.timeout)
+    complete, count = collect(log_path, args.port, args.timeout, fd, args.idle_timeout)
     print("Saved", count, "stages to", log_path, flush=True)
     if not complete:
         print("The board did not send DIAG_DONE. Upload this partial log for diagnosis.", file=sys.stderr)

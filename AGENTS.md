@@ -132,3 +132,11 @@ removes it after a complete run. These scripts have desktop validation
 only until Patrick runs the next board test. Do not claim all effects sustain
 30 FPS on hardware yet. Browser microphone, actual Wi-Fi load and visual color
 inspection are outside this automated test.
+
+The first physical run's host log was reported at zero bytes immediately after
+file creation. The initial Mac collector attached serial only *after* writing
+`code.py`, so an early boot traceback could be missed. The collector now opens
+serial before copying `code.py`, streams bytes to the log as they arrive, and
+stops after 60 seconds of serial silence with a partial log. This revision
+awaits physical verification; a zero-length old-run file alone is not evidence
+of a specific board failure.

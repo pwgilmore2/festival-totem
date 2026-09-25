@@ -3,15 +3,42 @@
 import contextlib
 import io
 import json
+import os
+from pathlib import Path
+import tempfile
+import threading
+import time
 import types
 import unittest
 from unittest.mock import patch
 
 import matrixportal_diagnostics as diagnostic
-from tools.run_matrixportal_diagnostics import private_program
+from tools.run_matrixportal_diagnostics import collect, private_program
 
 
 class DiagnosticTests(unittest.TestCase):
+    @unittest.skipUnless(hasattr(os, 'openpty'), 'requires a Unix pseudoterminal')
+    def test_serial_capture_keeps_boot_lines_and_stages(self):
+        master, slave = os.openpty()
+        def device():
+            time.sleep(.05)
+            os.write(master, b'Traceback on boot\nDIAG_BEGIN 1 / 1 GIF\n')
+            os.write(master, b'DIAG_STAGE {"name":"GIF","status":"PASS","steady":{"fps":30,"p95_ms":34}}\n')
+            os.write(master, b'DIAG_DONE {"stages":1,"slow_count":0}\n')
+        with tempfile.TemporaryDirectory() as temporary:
+            log = Path(temporary) / 'board.log'
+            task = threading.Thread(target=device)
+            task.start()
+            try:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    done, count = collect(log, None, 2, slave)
+            finally:
+                task.join()
+                os.close(master)
+            self.assertTrue(done)
+            self.assertEqual(count, 1)
+            self.assertIn('Traceback on boot', log.read_text())
+
     def test_preserves_private_password_with_comment_and_hash(self):
         template = 'WIFI_PASSWORD = ""  # private\nFPS = 30\n'
         installed = 'WIFI_PASSWORD = "a#password" # my secret\n'

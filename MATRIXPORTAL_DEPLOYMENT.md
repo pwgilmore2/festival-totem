@@ -10,8 +10,9 @@ project root after `git pull`:
 python3 tools/run_matrixportal_diagnostics.py
 ```
 
-This standard-library tool reads your current private `WIFI_PASSWORD` from
-`CIRCUITPY/code.py` without displaying it, installs the new diagnostic module,
+This standard-library tool opens USB serial before rebooting the board so
+startup tracebacks are captured. It reads your current private `WIFI_PASSWORD`
+from `CIRCUITPY/code.py` without displaying it, installs the diagnostic module,
 creates the one-shot marker, and copies the current project `code.py` last to
 trigger CircuitPython auto-reload. It reconnects to the USB serial port, prints
 progress, and saves the **full raw serial log** to `diagnostics/totem-*.log` on
@@ -20,7 +21,8 @@ the board until `DIAG_DONE`. On success, the collector removes the diagnostic
 trigger, so the next reset starts the normal app. If a stage crashes, the log
 still contains completed stages; upload the partial log. The trigger remains
 in place after an incomplete run to permit a restart. The timeout defaults to
-15 minutes and can be changed with `--timeout`.
+15 minutes and can be changed with `--timeout`; 60 seconds with no serial output
+ends the run with a partial log instead of waiting the full 15 minutes.
 
 The tour runs each prepared GIF, each base effect, every Chaos mode, each
 content and intense scene transition, Clock/Set Times/Waveform, every text
