@@ -1005,7 +1005,10 @@ class TotemRuntime:
 
             mode = self.panels[side]["info_scene"]
             if mode:
+                profile_started = time.monotonic() if self.profile_render else 0
                 self.info_scenes.render(mode, display, controller.time, signals)
+                if self.profile_render:
+                    self.profile_render("render/info", time.monotonic() - profile_started)
             elif self._black_background(side):
                 display.clear()
             else:
@@ -1080,10 +1083,16 @@ class TotemRuntime:
                 self.scene_snapshots[side] = copy_pixels(display)
 
             if not mode:
+                profile_started = time.monotonic() if self.profile_render else 0
                 self.chaos_engine.apply(display, frame_number + seed, signals)
+                if self.profile_render and self.chaos_engine.active:
+                    self.profile_render("render/chaos", time.monotonic() - profile_started)
 
         if self.mirrored:
+            profile_started = time.monotonic() if self.profile_render else 0
             self.displays["back"].copy_from(self.displays["front"])
+            if self.profile_render:
+                self.profile_render("render/mirror", time.monotonic() - profile_started)
 
         self.signal_store.end_frame()
 

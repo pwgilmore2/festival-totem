@@ -36,7 +36,7 @@ def launch():
         raise RuntimeError("Add prepared GIFs to assets/images and rebuild the manifest")
     icons = EMBEDDED_ICON_LIBRARY
     runtime = TotemRuntime(64, 32, backend.displays, media, icons,
-                           OverlayRenderer(64, 32, icons), EFFECTS)
+                           OverlayRenderer(64, 32, icons), EFFECTS, mirrored=True)
     # The default Dimmed background touches all 4096 panel pixels in Python
     # on every icon frame (measured 0.58-1.7 seconds per render). Keep the GIF
     # visible beneath overlays on this board until dimming can run natively.

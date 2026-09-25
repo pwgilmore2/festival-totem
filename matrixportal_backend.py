@@ -147,6 +147,13 @@ class MatrixPortalPanel:
 
     def fill(self, color):
         packed = rgb888_to_rgb565(color)
+        import bitmaptools
+        native_fill = getattr(bitmaptools, "fill_region", None)
+        if native_fill is not None:
+            value = _swap16(packed) if self.framebuffer.swapped_storage else packed
+            native_fill(self.framebuffer.bitmap, self.x_offset, 0,
+                        self.x_offset + self.width, self.height, value)
+            return
         for y in range(self.height):
             for x in range(self.width):
                 self.framebuffer[self._index(x, y)] = packed
@@ -170,6 +177,15 @@ class MatrixPortalPanel:
         return (0, 0, 0)
 
     def copy_from(self, other):
+        if (self.rotation == 0 and getattr(other, "rotation", None) == 0
+                and getattr(other, "framebuffer", None) is self.framebuffer):
+            import bitmaptools
+            bitmaptools.blit(self.framebuffer.bitmap, self.framebuffer.bitmap,
+                             self.x_offset, 0,
+                             x1=other.x_offset, y1=0,
+                             x2=other.x_offset + min(self.width, other.width),
+                             y2=min(self.height, other.height))
+            return
         packed = getattr(other, "get_pixel565", None)
         if packed is not None:
             for y in range(self.height):

@@ -157,7 +157,12 @@ class OverlayRenderer:
     def _text_time(self, seed, signature):
         side = "back" if int(seed or 0) >= 1000 else "front"
         clocks = self._text_clock[side]
-        clock = next((entry for entry in clocks if entry["signature"] == signature), None)
+        # CircuitPython's next() accepts only one positional argument.
+        clock = None
+        for entry in clocks:
+            if entry["signature"] == signature:
+                clock = entry
+                break
         if clock is None:
             clock = {"signature": signature, "started": time.monotonic()}
             clocks.append(clock)

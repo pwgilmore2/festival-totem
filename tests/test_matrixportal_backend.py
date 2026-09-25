@@ -142,10 +142,14 @@ class MatrixPortalBackendTests(unittest.TestCase):
             for py in range(kwargs["y1"], kwargs["y2"]):
                 for px in range(kwargs["x1"], kwargs["x2"]):
                     value = source[px, py]
-                    if value != kwargs["skip_source_index"]:
+                    if value != kwargs.get("skip_source_index"):
                         dest[x + px - kwargs["x1"], y + py - kwargs["y1"]] = value
+        def fill_region(dest, x1, y1, x2, y2, value):
+            for py in range(y1, y2):
+                for px in range(x1, x2):
+                    dest[px, py] = value
         with patch.dict(sys.modules, {"board": board, "displayio": displayio,
-             "bitmaptools": types.SimpleNamespace(blit=blit),
+             "bitmaptools": types.SimpleNamespace(blit=blit, fill_region=fill_region),
              "rgbmatrix": types.SimpleNamespace(RGBMatrix=FakeRGBMatrix),
              "framebufferio": types.SimpleNamespace(FramebufferDisplay=FakeFrameBufferDisplay)}):
             backend = MatrixPortalDisplayBackend(swapped_storage=True)
@@ -161,6 +165,10 @@ class MatrixPortalBackendTests(unittest.TestCase):
             self.assertEqual(front.get_pixel565(0, 1), 0x001F)
             self.assertEqual(len(calls), 2)
             self.assertIs(asset._board_bitmap, asset._board_bitmap)
+            back.copy_from(front)
+            self.assertEqual(back.get_pixel565(63, 0), 0xF800)
+            self.assertEqual(back.get_pixel565(0, 1), 0x001F)
+            self.assertEqual(len(calls), 3)
 
 
 if __name__ == "__main__":

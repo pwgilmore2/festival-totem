@@ -105,6 +105,18 @@ the project root to the board; leave the existing private-password `code.py`
 and GIF media in place. A fade or reactive-brightness frame still follows the
 slower Python path; physical FPS for the native path is still unverified.
 
+Physical retest confirmed icons display correctly and run at ~23.5 FPS with
+the phone connected; native steady icon draw takes ~2.25 ms per panel. Next
+Clock/Weather and Chaos produced ~0.85 FPS in one window, with ~1.06 seconds
+per render; stage-specific attribution is still missing. Text crashed because
+CircuitPython `next()` rejects a second default argument. The next candidate
+fixes text, defaults the hardware runtime to Mirrored (one face rendered, then
+copied), and uses native Bitmap fill and mirror blit. It adds render/info,
+render/chaos and render/mirror timings. Copy the updated `overlay_engine.py`,
+`matrixportal_backend.py`, `totem_runtime.py`, and finally `code.py` while
+retaining the existing private password. Test Clock and Chaos separately and
+report both sets of timings; desktop tests pass, physical speed is unknown.
+
 When CIRCUITPY is mounted, compare the deployment directly against its real free space:
 
 ```bash
