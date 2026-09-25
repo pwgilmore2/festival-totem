@@ -65,6 +65,14 @@ opts into that mode too; full runtime overlays, HTTP and transitions still need
 physical testing. The backend default remains the previously verified RGB565
 path.
 
+After repairing the board FAT volume and using the direct deployer, the first
+integrated physical run sustained ~14.8–15.0 FPS with 1.34–1.35 MB free RAM,
+~6.5 ms average runtime render, ~7.1–7.3 ms average present and ~4.6 ms worst
+decode/check. Phone UI interactions and extended stability still need testing.
+The loop had scheduled its next frame after render/present; a follow-up code
+change schedules the 50 ms period from frame start. That change has not yet
+been measured on hardware.
+
 When CIRCUITPY is mounted, compare the deployment directly against its real free space:
 
 ```bash

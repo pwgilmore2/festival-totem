@@ -82,7 +82,9 @@ def launch():
                 metrics.add_timing("present", time.monotonic() - started)
                 metrics.frame()
                 frame_number += 1
-                next_frame = time.monotonic() + 1 / FPS
+                # Frame period starts at the scheduled frame, not after its
+                # render/present work. Otherwise 50 ms + ~14 ms yields ~15 FPS.
+                next_frame = now + 1 / FPS
 
             now = time.monotonic()
             if now >= next_state:
