@@ -126,8 +126,8 @@ class SignalStore:
             "mids": 0.0,
             "highs": 0.0,
             "beat": False,
-            **self.motion,
         }
+        out.update(self.motion)
         if self.audio_fresh():
             out.update({key: self.audio[key] for key in AUDIO_KEYS})
         return out

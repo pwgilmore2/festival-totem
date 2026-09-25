@@ -1116,7 +1116,7 @@ class TotemRuntime:
     def controller_state(self):
         reference = self.phone_panel(self.reference_side())
         icon_errors = getattr(self.icon_library, "errors", [])
-        return {
+        state = {
             "target": self.active_target,
             "reference_side": self.reference_side(),
             "image_count": len(self.media),
@@ -1160,5 +1160,6 @@ class TotemRuntime:
             "icon_library_errors": list(icon_errors),
             "icon_motions": list(ICON_MOTIONS),
             "guest": self.chaos_engine.snapshot(),
-            **reference,
         }
+        state.update(reference)
+        return state

@@ -8,6 +8,8 @@ Last reviewed: 2026-09-25. Read this file first when resuming work; inspect curr
 
 First integrated boot failed before display setup: CircuitPython 10.3.1 lacks `base64`, imported by `overlay_exact_assets.py` through `embedded_icon_library.py`. The subsequent fix makes the Mac build generate `board_icon_index.py` and `board_icons/*.rgba`, and the board icon library loads those raw assets without base64 or zlib. This fix passed desktop tests and build checks but has **not** yet been tried on the S3. Rebuild and copy the entire fresh output, including the new index and directory.
 
+Next board boot hit `SyntaxError` at `totem_runtime.py:1163`: CircuitPython rejects dictionary literal unpacking (`**reference`). Replaced this and the analogous `runtime_io.py` dictionary unpack with `dict.update()`. Desktop suite still passes (47 tests). This second fix awaits an on-device boot.
+
 ## Physical board bring-up: confirmed September 25
 
 - CircuitPython **10.3.1** runs on the user's Adafruit MatrixPortal S3. Two opposite-facing logical **64×32** panels are chained as one 128×32 HUB75 display and powered separately by the 5 V distribution; the board was powered/programmed from Mac USB during tests.
