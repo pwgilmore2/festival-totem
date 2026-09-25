@@ -15,10 +15,27 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 import matrixportal_diagnostics as diagnostic
-from tools.run_matrixportal_diagnostics import collect, open_serial, private_program
+from tools.run_matrixportal_diagnostics import collect, open_serial, private_program, probe_serial
 
 
 class DiagnosticTests(unittest.TestCase):
+    @unittest.skipUnless(hasattr(os, 'openpty'), 'requires a Unix pseudoterminal')
+    def test_probe_requires_board_bytes_before_deploy(self):
+        master, slave = os.openpty()
+        try:
+            with self.assertRaises(TimeoutError):
+                probe_serial(slave, seconds=.05)
+            os.write(master, b'Performance: live\n')
+            self.assertIn(b'Performance:', probe_serial(slave, seconds=.1))
+        finally:
+            os.close(master)
+            os.close(slave)
+
+    def test_serial_open_failure_explains_error(self):
+        errors = []
+        self.assertIsNone(open_serial('/no/such/usbmodem', errors))
+        self.assertIn('FileNotFoundError', errors[0])
+
     def test_one_gif_transition_waits_for_presented_source_frames(self):
         rt = MagicMock()
         rt.base_effects = {'Rainbow': None}
@@ -75,6 +92,22 @@ class DiagnosticTests(unittest.TestCase):
             self.assertEqual(ioctl.call_args.args[1], termios.TIOCMBIS)
             self.assertEqual(ioctl.call_args.args[2],
                              struct.pack('I', termios.TIOCM_DTR))
+        finally:
+            os.close(master)
+
+    @unittest.skipUnless(hasattr(os, 'openpty'), 'requires a Unix pseudoterminal')
+    def test_unsupported_modem_ioctl_still_probes_serial(self):
+        master, slave = os.openpty()
+        path = os.ttyname(slave)
+        os.close(slave)
+        try:
+            with patch('tools.run_matrixportal_diagnostics.fcntl.ioctl',
+                       side_effect=OSError('unsupported')) as ioctl, \
+                    contextlib.redirect_stdout(io.StringIO()):
+                descriptor = open_serial(path)
+            self.assertIsNotNone(descriptor)
+            self.assertTrue(ioctl.called)
+            os.close(descriptor)
         finally:
             os.close(master)
 

@@ -76,8 +76,12 @@ def port_candidates(preferred):
     return sorted(glob.glob("/dev/cu.usbmodem*"))
 
 
-def open_serial(preferred_port):
-    for port in port_candidates(preferred_port):
+def open_serial(preferred_port, errors=None):
+    candidates = port_candidates(preferred_port)
+    if not candidates and errors is not None:
+        errors.append("No /dev/cu.usbmodem* port was found")
+    for port in candidates:
+        fd = None
         try:
             fd = os.open(port, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
             tty.setraw(fd)
@@ -89,15 +93,36 @@ def open_serial(preferred_port):
             # CircuitPython regards USB CDC as connected only while the host
             # asserts DTR. os.open + termios does not guarantee that state;
             # pyserial and screen assert it when they connect.
-            fcntl.ioctl(fd, termios.TIOCMBIS,
-                        struct.pack('I', termios.TIOCM_DTR))
-            print("Reading serial from", port, '(DTR enabled)', flush=True)
+            try:
+                fcntl.ioctl(fd, termios.TIOCMBIS,
+                            struct.pack('I', termios.TIOCM_DTR))
+                dtr_status = 'DTR enabled'
+            except (OSError, AttributeError) as exc:
+                # Some macOS USB drivers do not support this modem ioctl.
+                # Opening a callout device may already assert DTR; verify by
+                # actually reading board output before changing CIRCUITPY.
+                dtr_status = 'DTR ioctl unavailable: %s' % exc
+            print("Reading serial from", port, '(' + dtr_status + ')', flush=True)
             return fd
-        except OSError:
-            if 'fd' in locals():
+        except (OSError, AttributeError) as exc:
+            if errors is not None:
+                errors.append("%s: %s: %s" % (port, type(exc).__name__, exc))
+            if fd is not None:
                 os.close(fd)
-                del fd
     return None
+
+
+def probe_serial(fd, seconds=15):
+    """Confirm the current board actually prints before starting a new tour."""
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        readable, _, _ = select.select([fd], [], [], max(0, min(.5, deadline - time.monotonic())))
+        if readable:
+            chunk = os.read(fd, 8192)
+            if not chunk:
+                raise OSError("USB serial disconnected during preflight")
+            return chunk
+    raise TimeoutError("USB port opened, but the running board sent no console output in %s seconds" % seconds)
 
 
 def collect(log_path, preferred_port, timeout, initial_fd=None, idle_timeout=60):
@@ -196,12 +221,22 @@ def main():
     logs = ROOT / "diagnostics"
     logs.mkdir(exist_ok=True)
     log_path = logs / ("totem-" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + ".log")
-    fd = open_serial(args.port)
+    open_errors = []
+    fd = open_serial(args.port, open_errors)
+    if fd is None:
+        parser.error("USB serial preflight failed before changing CIRCUITPY: "
+                     + "; ".join(open_errors)
+                     + ". Close screen or another serial monitor, then retry.")
     try:
+        print("Checking for existing board console output before deploying...", flush=True)
+        probe_serial(fd)
+        print("Board serial output confirmed.", flush=True)
         deploy(Path(args.target))
+    except TimeoutError as exc:
+        os.close(fd)
+        parser.error("%s. The board was not changed. Check the selected USB port or close another serial monitor." % exc)
     except Exception:
-        if fd is not None:
-            os.close(fd)
+        os.close(fd)
         raise
     print("The full serial log is being saved to", log_path, flush=True)
     complete, count = collect(log_path, args.port, args.timeout, fd, args.idle_timeout)

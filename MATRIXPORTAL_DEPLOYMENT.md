@@ -11,7 +11,7 @@ python3 tools/run_matrixportal_diagnostics.py
 ```
 
 This standard-library tool opens USB serial before rebooting the board so
-startup tracebacks are captured and explicitly asserts DTR, which CircuitPython
+startup tracebacks are captured and attempts to assert DTR, which CircuitPython
 requires for USB console output. It reads your current private `WIFI_PASSWORD`
 from `CIRCUITPY/code.py` without displaying it, installs the diagnostic module,
 creates the one-shot marker, and copies the current project `code.py` last to
@@ -24,6 +24,13 @@ still contains completed stages; upload the partial log. The trigger remains
 in place after an incomplete run to permit a restart. The timeout defaults to
 30 minutes and can be changed with `--timeout`; 60 seconds with no serial output
 ends the run with a partial log instead of waiting the full timeout.
+
+Before installing or restarting anything, the collector now requires an open
+USB serial port **and actual bytes from the already-running board**. If the
+port is busy, missing or silent, it stops immediately with a specific error;
+close `screen` or another serial monitor and rerun. A Mac USB driver can reject
+the DTR ioctl even if opening its callout port already asserts DTR; the runner
+tries the port and lets the board-output check make the final decision.
 
 The tour runs each prepared GIF, each base effect, every Chaos mode, each
 content and intense scene transition, Clock/Set Times/Waveform, every text

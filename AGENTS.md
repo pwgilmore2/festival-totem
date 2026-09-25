@@ -162,3 +162,13 @@ two frames before activating a Rainbow-to-GIF transition. Single-GIF slideshow
 and independent panel tests are labeled as lacking a distinct second image.
 The host overall timeout was increased to 30 minutes. These changes still need
 on-device verification; do not infer FPS from either uploaded silent log.
+
+The third uploaded log `totem-20260925-085424.log` is 201 bytes and says
+`candidate ports: ['/dev/cu.usbmodem4ABCF81B53CC1']`, `connected port: none`,
+then 60 seconds of no board output. The Mac never opened the port. The runner
+had silently swallowed all `open_serial` errors and proceeded to deploy, so
+the visual tour continued for ~10–15 minutes after the Mac timed out. The
+runner now reports the actual open error and requires a successful USB serial
+read from the running board before writing to CIRCUITPY. Unsupported DTR
+ioctls do not discard an otherwise valid open descriptor; the read probe
+decides connectivity. Real Mac port behavior still needs verification.
