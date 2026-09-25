@@ -34,6 +34,9 @@ class FakeBitmap:
         x, y = xy
         self.data[y * self.width + x] = value
 
+    def fill(self, value):
+        self.data[:] = [value] * len(self.data)
+
 
 class FakeFrameBufferDisplay:
     def __init__(self, matrix, auto_refresh=False):
@@ -173,6 +176,14 @@ class MatrixPortalBackendTests(unittest.TestCase):
             self.assertEqual(back.get_pixel565(0, 0), 0x001F)
             self.assertTrue(any(front.get_pixel565(x, y) not in (0x001F, 0xF800)
                                 for y in range(32) for x in range(64)))
+            front.blit_glyph("A", ("01010", "10001", "11111", "10001",
+                                   "10001", "10001", "10001"), 5, 5, (255, 0, 0), 1)
+            first_cache_size = len(backend.framebuffer.glyph_cache)
+            front.blit_glyph("A", ("01010", "10001", "11111", "10001",
+                                   "10001", "10001", "10001"), 5, 5, (255, 0, 0), 1)
+            self.assertEqual(len(backend.framebuffer.glyph_cache), first_cache_size)
+            self.assertEqual(front.get_pixel565(6, 5), 0xF800)
+            self.assertNotEqual(front.get_pixel565(5, 5), 0xF800)
 
 
 if __name__ == "__main__":

@@ -18,6 +18,8 @@ class _BitmapLinearBuffer:
         self.bitmap = bitmap
         self.stride = int(stride)
         self.swapped_storage = bool(swapped_storage)
+        self.glyph_cache = {}
+        self.glyph_order = []
 
     def __getitem__(self, index):
         index = int(index)
@@ -288,6 +290,48 @@ class MatrixPortalPanel:
                              x1=x1, y1=y1, x2=x2, y2=y2,
                              skip_source_index=skip)
         return True
+
+    def blit_glyph(self, ch, pattern, x, y, color, scale):
+        """Cache exact Pixel-font glyphs, then blit with transparent pixels."""
+        if self.rotation != 0:
+            for row, line in enumerate(pattern):
+                for col, pixel in enumerate(line):
+                    if pixel == "1":
+                        for dy in range(scale):
+                            for dx in range(scale):
+                                self.set_pixel(x + col * scale + dx, y + row * scale + dy, color)
+            return
+        import bitmaptools
+        import displayio
+        packed = rgb888_to_rgb565(color)
+        key = (ch, scale, packed)
+        cache = self.framebuffer.glyph_cache
+        bitmap = cache.get(key)
+        if bitmap is None:
+            width, height = 5 * scale, 7 * scale
+            bitmap = displayio.Bitmap(width, height, 65536)
+            blank = 0x0100 if self.framebuffer.swapped_storage else 1
+            bitmap.fill(blank)
+            value = 2 if packed == 1 else packed
+            if self.framebuffer.swapped_storage:
+                value = _swap16(value)
+            for row, line in enumerate(pattern):
+                for col, pixel in enumerate(line):
+                    if pixel == "1":
+                        for dy in range(scale):
+                            for dx in range(scale):
+                                bitmap[col * scale + dx, row * scale + dy] = value
+            if len(self.framebuffer.glyph_order) >= 128:
+                del cache[self.framebuffer.glyph_order.pop(0)]
+            cache[key] = bitmap
+            self.framebuffer.glyph_order.append(key)
+        x1, y1 = max(0, -x), max(0, -y)
+        x2, y2 = min(bitmap.width, self.width - x), min(bitmap.height, self.height - y)
+        if x2 > x1 and y2 > y1:
+            bitmaptools.blit(self.framebuffer.bitmap, bitmap,
+                             self.x_offset + x + x1, y + y1,
+                             x1=x1, y1=y1, x2=x2, y2=y2,
+                             skip_source_index=0x0100 if self.framebuffer.swapped_storage else 1)
 
 
 class MatrixPortalDisplayBackend:

@@ -129,6 +129,20 @@ changed modules (`matrixportal_backend.py`, `text_engine.py`,
 `overlay_engine.py`, `chaos_engine.py`, `totem_runtime.py`) without replacing
 the private-password `code.py`. Keep Mirrored and None · GIF selected.
 
+Text improved only to ~7.24 FPS with `render/text` ~88 ms; user rejected the
+simplified Chaos visuals as a final replacement. A subsequent Pixel-font path
+caches per-glyph RGB565 Bitmaps and uses transparent native blits; rainbow
+color advances four times/second for glyph reuse. To investigate preserving
+the original full-frame Chaos effects, `matrixportal_bitmap_buffer_probe.py`
+verifies `memoryview(displayio.Bitmap)` indexing at startup and times 2048
+reads/writes without changing the image. It does **not** enable direct bitmap
+buffer access during normal rendering. This differs from the known-faulty
+`memoryview(rgbmatrix.RGBMatrix)` method. Updated `code.py` logs frame interval,
+lateness and GC duration to find periodic GIF catches. Copy the new probe
+module before the new `code.py`, keep its private password, and copy backend
+and text_engine updates. Text FPS and the Bitmap buffer path require physical
+measurement before committing to a full effect-engine rewrite.
+
 When CIRCUITPY is mounted, compare the deployment directly against its real free space:
 
 ```bash

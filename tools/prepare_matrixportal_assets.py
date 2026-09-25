@@ -32,7 +32,7 @@ from tools.build_controller_asset import build as build_controller_asset
 
 
 DEVICE_MODULES = (
-    "code.py", "matrixportal_backend.py", "matrixportal_effects.py", "runtime_random.py",
+    "code.py", "matrixportal_backend.py", "matrixportal_bitmap_buffer_probe.py", "matrixportal_effects.py", "runtime_random.py",
     "matrixportal_colorsys.py", "matrixportal_library.py", "matrixportal_media.py",
     "matrixportal_server.py", "control_bus.py", "runtime_metrics.py",
     "runtime_io.py", "display.py", "totem_runtime.py", "controller.py",

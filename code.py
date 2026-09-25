@@ -10,6 +10,7 @@ import socketpool
 import wifi
 
 from embedded_icon_library import EMBEDDED_ICON_LIBRARY
+from matrixportal_bitmap_buffer_probe import run as probe_bitmap_buffer
 from matrixportal_backend import MatrixPortalDisplayBackend
 from matrixportal_effects import EFFECTS
 from matrixportal_library import MatrixPortalMediaAdapter
@@ -21,6 +22,7 @@ from totem_runtime import TotemRuntime
 
 FPS = 30  # Target; physical display/HTTP timings decide the delivered rate.
 REPORT_SECONDS = 5
+BITMAP_BUFFER_PROBE = True  # One-shot startup measurement; no live renderer changes.
 WIFI_SSID = "Festival-Totem"
 WIFI_PASSWORD = ""  # Set a private WPA password of at least eight characters.
 
@@ -31,6 +33,8 @@ def launch():
     # RGB565 through the backend's swapped-storage adapter.
     backend = MatrixPortalDisplayBackend(bit_depth=1, doublebuffer=False,
                                           swapped_storage=True)
+    if BITMAP_BUFFER_PROBE:
+        probe_bitmap_buffer(backend.bitmap)
     media = MatrixPortalMediaAdapter()
     if not len(media):
         raise RuntimeError("Add prepared GIFs to assets/images and rebuild the manifest")
@@ -74,6 +78,8 @@ def launch():
 
             now = time.monotonic()
             if now >= next_frame:
+                metrics.add_timing("frame/interval", now - last_frame)
+                metrics.add_timing("frame/lateness", max(0.0, now - next_frame))
                 dt = min(.25, now - last_frame)
                 last_frame = now
                 started = time.monotonic()
@@ -100,8 +106,10 @@ def launch():
             metrics.loop()
             metrics.add_timing("loop", time.monotonic() - loop_started)
             if metrics.due():
-                print("Performance:", metrics.take_report(free_ram=gc.mem_free()))
+                gc_started = time.monotonic()
                 gc.collect()
+                metrics.add_timing("gc", time.monotonic() - gc_started)
+                print("Performance:", metrics.take_report(free_ram=gc.mem_free()))
     finally:
         server.stop()
         media.close()
