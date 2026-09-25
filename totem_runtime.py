@@ -134,6 +134,7 @@ class TotemRuntime:
         }
         self.text_transitions = {side: None for side in SIDES}
         self.overlay_background = "Dimmed"
+        self.profile_render = None
         self.overlay_audio_reactivity = "Off"
         self._media_suspended = {side: False for side in SIDES}
         self._separate_initial_media()
@@ -1010,7 +1011,10 @@ class TotemRuntime:
             else:
                 controller.effect(display, controller.time)
 
+            profile_started = time.monotonic() if self.profile_render else 0
             self.content_transitions[side].apply(display)
+            if self.profile_render and self.content_transitions[side].active:
+                self.profile_render("render/content_transition", time.monotonic() - profile_started)
             # A Bitmap pixel read is costly on CircuitPython. The hardware
             # transition manager captures its source only when a transition
             # starts; desktop keeps distinct per-stage snapshots for polish.
@@ -1035,7 +1039,10 @@ class TotemRuntime:
             if not mode and self.overlay_background == "Dimmed" and (
                 text_enabled or text_transition or icon.get("icon_enabled")
             ):
+                profile_started = time.monotonic() if self.profile_render else 0
                 self.text_engine.prepare_background(display, text)
+                if self.profile_render:
+                    self.profile_render("render/dim", time.monotonic() - profile_started)
             if not mode:
                 text["audio_reactivity"] = self.overlay_audio_reactivity
                 progress = min(1.0, (time.monotonic() - text_transition["started"]) / OVERLAY_TRANSITION_DURATION) if text_transition else 1.0
@@ -1052,6 +1059,7 @@ class TotemRuntime:
                                                     signals, seed, bottom=False)
             icon_settings = {"audio_reactivity": self.overlay_audio_reactivity}
             if not mode:
+                profile_started = time.monotonic() if self.profile_render else 0
                 self.overlay_renderer.draw_icon(
                     display,
                     icon,
@@ -1061,8 +1069,13 @@ class TotemRuntime:
                     seed,
                     text_enabled=text_enabled,
                 )
+                if self.profile_render and icon.get("icon_enabled"):
+                    self.profile_render("render/icon", time.monotonic() - profile_started)
 
+            profile_started = time.monotonic() if self.profile_render else 0
             self.scene_transitions[side].apply(display)
+            if self.profile_render and self.scene_transitions[side].active:
+                self.profile_render("render/scene_transition", time.monotonic() - profile_started)
             if not getattr(display, "snapshot_on_demand", False):
                 self.scene_snapshots[side] = copy_pixels(display)
 

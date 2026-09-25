@@ -87,6 +87,15 @@ test; the physical performance gain has not yet been measured. The `None`
 background choice in Manage → Setup → Overlay Behavior skips dimming and can
 isolate the cost while testing from the phone.
 
+The on-device retest measured ~580 ms average render with an icon still visible
+and ~1.3 FPS, so packed dimming alone is too slow. The next candidate uses
+`None` for its hardware default overlay background (GIF remains visible under
+the icon), targets 30 FPS, and records optional dim/icon/transition timings.
+The phone may restore `Dimmed` from localStorage when its page opens: choose
+`None` explicitly in Manage → Setup → Overlay Behavior to save that preference.
+When updating `code.py`, retain its existing private AP password; the
+project-root template deliberately has an empty password.
+
 When CIRCUITPY is mounted, compare the deployment directly against its real free space:
 
 ```bash

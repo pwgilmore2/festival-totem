@@ -19,7 +19,7 @@ from runtime_metrics import RuntimeMetrics
 from totem_runtime import TotemRuntime
 
 
-FPS = 20  # Conservative starting point; record physical timings before tuning.
+FPS = 30  # Target; physical display/HTTP timings decide the delivered rate.
 REPORT_SECONDS = 5
 WIFI_SSID = "Festival-Totem"
 WIFI_PASSWORD = ""  # Set a private WPA password of at least eight characters.
@@ -37,6 +37,10 @@ def launch():
     icons = EMBEDDED_ICON_LIBRARY
     runtime = TotemRuntime(64, 32, backend.displays, media, icons,
                            OverlayRenderer(64, 32, icons), EFFECTS)
+    # The default Dimmed background touches all 4096 panel pixels in Python
+    # on every icon frame (measured 0.58-1.7 seconds per render). Keep the GIF
+    # visible beneath overlays on this board until dimming can run natively.
+    runtime.set_overlay_background("None")
 
     if len(WIFI_PASSWORD) < 8:
         raise RuntimeError("Set WIFI_PASSWORD in code.py to at least eight characters")
@@ -46,6 +50,7 @@ def launch():
     print("Controller:", server.start())
 
     metrics = RuntimeMetrics(REPORT_SECONDS)
+    runtime.profile_render = metrics.add_timing
     last_frame = time.monotonic()
     next_frame = last_frame
     next_state = last_frame
