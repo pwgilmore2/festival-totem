@@ -35,6 +35,21 @@ removes four per-frame panel snapshots and captures only when a transition
 starts. Its physical effect remains unmeasured; log a fresh `Performance:`
 window and observe whether display lines occur only on content transitions.
 
+After that run the board repeatedly disconnected and its filesystem appeared
+nearly empty. To isolate the display/media path, create a small profile build:
+
+```bash
+python3 tools/stage_bitmap_profile.py --target-volume /Volumes/CIRCUITPY
+```
+
+This uses up to two previously baked GIFs in `matrixportal_build/`, mirroring
+each through the same 128×32 Bitmap backend. It excludes the full runtime and
+Wi-Fi. Copy `matrixportal_profile_build/media/`, its `manifest.json` and
+`matrixportal_backend.py` to CIRCUITPY, then copy its `code.py` last. The board
+prints GIF index, RAM, FPS and worst decode/copy/present times. Use `--count 1`
+if the second file will not fit. The profile is a diagnostic, not a replacement
+for the full app, and has not been physically tested yet.
+
 When CIRCUITPY is mounted, compare the deployment directly against its real free space:
 
 ```bash
