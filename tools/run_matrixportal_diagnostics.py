@@ -17,6 +17,7 @@ from pathlib import Path
 import re
 import select
 import shutil
+import subprocess
 import struct
 import sys
 import termios
@@ -125,7 +126,24 @@ def probe_serial(fd, seconds=15):
     raise TimeoutError("USB port opened, but the running board sent no console output in %s seconds" % seconds)
 
 
-def collect(log_path, preferred_port, timeout, initial_fd=None, idle_timeout=60):
+def port_owners(ports):
+    """Return brief macOS lsof output for the port that blocked preflight."""
+    executable = shutil.which('lsof') or '/usr/sbin/lsof'
+    owners = []
+    for port in ports:
+        try:
+            result = subprocess.run([executable, '-nP', port], capture_output=True,
+                                    text=True, timeout=3, check=False)
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        lines = result.stdout.strip().splitlines()
+        if len(lines) > 1:
+            owners.append(port + ':\n' + '\n'.join(lines[:5]))
+    return '\n'.join(owners)
+
+
+def collect(log_path, preferred_port, timeout, initial_fd=None, idle_timeout=60,
+            done_hold_seconds=0):
     deadline = time.monotonic() + timeout
     fd = initial_fd
     buffer = b""
@@ -203,6 +221,10 @@ def collect(log_path, preferred_port, timeout, initial_fd=None, idle_timeout=60)
                 os.close(fd)
                 fd = None
                 buffer = b""
+    if captured_done and done_hold_seconds:
+        print("DONE is on the panels. Keeping it visible for %d seconds." % done_hold_seconds,
+              flush=True)
+        time.sleep(done_hold_seconds)
     if fd is not None:
         os.close(fd)
     return captured_done, stage_count
@@ -224,9 +246,12 @@ def main():
     open_errors = []
     fd = open_serial(args.port, open_errors)
     if fd is None:
+        owners = port_owners(port_candidates(args.port))
         parser.error("USB serial preflight failed before changing CIRCUITPY: "
                      + "; ".join(open_errors)
-                     + ". Close screen or another serial monitor, then retry.")
+                     + ("\nPort owner:\n" + owners if owners else "")
+                     + "\nClose the program holding the port. If it is screen, run "
+                       "screen -ls and then screen -S <session-id> -X quit; retry.")
     try:
         print("Checking for existing board console output before deploying...", flush=True)
         probe_serial(fd)
@@ -239,7 +264,8 @@ def main():
         os.close(fd)
         raise
     print("The full serial log is being saved to", log_path, flush=True)
-    complete, count = collect(log_path, args.port, args.timeout, fd, args.idle_timeout)
+    complete, count = collect(log_path, args.port, args.timeout, fd,
+                              args.idle_timeout, done_hold_seconds=15)
     print("Saved", count, "stages to", log_path, flush=True)
     if not complete:
         print("The board did not send DIAG_DONE. Upload this partial log for diagnosis.", file=sys.stderr)

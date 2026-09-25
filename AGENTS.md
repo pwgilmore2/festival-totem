@@ -172,3 +172,13 @@ runner now reports the actual open error and requires a successful USB serial
 read from the running board before writing to CIRCUITPY. Unsupported DTR
 ioctls do not discard an otherwise valid open descriptor; the read probe
 decides connectivity. Real Mac port behavior still needs verification.
+
+Patrick's immediate follow-up preflight showed the actual error:
+`/dev/cu.usbmodem4ABCF81B53CC1: OSError: [Errno 16] Resource busy`.
+No board files were changed. A `screen` session or other serial-monitor process
+holds the port; the Mac runner now includes `lsof` owner detail when available.
+On board completion, `BoardDiagnostics` shows green `DONE` through
+`TotemRuntime.show_text` on a black background; it emits `DIAG_DONE` only after
+at least two displayed frames and three seconds. The host holds the open USB
+console for 15 additional seconds so DONE remains visible, then removes the
+diagnostic flag. This is desktop-tested only and needs a real board run.

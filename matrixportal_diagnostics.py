@@ -112,11 +112,13 @@ class BoardDiagnostics:
         self.prepare_started = 0.0
         self.prepare_frames = 0
         self.force_advance = False
+        self.finishing_at = None
+        self.finishing_frames = 0
         print("DIAG_READY stages", len(self.stages), "gifs", len(media),
               "starts_in_seconds", startup_seconds)
 
     def profile(self, label, seconds):
-        if self.index < 0 or self.done or self.pending:
+        if self.index < 0 or self.done or self.pending or self.finishing_at is not None:
             return
         now = time.monotonic()
         active = self.early if now - self.current_started < self.warmup_seconds else self.steady
@@ -124,6 +126,9 @@ class BoardDiagnostics:
 
     def frame(self, now):
         if self.index < 0 or self.done:
+            return
+        if self.finishing_at is not None:
+            self.finishing_frames += 1
             return
         if self.pending:
             self.prepare_frames += 1
@@ -133,6 +138,11 @@ class BoardDiagnostics:
 
     def tick(self, now):
         if self.done or now < self.ready_at:
+            return
+        if self.finishing_at is not None:
+            if ((now - self.finishing_at >= 3 and self.finishing_frames >= 2)
+                    or now - self.finishing_at >= 15):
+                self._finish()
             return
         if self.pending:
             if now - self.prepare_started < .9 or self.prepare_frames < 2:
@@ -181,11 +191,13 @@ class BoardDiagnostics:
             print("DIAG_STAGE", json.dumps(result))
         self.index += 1
         if self.index >= len(self.stages):
-            self.done = True
             self._restore()
-            print("DIAG_DONE", json.dumps({"stages": len(self.stages),
-                                          "slow_count": len(self.failures),
-                                          "slow": self.failures}))
+            self.runtime.set_overlay_background("Black")
+            self.runtime.show_text({"message": "DONE", "font": "Pixel", "scale": 1,
+                                    "color_mode": "Solid", "color": "#00ff00"})
+            self.finishing_at = time.monotonic()
+            self.finishing_frames = 0
+            print("DIAG_FINISHING waiting_for_DONE_to_appear")
             return
         kind, label, value = self.stages[self.index]
         self.early = PhaseStats()
@@ -205,11 +217,22 @@ class BoardDiagnostics:
             self.force_advance = True
 
     def skip_current(self, exc):
+        if self.index >= len(self.stages):
+            print("DIAG_ERROR", "Done screen", type(exc).__name__, str(exc))
+            self.failures.append(("Done screen", "error", str(exc)))
+            self._finish()
+            return
         label = self.stages[self.index][1]
         print("DIAG_ERROR", label, type(exc).__name__, str(exc))
         self.failures.append((label, "error", str(exc)))
         self.force_advance = True
         self.pending = None
+
+    def _finish(self):
+        self.done = True
+        print("DIAG_DONE", json.dumps({"stages": len(self.stages),
+                                      "slow_count": len(self.failures),
+                                      "slow": self.failures}))
 
     def _reset(self):
         rt = self.runtime

@@ -161,6 +161,7 @@ class DiagnosticTests(unittest.TestCase):
                                           for s in self.panels}
                 self.mirrored = True
                 self.effect = 'Image'
+                self.last_text = None
 
             def _stop_show(self, side):
                 pass
@@ -177,10 +178,13 @@ class DiagnosticTests(unittest.TestCase):
             def select_image(self, index):
                 self.panels['front']['image_index'] = index
 
+            def show_text(self, value=None):
+                self.last_text = value
+
             def __getattr__(self, name):
                 if name in ('set_transition', 'hide_text', 'set_info_scene',
                             'set_overlay_background', 'set_reactive_enabled',
-                            'intense_transition_next', 'show_text', 'toggle_icon',
+                            'intense_transition_next', 'toggle_icon',
                             'set_reactive_preset', 'start_show', 'set_target',
                             'set_icon_motion', 'set_overlay_audio_reactivity',
                             'apply_scene'):
@@ -200,6 +204,11 @@ class DiagnosticTests(unittest.TestCase):
                 tour.frame(now + .01)
                 now = tour.current_started + .04
             tour.tick(now)
+            self.assertIsNotNone(tour.finishing_at)
+            self.assertFalse(tour.done)
+            tour.frame(tour.finishing_at + .1)
+            tour.frame(tour.finishing_at + .2)
+            tour.tick(tour.finishing_at + 3.1)
         names = [entry[1] for entry in tour.stages]
         self.assertIn('Chaos/trance', names)
         self.assertIn('Content/Fade', names)
@@ -208,6 +217,7 @@ class DiagnosticTests(unittest.TestCase):
         self.assertIn('Independent/two panels', names)
         self.assertEqual(output.getvalue().count('DIAG_STAGE '), len(tour.stages))
         self.assertIn('DIAG_DONE ', output.getvalue())
+        self.assertEqual(rt.last_text['message'], 'DONE')
         self.assertTrue(rt.mirrored)
         self.assertEqual(rt.effect, 'Image')
         for line in output.getvalue().splitlines():

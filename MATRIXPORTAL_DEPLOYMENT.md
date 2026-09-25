@@ -25,10 +25,16 @@ in place after an incomplete run to permit a restart. The timeout defaults to
 30 minutes and can be changed with `--timeout`; 60 seconds with no serial output
 ends the run with a partial log instead of waiting the full timeout.
 
+When the last stage ends, the board displays **DONE** in green using the normal
+text overlay. It waits for two displayed frames and at least three seconds
+before emitting `DIAG_DONE`; the Mac collector keeps the serial connection
+and the DONE message visible for another 15 seconds before removing the flag.
+
 Before installing or restarting anything, the collector now requires an open
 USB serial port **and actual bytes from the already-running board**. If the
 port is busy, missing or silent, it stops immediately with a specific error;
-close `screen` or another serial monitor and rerun. A Mac USB driver can reject
+when available it names the process holding the port through `lsof`. Close
+`screen` or another serial monitor and rerun. A Mac USB driver can reject
 the DTR ioctl even if opening its callout port already asserts DTR; the runner
 tries the port and lets the board-output check make the final decision.
 
@@ -149,39 +155,7 @@ project-root template deliberately has an empty password.
 With that setting the user measured 28.09 FPS without the phone and 23.87 FPS
 with the phone, but only 3.44 FPS with an icon. Each icon draw cost ~102.5 ms
 per panel, while native display present remained ~7.6 ms. The next candidate
-caches icons as RGB565 Bitmaps and uses native transparent `bitmaptools.blit`
-for steady icons. Copy `matrixportal_backend.py` and `overlay_engine.py` from
-the project root to the board; leave the existing private-password `code.py`
-and GIF media in place. A fade or reactive-brightness frame still follows the
-slower Python path; physical FPS for the native path is still unverified.
-
-Physical retest confirmed icons display correctly and run at ~23.5 FPS with
-the phone connected; native steady icon draw takes ~2.25 ms per panel. Next
-Clock/Weather and Chaos produced ~0.85 FPS in one window, with ~1.06 seconds
-per render; stage-specific attribution is still missing. Text crashed because
-CircuitPython `next()` rejects a second default argument. The next candidate
-fixes text, defaults the hardware runtime to Mirrored (one face rendered, then
-copied), and uses native Bitmap fill and mirror blit. It adds render/info,
-render/chaos and render/mirror timings. Copy the updated `overlay_engine.py`,
-`matrixportal_backend.py`, `totem_runtime.py`, and finally `code.py` while
-retaining the existing private password. Test Clock and Chaos separately and
-report both sets of timings; desktop tests pass, physical speed is unknown.
-
-On the mirrored board text appeared but ran at 1.89 FPS with ~387 ms render;
-the mirror itself was only ~2.3 ms. After text cleared, icons returned to
-~23.4 FPS. One Chaos action cost ~3.67 seconds entirely inside render/chaos.
-The next candidate replaces hardware text's dimmed backing with a native
-solid-black rectangle, adds render/text timing, and uses a bounded native
-shape version of Chaos rather than desktop per-pixel color/spatial passes.
-The hardware Chaos shapes simplify the original visuals deliberately; compare
-their appearance and performance before treating this as final. Copy the five
-changed modules (`matrixportal_backend.py`, `text_engine.py`,
-`overlay_engine.py`, `chaos_engine.py`, `totem_runtime.py`) without replacing
-the private-password `code.py`. Keep Mirrored and None · GIF selected.
-
-Text improved only to ~7.24 FPS with `render/text` ~88 ms; user rejected the
-simplified Chaos visuals as a final replacement. A subsequent Pixel-font path
-caches per-glyph RGB565 Bitmaps and uses transparent native blits; rainbow
+caches icons as RGB565 Bitmaps and uses native transparent `bitmaptools.blit`…551 tokens truncated…s transparent native blits; rainbow
 color advances four times/second for glyph reuse. To investigate preserving
 the original full-frame Chaos effects, `matrixportal_bitmap_buffer_probe.py`
 verifies `memoryview(displayio.Bitmap)` indexing at startup and times 2048
