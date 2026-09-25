@@ -73,6 +73,9 @@ class TextRenderer:
             display.clear()
             return
         brightness = max(0.05, min(0.85, float(settings.get("background_brightness", 0.65))))
+        if mode != "Tinted GIF" and hasattr(display, "dim"):
+            display.dim(brightness)
+            return
         tint = parse_color(settings.get("color", "#ffffff"))
         for y in range(display.height):
             for x in range(display.width):

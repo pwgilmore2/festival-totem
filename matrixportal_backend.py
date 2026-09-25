@@ -127,6 +127,24 @@ class MatrixPortalPanel:
     def clear(self):
         self.fill((0, 0, 0))
 
+    def dim(self, brightness):
+        """Dim RGB565 in place without converting each pixel to an RGB tuple."""
+        scale = max(0, min(256, int(float(brightness) * 256)))
+        bitmap = self.framebuffer.bitmap
+        swapped = self.framebuffer.swapped_storage
+        for y in range(self.height):
+            for x in range(self.width):
+                px = self.width - 1 - x if self.rotation == 180 else x
+                py = self.height - 1 - y if self.rotation == 180 else y
+                bx = self.x_offset + px
+                value = bitmap[bx, py]
+                if swapped:
+                    value = _swap16(value)
+                value = (((((value >> 11) & 31) * scale >> 8) << 11)
+                         | (((((value >> 5) & 63) * scale >> 8) << 5))
+                         | ((value & 31) * scale >> 8))
+                bitmap[bx, py] = _swap16(value) if swapped else value
+
     def fill(self, color):
         packed = rgb888_to_rgb565(color)
         for y in range(self.height):

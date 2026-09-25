@@ -79,6 +79,14 @@ now falls back to `time.localtime(seconds)` after applying the phone-supplied
 festival offset. Copy only the project-root `info_scenes.py` to CIRCUITPY,
 reset, and retry with serial attached. This change awaits a physical retest.
 
+An icon then appeared successfully, but the default Dimmed overlay reduced
+render speed to ~1.7 seconds per frame (~0.52 FPS). A packed RGB565 board
+`dim()` in `matrixportal_backend.py`, used by `text_engine.py`, avoids tuple
+conversion on every display pixel. Copy both project-root files for the next
+test; the physical performance gain has not yet been measured. The `None`
+background choice in Manage → Setup → Overlay Behavior skips dimming and can
+isolate the cost while testing from the phone.
+
 When CIRCUITPY is mounted, compare the deployment directly against its real free space:
 
 ```bash

@@ -124,6 +124,10 @@ class MatrixPortalBackendTests(unittest.TestCase):
         self.assertEqual(backend.get("back").get_pixel(0, 0), (255, 0, 0))
         backend.get("front").set_pixel(1, 1, (0, 0, 255))
         self.assertEqual(backend.bitmap[1, 1], 0x1F00)
+        backend.get("front").dim(0.5)
+        self.assertEqual(backend.get("front").get_pixel565(0, 0), 0x7800)
+        self.assertEqual(backend.get("front").get_pixel565(1, 1), 0x000F)
+        self.assertEqual(backend.get("back").get_pixel565(0, 0), 0xF800)
 
 
 if __name__ == "__main__":
