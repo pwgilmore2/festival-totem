@@ -164,6 +164,17 @@ times component zoom/split/hue/wave passes across Chaos modes, and benchmarks a
 original effects. Collect the ULAB line and a complete active-Chaos report
 before deciding which pass to vectorize or move into native code.
 
+The stage profile then measured ~2,734 ms hue and ~802 ms RGB split inside
+~3,596 ms Chaos rendering, while native zoom cost ~4.4 ms. The next build
+replaces only these packed color operations with `ulab.numpy` arrays on the
+verified Bitmap pixel view. It preserves the original modes, color math and
+native zoom, with a one-time logged fallback to the previous color renderer if
+the board's ulab lacks an operation. This path still needs a physical test:
+copy `matrixportal_ulab_colors.py` to CIRCUITPY **before** replacing
+`matrixportal_backend.py`. Keep the existing `code.py`, private Wi-Fi password,
+media, library and `bit_depth=1`. Select Chaos and capture the full next
+`Performance:` report, together with any `ULAB COLORS unavailable` line.
+
 When CIRCUITPY is mounted, compare the deployment directly against its real free space:
 
 ```bash

@@ -33,6 +33,7 @@ class _BitmapLinearBuffer:
         self.spatial_bitmap = None
         self.spatial_available = True
         self.color_available = True
+        self.vector_color_available = True
 
     def __getitem__(self, index):
         index = int(index)
@@ -197,6 +198,18 @@ class MatrixPortalPanel:
         raw = self.framebuffer.pixels_view
         if raw is None or self.rotation != 0 or not self.framebuffer.color_available:
             return False
+        if self.framebuffer.vector_color_available:
+            try:
+                from ulab import numpy as np
+                from matrixportal_ulab_colors import apply
+                apply(raw, self.stride, self.x_offset, self.width, self.height,
+                      self.framebuffer.swapped_storage, degrees, split_amount,
+                      brighten_amount, np)
+                return True
+            except Exception as exc:
+                print("ULAB COLORS unavailable; using original colors:",
+                      type(exc).__name__, str(exc))
+                self.framebuffer.vector_color_available = False
         hue = abs(degrees) >= .5
         split = split_amount > .02
         mult = 1.0 + max(0.0, float(brighten_amount))

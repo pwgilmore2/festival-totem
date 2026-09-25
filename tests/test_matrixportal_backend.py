@@ -51,6 +51,47 @@ class FakeFrameBufferDisplay:
 
 
 class MatrixPortalBackendTests(unittest.TestCase):
+    def test_vector_colors_preserve_chaos_pipeline_and_other_face(self):
+        try:
+            import numpy
+        except ImportError:
+            self.skipTest("desktop numpy is unavailable")
+        from matrixportal_ulab_colors import apply
+
+        class BufferedBitmap(array):
+            width = 128
+            height = 32
+
+            def __new__(cls):
+                return array.__new__(cls, "H", [0] * (128 * 32))
+
+        for degrees, split, bright in ((0, .5, 0), (75, 0, 0),
+                                       (170, .4, .1), (239, 0, 0),
+                                       (359, .8, .4)):
+            bitmap = BufferedBitmap()
+            raw = _BitmapLinearBuffer(bitmap, 128, swapped_storage=True)
+            panel = MatrixPortalPanel(raw, 128, 0, 64, 32)
+            expected = VirtualDisplay(64, 32)
+            for y in range(32):
+                for x in range(64):
+                    panel.set_pixel565(x, y, (x * 1151 + y * 251) & 65535)
+                    expected.set_pixel(x, y, panel.get_pixel(x, y))
+                raw.pixels_view[y * 128 + 64:y * 128 + 128] = array("H", [y + 111] * 64)
+            untouched = [bitmap[y * 128 + 64:y * 128 + 128] for y in range(32)]
+            VisualLayerEngine(64, 32)._color_pipeline(expected, degrees, split, bright)
+            apply(raw.pixels_view, 128, 0, 64, 32, True,
+                  degrees, split, bright, numpy)
+            for y in range(32):
+                self.assertEqual(bitmap[y * 128 + 64:y * 128 + 128], untouched[y])
+                for x in range(64):
+                    actual = panel.get_pixel565(x, y)
+                    wanted = rgb888_to_rgb565(expected.get_pixel(x, y))
+                    # CircuitPython ulab uses float32; interpolation at a
+                    # quantization boundary may differ by one channel step.
+                    for mask, shift in ((31, 11), (63, 5), (31, 0)):
+                        self.assertLessEqual(abs(((actual >> shift) & mask)
+                                                 - ((wanted >> shift) & mask)), 1)
+
     def test_packed_color_pipeline_matches_original_rgb565_result(self):
         class BufferedBitmap(array):
             width = 8
