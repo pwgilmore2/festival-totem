@@ -158,6 +158,44 @@ class MatrixPortalPanel:
             for x in range(self.width):
                 self.framebuffer[self._index(x, y)] = packed
 
+    def fill_rect(self, x1, y1, x2, y2, color):
+        """Native clipped rectangle for lightweight backplates and effects."""
+        import bitmaptools
+        x1, y1 = max(0, int(x1)), max(0, int(y1))
+        x2, y2 = min(self.width, int(x2)), min(self.height, int(y2))
+        if x2 <= x1 or y2 <= y1:
+            return
+        if self.rotation == 180:
+            x1, x2 = self.width - x2, self.width - x1
+            y1, y2 = self.height - y2, self.height - y1
+        value = rgb888_to_rgb565(color)
+        if self.framebuffer.swapped_storage:
+            value = _swap16(value)
+        bitmaptools.fill_region(self.framebuffer.bitmap, self.x_offset + x1, y1,
+                                self.x_offset + x2, y2, value)
+
+    def fast_chaos(self, mode, amount, frame, signals):
+        """Bounded native shape effects over the GIF for responsive Chaos."""
+        if mode == "bassjostle" and not (signals.get("beat") or signals.get("bass", 0) > .12):
+            return
+        palette = ((255, 43, 151), (54, 224, 246), (249, 221, 67),
+                   (131, 82, 255), (49, 244, 128))
+        count = max(2, min(12, int(3 + amount * 9)))
+        vertical = mode in ("pixelmelt", "meltdown", "liquid", "rainbow")
+        squares = mode in ("jumble", "spark", "prism", "tunnel", "xyintent")
+        if mode == "boom":
+            count = 5
+        for i in range(count):
+            color = palette[(i + frame // 3) % len(palette)]
+            x = (i * 23 + frame * (2 + i % 3)) % self.width
+            y = (i * 11 + frame * (1 + i % 2)) % self.height
+            if vertical:
+                self.fill_rect(x, y, x + 2, y + 4 + int(amount * 8), color)
+            elif squares:
+                self.fill_rect(x, y, x + 2 + i % 3, y + 2 + i % 3, color)
+            else:
+                self.fill_rect(x, y, x + 4 + int(amount * 13), y + 1 + i % 2, color)
+
     def set_pixel565(self, x, y, value):
         if 0 <= x < self.width and 0 <= y < self.height:
             self.framebuffer[self._index(x, y)] = int(value) & 0xFFFF

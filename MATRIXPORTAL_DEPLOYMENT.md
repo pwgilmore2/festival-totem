@@ -117,6 +117,18 @@ render/chaos and render/mirror timings. Copy the updated `overlay_engine.py`,
 retaining the existing private password. Test Clock and Chaos separately and
 report both sets of timings; desktop tests pass, physical speed is unknown.
 
+On the mirrored board text appeared but ran at 1.89 FPS with ~387 ms render;
+the mirror itself was only ~2.3 ms. After text cleared, icons returned to
+~23.4 FPS. One Chaos action cost ~3.67 seconds entirely inside render/chaos.
+The next candidate replaces hardware text's dimmed backing with a native
+solid-black rectangle, adds render/text timing, and uses a bounded native
+shape version of Chaos rather than desktop per-pixel color/spatial passes.
+The hardware Chaos shapes simplify the original visuals deliberately; compare
+their appearance and performance before treating this as final. Copy the five
+changed modules (`matrixportal_backend.py`, `text_engine.py`,
+`overlay_engine.py`, `chaos_engine.py`, `totem_runtime.py`) without replacing
+the private-password `code.py`. Keep Mirrored and None · GIF selected.
+
 When CIRCUITPY is mounted, compare the deployment directly against its real free space:
 
 ```bash

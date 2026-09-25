@@ -169,6 +169,10 @@ class MatrixPortalBackendTests(unittest.TestCase):
             self.assertEqual(back.get_pixel565(63, 0), 0xF800)
             self.assertEqual(back.get_pixel565(0, 1), 0x001F)
             self.assertEqual(len(calls), 3)
+            front.fast_chaos("chaos", 1.0, 5, {})
+            self.assertEqual(back.get_pixel565(0, 0), 0x001F)
+            self.assertTrue(any(front.get_pixel565(x, y) not in (0x001F, 0xF800)
+                                for y in range(32) for x in range(64)))
 
 
 if __name__ == "__main__":

@@ -174,6 +174,10 @@ class TextRenderer:
         right = min(display.width, x + width + 2)
         top = max(0, y - 2)
         bottom = min(display.height, y + text_h + 2)
+        fill_rect = getattr(display, "fill_rect", None)
+        if fill_rect is not None:
+            fill_rect(left, top, right, bottom, (0, 0, 0))
+            return
         for py in range(top, bottom):
             for px in range(left, right):
                 r, g, b = display.get_pixel(px, py)

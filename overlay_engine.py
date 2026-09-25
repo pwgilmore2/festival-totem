@@ -226,10 +226,14 @@ class OverlayRenderer:
                 right = min(self.width, max(x + width for _, x, _, width in positions) + 2)
                 top = max(0, min(y for _, _, y, _ in positions) - 2)
                 bottom_y = min(self.height, max(y + 7 * scale for _, _, y, _ in positions) + 2)
-                for py in range(top, bottom_y):
-                    for px in range(left, right):
-                        r, g, b = display.get_pixel(px, py)
-                        display.set_pixel(px, py, (int(r * .28), int(g * .28), int(b * .28)))
+                fill_rect = getattr(display, "fill_rect", None)
+                if fill_rect is not None:
+                    fill_rect(left, top, right, bottom_y, (0, 0, 0))
+                else:
+                    for py in range(top, bottom_y):
+                        for px in range(left, right):
+                            r, g, b = display.get_pixel(px, py)
+                            display.set_pixel(px, py, (int(r * .28), int(g * .28), int(b * .28)))
 
             for line, x, y, _ in positions:
                 draw_line(line, x, y, draw_backplate=False)

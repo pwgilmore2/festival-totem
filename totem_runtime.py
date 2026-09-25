@@ -1050,6 +1050,7 @@ class TotemRuntime:
                 text["audio_reactivity"] = self.overlay_audio_reactivity
                 progress = min(1.0, (time.monotonic() - text_transition["started"]) / OVERLAY_TRANSITION_DURATION) if text_transition else 1.0
                 previous = text_transition["previous"] if text_transition else None
+                profile_started = time.monotonic() if self.profile_render else 0
                 for settings, outgoing in ((previous, True), (text if text_enabled else None, False)):
                     if settings is None:
                         continue
@@ -1060,6 +1061,8 @@ class TotemRuntime:
                         render_settings.update(transition_progress=progress, transition_outgoing=outgoing)
                     self.overlay_renderer.draw_text(display, render_settings, controller.time,
                                                     signals, seed, bottom=False)
+                if self.profile_render and (text_enabled or previous):
+                    self.profile_render("render/text", time.monotonic() - profile_started)
             icon_settings = {"audio_reactivity": self.overlay_audio_reactivity}
             if not mode:
                 profile_started = time.monotonic() if self.profile_render else 0

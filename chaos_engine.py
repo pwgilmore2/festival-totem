@@ -155,6 +155,12 @@ class ChaosEngine:
             return
         signals = signals or {}
         mode = self.mode
+        # The physical Bitmap backend draws a bounded number of native
+        # shapes. Desktop retains the original full-frame pixel effects.
+        fast_chaos = getattr(display, "fast_chaos", None)
+        if fast_chaos is not None:
+            fast_chaos(mode, amount, frame_number, signals)
+            return
         layer = self.layer_engine
 
         if mode in ("glitch", "chaos"):
