@@ -76,7 +76,8 @@ The Mac prepares images, GIFs, metadata, tags and the phone page. The S3 stores
 the prepared 64×32 GIFs, streams one decode at a time across two independent
 players, renders both logical displays and serves the local phone controls.
 `MATRIXPORTAL_DEPLOYMENT.md` describes the staging command and the device
-smoke test. A final `code.py` that wires the modules together is still needed.
+smoke test. An integrated `code.py` candidate now wires these modules together,
+but has not yet been run on the physical board.
 
 The 20,000 mAh battery label normally refers to internal cell capacity; it is
 not 20 Ah at 5 V. If its stored energy is about 74 Wh, and usable energy after

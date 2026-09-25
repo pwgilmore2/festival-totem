@@ -1,4 +1,7 @@
-import colorsys
+try:
+    import colorsys
+except ImportError:  # CircuitPython does not ship CPython's colorsys module.
+    from matrixportal_colorsys import colorsys
 import math
 import random
 

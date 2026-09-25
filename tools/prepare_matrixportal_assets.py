@@ -30,6 +30,17 @@ from tools.build_large_icons import DESTINATION as LARGE_ICON_MODULE, build as b
 from tools.build_controller_asset import build as build_controller_asset
 
 
+DEVICE_MODULES = (
+    "code.py", "matrixportal_backend.py", "matrixportal_effects.py",
+    "matrixportal_colorsys.py", "matrixportal_library.py", "matrixportal_media.py",
+    "matrixportal_server.py", "control_bus.py", "runtime_metrics.py",
+    "runtime_io.py", "display.py", "totem_runtime.py", "controller.py",
+    "chaos_engine.py", "info_scenes.py", "particles.py", "text_engine.py",
+    "text.py", "transition_engine.py", "visual_engine.py", "overlay_engine.py",
+    "embedded_icon_library.py", "overlay_exact_assets.py",
+)
+
+
 def safe_name(index, name):
     stem = Path(name).stem
     clean = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in stem)
@@ -175,6 +186,8 @@ def build(args):
     media_dir.mkdir(parents=True, exist_ok=True)
     thumbs_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy2(LARGE_ICON_MODULE, output / LARGE_ICON_MODULE.name)
+    for module in DEVICE_MODULES:
+        shutil.copy2(PROJECT_ROOT / module, output / module)
     large_icon_bytes = (output / LARGE_ICON_MODULE.name).stat().st_size
 
     library = ImageLibrary(

@@ -19,7 +19,7 @@ from runtime_metrics import RuntimeMetrics
 
 WIDTH = 64
 HEIGHT = 32
-BIT_DEPTH = 4
+BIT_DEPTH = 1
 TARGET_FPS = 30
 REPORT_SECONDS = 5.0
 
@@ -58,7 +58,7 @@ def main():
         bit_depth=BIT_DEPTH,
         front_rotation=FRONT_ROTATION,
         back_rotation=BACK_ROTATION,
-        doublebuffer=True,
+        doublebuffer=False,
     )
     displays = backend.displays
     print("Free RAM after display:", memory_free())

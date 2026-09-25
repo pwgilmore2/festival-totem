@@ -2,6 +2,10 @@
 
 Last reviewed: 2026-09-25. Read this file first when resuming work; inspect current code and the detailed deployment and hardware documents before changing behavior. Update this file in the same commit/push as meaningful project changes. Mark hardware assumptions and untested software explicitly; do not turn plans into claims of completion.
 
+## Integrated device candidate (September 25, software only)
+
+`code.py` now wires the verified Bitmap backend (bit depth 1), `TotemRuntime`, baked GIF adapter, embedded icons, portable effects, HTTP command/state server, and cooperative performance reporting. `tools/prepare_matrixportal_assets.py` includes the complete local Python runtime in `matrixportal_build/`. The board has **not** run this integrated build. The compiled phone page is served over plain HTTP; browser microphone remains unavailable until a secure context is supplied. The build currently has zero user GIFs and `code.py` rejects an empty manifest. `adafruit_httpserver` must be installed separately in `CIRCUITPY/lib/` and a private Wi-Fi AP password set in `code.py`. Desktop MatrixPortal mapping/manifest unittest discovery passes; no device FPS or RAM metrics for the full app exist yet.
+
 ## Physical board bring-up: confirmed September 25
 
 - CircuitPython **10.3.1** runs on the user's Adafruit MatrixPortal S3. Two opposite-facing logical **64×32** panels are chained as one 128×32 HUB75 display and powered separately by the 5 V distribution; the board was powered/programmed from Mac USB during tests.

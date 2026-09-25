@@ -14,6 +14,21 @@ Build with:
 python tools/prepare_matrixportal_assets.py --clean
 ```
 
+The build now copies `code.py` and its CircuitPython-safe local modules into
+`matrixportal_build/` alongside the assets. Copy its **contents** to CIRCUITPY,
+and install the matching `adafruit_httpserver` library from the CircuitPython
+10.x library bundle in `CIRCUITPY/lib/`. Set a private WPA password (at least
+eight characters) in `code.py` before building. This first integrated app is
+software-only until tested on the S3; it requires at least one baked GIF in
+the manifest. Start with a small sample of the user's GIFs in `assets/images/`
+and review the storage report against the mounted board's free space. The AP
+prints its controller URL to serial. The browser microphone still requires a
+secure origin; HTTP can exercise the rest of the compiled UI and commands.
+
+The integrated loop reports FPS, RAM, loop maximum and HTTP, command, GIF
+decode/check, update, render, present, and state timings every five seconds.
+Use those board numbers to decide whether the initial 20 FPS target is viable.
+
 When CIRCUITPY is mounted, compare the deployment directly against its real free space:
 
 ```bash
@@ -176,17 +191,21 @@ A direct-access-point mode can also be added later if we want the S3 to advertis
 
 ## What remains before final deployment
 
-The final `code.py` still needs to tie together:
+The first `code.py` candidate now ties together:
 
 - `TotemRuntime`
 - MatrixPortal display backend
 - MatrixPortal media adapter
 - nonblocking HTTP server
 - cooperative timer scheduler
-- audio source
+- phone-supplied normalized audio signals (blocked on plain HTTP by browser
+  microphone security until a secure origin is arranged)
 - runtime metrics/state publication
 
-Once that exists, the build tool can be extended from "prepared media/controller bundle" to a complete one-command CIRCUITPY staging bundle containing both runtime code and assets.
+The build tool stages the local runtime and media, but the external HTTP library
+must be installed and the complete build verified on physical hardware. The
+physical microphone, secure browser origin and full performance benchmarks
+remain outstanding.
 
 ### Overlay polish before board testing
 
