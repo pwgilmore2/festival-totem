@@ -36,6 +36,8 @@ class _BitmapLinearBuffer:
         self.vector_color_available = True
         self.native_filter_available = True
         self.native_color_bitmaps = None
+        self.wave_bitmaps = None
+        self.wave_available = True
         self.color_path = None
         self.next_color_path_report = 0.0
 
@@ -185,6 +187,55 @@ class MatrixPortalPanel:
             v = (state * 111) >> 32
             raw[y * stride + origin + x] = colors[v]
         return True
+
+    def native_row_wave(self, amount, frame, tint=None,
+                        speed=0.035, frequency=0.34):
+        """Shift each row from a single snapshot using native Bitmap blits."""
+        if (self.rotation != 0 or not self.framebuffer.swapped_storage
+                or not self.framebuffer.wave_available):
+            return False
+        try:
+            import math
+            import bitmaptools
+            import displayio
+            bitmaps = self.framebuffer.wave_bitmaps
+            if bitmaps is None:
+                bitmaps = (displayio.Bitmap(self.width, self.height, 65536),
+                           displayio.Bitmap(self.width, self.height, 65536))
+                self.framebuffer.wave_bitmaps = bitmaps
+            source, dest = bitmaps
+            bitmaptools.blit(source, self.framebuffer.bitmap, 0, 0,
+                             x1=self.x_offset, y1=0,
+                             x2=self.x_offset + self.width, y2=self.height)
+            amp = max(1, int(1 + amount * 5))
+            for y in range(self.height):
+                shift = int(math.sin(y * frequency + frame * speed) * amp)
+                if shift > 0:
+                    bitmaptools.blit(dest, source, shift, y,
+                                     x1=0, y1=y, x2=self.width-shift, y2=y+1)
+                    bitmaptools.fill_region(dest, 0, y, shift, y+1, source[0, y])
+                elif shift < 0:
+                    edge = -shift
+                    bitmaptools.blit(dest, source, 0, y,
+                                     x1=edge, y1=y, x2=self.width, y2=y+1)
+                    bitmaptools.fill_region(dest, self.width-edge, y,
+                                            self.width, y+1, source[self.width-1, y])
+                else:
+                    bitmaptools.blit(dest, source, 0, y,
+                                     x1=0, y1=y, x2=self.width, y2=y+1)
+            if tint == "teal":
+                import bitmapfilter
+                bitmapfilter.mix(dest, bitmapfilter.ChannelMixer(
+                    0.44, 0, 0, 0, 1.04, 0.15, 0, 0, 1.10))
+                # Original blue depends on already-clamped green.
+                bitmapfilter.mix(dest, bitmapfilter.ChannelMixer(
+                    1, 0, 0, 0, 1, 0, 0, 0.05, 1))
+            bitmaptools.blit(self.framebuffer.bitmap, dest, self.x_offset, 0)
+            return True
+        except Exception as exc:
+            print("NATIVE ROW WAVE unavailable:", type(exc).__name__, str(exc))
+            self.framebuffer.wave_available = False
+            return False
 
     def dim(self, brightness):
         """Dim RGB565 in place without converting each pixel to an RGB tuple."""

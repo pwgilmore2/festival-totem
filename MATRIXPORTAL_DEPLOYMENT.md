@@ -218,6 +218,19 @@ that sparkles still look similar and report sustained active-Chaos FPS,
 `chaos/sparkles`, `render/chaos`, and frame interval maxima. Physical speed
 of this sparkle path has not been measured.
 
+Physical retest: Chaos now runs ~13.07 FPS with sparkles ~15.9 ms; Prism
+~16.17 FPS while active, Glitch ~19 ms for active Chaos rendering. Trance
+still runs ~0.835 FPS because `chaos/row_wave` takes ~898 ms. A new board
+`native_row_wave` snapshots the front panel once and shifts its rows via
+native Bitmap blits with clipped edge fills; for Trance the original teal
+formula is approximated using two sequential native channel mixers, with
+RGB565 rounding differences possible. Liquid uses the same row displacement
+without tint. Desktop geometry/back-panel isolation tests pass, but board
+appearance and FPS still need testing. Copy `matrixportal_backend.py` and
+`chaos_engine.py` from the project root, keeping `code.py` and GIFs intact.
+Report active Trance and Liquid `chaos/row_wave`, FPS and any
+`NATIVE ROW WAVE unavailable` line, and check that teal still looks right.
+
 When CIRCUITPY is mounted, compare the deployment directly against its real free space:
 
 ```bash

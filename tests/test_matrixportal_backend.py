@@ -52,6 +52,55 @@ class FakeFrameBufferDisplay:
 
 
 class MatrixPortalBackendTests(unittest.TestCase):
+    def test_native_row_wave_shifts_each_row_with_clamped_edges(self):
+        import math
+        class Bitmap:
+            def __init__(self, width, height, colors):
+                self.width, self.height = width, height
+                self.data = [0] * (width * height)
+            def __getitem__(self, xy):
+                x, y = xy
+                return self.data[y * self.width + x]
+            def __setitem__(self, xy, value):
+                x, y = xy
+                self.data[y * self.width + x] = value
+
+        bitmap = Bitmap(128, 32, 65536)
+        for y in range(32):
+            for x in range(64):
+                bitmap[x, y] = y * 64 + x
+                bitmap[x + 64, y] = 41700 + x
+        buffer = _BitmapLinearBuffer(bitmap, 128, swapped_storage=True)
+        panel = MatrixPortalPanel(buffer, 128, 0, 64, 32)
+
+        def blit(dst, src, dx, dy, *, x1=0, y1=0, x2=None, y2=None):
+            for sy in range(y1, src.height if y2 is None else y2):
+                for sx in range(x1, src.width if x2 is None else x2):
+                    dst[dx + sx - x1, dy + sy - y1] = src[sx, sy]
+        def fill(dst, x1, y1, x2, y2, value):
+            for y in range(y1, y2):
+                for x in range(x1, x2):
+                    dst[x, y] = value
+        weights = []
+        tools = types.SimpleNamespace(blit=blit, fill_region=fill)
+        filters = types.SimpleNamespace(
+            mix=lambda bitmap, matrix: weights.append(matrix),
+            ChannelMixer=lambda *values: values)
+        with patch.dict(sys.modules, {"bitmaptools": tools,
+                                      "displayio": types.SimpleNamespace(Bitmap=Bitmap),
+                                      "bitmapfilter": filters}):
+            self.assertTrue(panel.native_row_wave(.6, 39, speed=.028, frequency=.31))
+            amp = max(1, int(1 + .6 * 5))
+            for y in range(32):
+                shift = int(math.sin(y * .31 + 39 * .028) * amp)
+                for x in range(64):
+                    sx = max(0, min(63, x - shift))
+                    self.assertEqual(bitmap[x, y], y * 64 + sx)
+                    self.assertEqual(bitmap[x + 64, y], 41700 + x)
+            self.assertTrue(panel.native_row_wave(.6, 39, "teal", .032, .34))
+            self.assertEqual(weights, [(0.44, 0, 0, 0, 1.04, 0.15, 0, 0, 1.10),
+                                       (1, 0, 0, 0, 1, 0, 0, 0.05, 1)])
+
     def test_native_sparkles_match_board_seeded_points_and_preserve_other_face(self):
         class BufferedBitmap(array):
             width = 128

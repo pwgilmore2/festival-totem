@@ -216,6 +216,9 @@ class ChaosEngine:
             layer.guest_burst(display, mode, amount, frame_number)
 
     def _row_wave(self, display, amount, frame, tint=None, speed=0.035, frequency=0.34):
+        native = getattr(display, "native_row_wave", None)
+        if native is not None and native(amount, frame, tint, speed, frequency):
+            return
         src = copy_pixels(display)
         amp = max(1, int(1 + amount * 5))
         for y in range(display.height):
