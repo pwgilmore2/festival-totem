@@ -25,6 +25,13 @@ and review the storage report against the mounted board's free space. The AP
 prints its controller URL to serial. The browser microphone still requires a
 secure origin; HTTP can exercise the rest of the compiled UI and commands.
 
+After preparing assets and renaming the previous `CIRCUITPY/code.py`, run
+`python3 tools/deploy_matrixportal.py` from the Mac. It checks free space,
+copies and verifies every file directly, then writes `code.py` last. Install
+the external 10.x `adafruit_httpserver` library separately. This avoids the
+temporary-file rename that failed with the earlier rsync transfer; it has not
+yet been validated on the board.
+
 The integrated loop reports FPS, RAM, loop maximum and HTTP, command, GIF
 decode/check, update, render, present, and state timings every five seconds.
 Use those board numbers to decide whether the initial 20 FPS target is viable.
