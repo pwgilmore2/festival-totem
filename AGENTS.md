@@ -127,8 +127,8 @@ distribution and named timings as `DIAG_STAGE` JSON; completion emits
 `DIAG_DONE`. The Mac collector deploys the diagnostic module and current
 project `code.py`, preserving the password from the board's existing code,
 and records the raw log under ignored `diagnostics/`. The flag
-`/Volumes/CIRCUITPY/totem_diagnostics.flag` enables the tour; remove it after
-the run to return to normal startup. These scripts have desktop validation
+`/Volumes/CIRCUITPY/totem_diagnostics.flag` enables the tour; the collector
+removes it after a complete run. These scripts have desktop validation
 only until Patrick runs the next board test. Do not claim all effects sustain
 30 FPS on hardware yet. Browser microphone, actual Wi-Fi load and visual color
 inspection are outside this automated test.

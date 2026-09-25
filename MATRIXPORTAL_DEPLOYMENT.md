@@ -16,11 +16,11 @@ creates the one-shot marker, and copies the current project `code.py` last to
 trigger CircuitPython auto-reload. It reconnects to the USB serial port, prints
 progress, and saves the **full raw serial log** to `diagnostics/totem-*.log` on
 your Mac. Upload that log for performance analysis. Do not eject or disconnect
-the board until `DIAG_DONE`. The marker makes diagnostics run again on a future
-reset; once you've saved the log, remove the marker with
-`rm /Volumes/CIRCUITPY/totem_diagnostics.flag` to restore normal boot behavior.
-If a stage crashes, the log still contains completed stages; upload the partial
-log. The timeout defaults to 15 minutes and can be changed with `--timeout`.
+the board until `DIAG_DONE`. On success, the collector removes the diagnostic
+trigger, so the next reset starts the normal app. If a stage crashes, the log
+still contains completed stages; upload the partial log. The trigger remains
+in place after an incomplete run to permit a restart. The timeout defaults to
+15 minutes and can be changed with `--timeout`.
 
 The tour runs each prepared GIF, each base effect, every Chaos mode, each
 content and intense scene transition, Clock/Set Times/Waveform, every text

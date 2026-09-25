@@ -154,6 +154,11 @@ def main():
     if not complete:
         print("The board did not send DIAG_DONE. Upload this partial log for diagnosis.", file=sys.stderr)
         return 1
+    marker = Path(args.target) / "totem_diagnostics.flag"
+    if marker.exists():
+        marker.unlink()
+        os.sync()
+    print("Diagnostic trigger removed; the next reset starts the normal app.", flush=True)
     return 0
 
 
