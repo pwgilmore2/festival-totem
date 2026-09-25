@@ -20,6 +20,29 @@ class FakeRGBMatrix:
         pass
 
 
+class FakeBitmap:
+    def __init__(self, width, height, value_count):
+        self.data = [0] * (width * height)
+        self.width = width
+
+    def __getitem__(self, xy):
+        x, y = xy
+        return self.data[y * self.width + x]
+
+    def __setitem__(self, xy, value):
+        x, y = xy
+        self.data[y * self.width + x] = value
+
+
+class FakeFrameBufferDisplay:
+    def __init__(self, matrix, auto_refresh=False):
+        self.matrix = matrix
+        self.root_group = None
+
+    def refresh(self):
+        self.matrix.refresh()
+
+
 class MatrixPortalBackendTests(unittest.TestCase):
     def test_both_panels_map_to_distinct_halves_and_back_can_rotate(self):
         board = types.SimpleNamespace(
@@ -27,10 +50,19 @@ class MatrixPortalBackendTests(unittest.TestCase):
             MTX_COMMON={"rgb_pins": (0, 1, 2, 3, 4, 5), "clock_pin": 0,
                         "latch_pin": 0, "output_enable_pin": 0},
         )
-        displayio = types.SimpleNamespace(release_displays=lambda: None)
+        displayio = types.SimpleNamespace(
+            release_displays=lambda: None,
+            Bitmap=FakeBitmap,
+            ColorConverter=lambda **kwargs: None,
+            Colorspace=types.SimpleNamespace(RGB565=1),
+            Group=list,
+            TileGrid=lambda bitmap, pixel_shader: bitmap,
+        )
+        framebufferio = types.SimpleNamespace(FramebufferDisplay=FakeFrameBufferDisplay)
         rgbmatrix = types.SimpleNamespace(RGBMatrix=FakeRGBMatrix)
         with patch.dict(sys.modules, {
-            "board": board, "displayio": displayio, "rgbmatrix": rgbmatrix
+            "board": board, "displayio": displayio, "rgbmatrix": rgbmatrix,
+            "framebufferio": framebufferio,
         }):
             backend = MatrixPortalDisplayBackend(
                 width=64, height=32, front_rotation=0, back_rotation=180

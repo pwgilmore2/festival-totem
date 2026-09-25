@@ -10,6 +10,8 @@ User confirmed corrected RGB squares on both physical panels with `matrixportal_
 
 User confirmed the generated orbit and colored-line GIFs play on both physical panels. `matrixportal_phone_demo.py` extends this proven display path with a temporary `Festival-Totem-Test` AP and a simple HTTP GIF selector. This phone demo is not yet tested on hardware and is separate from the full authoring phone app. It uses only built-in CircuitPython APIs. Do not claim the full controller, integrated shared runtime or phone mic is operational until tested on the board.
 
+2026-09-25 hardware results: user confirmed the standalone AP GIF selector works. The custom RGBMatrix framebuffer hard-crashes even at bit depth 1 without doublebuffer; writing into `memoryview(matrix)` directly produces stray pixels. A 128×32 16-bit `displayio.Bitmap` with `ColorConverter(RGB565)` and `framebufferio.FramebufferDisplay` renders clean red/blue squares, leaving 2,037,824 bytes free RAM (2,070,512 before the canvas). `matrixportal_backend.py` now adapts the per-pixel runtime to this displayio bitmap. `matrixportal_bitmap_backend_check.py` is pending physical verification of the adapter. Earlier bring-up code is on GitHub main at `b92caca`.
+
 ## Goal and current priority
 
 Build a portable, battery-powered festival totem with two opposite-facing HUB75 LED panels, GIFs, graphics/text overlays and transitions, music-reactive visuals, and phone controls that feel like a live instrument. Hardware assembly and travel are imminent. Current priority: finish a reliable physical build, validate the MatrixPortal S3 performance, then refine Vibe/Chaos interaction using real bass-heavy music. The user prefers direct progress and a simple phone UI with safe scrolling.

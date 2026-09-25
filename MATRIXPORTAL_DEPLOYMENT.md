@@ -70,7 +70,15 @@ The build report itself is not part of the required device payload.
 
 Front and back each own an independent `gifio.OnDiskGif` decoder/file pointer. Only one synchronous GIF decode is intentionally serviced per scheduler iteration, preventing both sides from creating a large flash/decode spike at the same instant.
 
-The physical matrix uses a double-buffered RGBMatrix framebuffer. Application scheduling remains cooperative/non-blocking: GIF deadlines, rendering, HTTP polling, audio work, state publication, and diagnostics each receive their own timer/deadline rather than using frame-pacing sleeps.
+Application scheduling remains cooperative/non-blocking: GIF deadlines, rendering, HTTP polling, audio work, state publication, and diagnostics each receive their own timer/deadline rather than using frame-pacing sleeps.
+
+Physical tests on CircuitPython 10.3.1 invalidated that framebuffer assumption:
+passing a Python-owned RGB565 array into `rgbmatrix.RGBMatrix` caused a hard
+fault even at bit depth 1 without doublebuffer. The verified display path uses
+a 16-bit `displayio.Bitmap` and `framebufferio.FramebufferDisplay`, which left
+2,037,824 bytes of free RAM after canvas allocation. The backend now maps
+logical panel pixel indices to this bitmap and calls `display.refresh()`. Its
+runtime adapter must still pass the on-device check before measuring FPS.
 
 ## Measuring real S3 performance
 

@@ -1,15 +1,30 @@
 """CircuitPython MatrixPortal S3 display backend.
 
-Two logical 64x32 panels share one caller-owned 128x32 RGB565 framebuffer. The
-backend writes that framebuffer directly and calls ``RGBMatrix.refresh()`` once
-per composed frame. ``rgbmatrix`` owns HUB75 refresh timing and native double
-buffering while Python prepares the next frame cooperatively.
+Two logical 64x32 panels share a displayio-owned 128x32 RGB565 Bitmap.
+The prior caller-owned rgbmatrix framebuffer hard-faulted on the physical S3;
+Bitmap plus FramebufferDisplay rendered cleanly with over 2 MB free.
 """
 
 from array import array
 
 
 SIDES = ("front", "back")
+
+
+class _BitmapLinearBuffer:
+    """Expose Bitmap pixels through the renderer's linear RGB565 indexing."""
+
+    def __init__(self, bitmap, stride):
+        self.bitmap = bitmap
+        self.stride = int(stride)
+
+    def __getitem__(self, index):
+        index = int(index)
+        return self.bitmap[index % self.stride, index // self.stride]
+
+    def __setitem__(self, index, value):
+        index = int(index)
+        self.bitmap[index % self.stride, index // self.stride] = int(value) & 0xFFFF
 
 
 def _swap16(value):
@@ -159,25 +174,24 @@ class MatrixPortalPanel:
 class MatrixPortalDisplayBackend:
     """Direct framebuffer backend for two chained MatrixPortal S3 panels.
 
-    S3 is the target hardware. ``bit_depth=4`` is the initial quality/performance
-    target; it remains configurable so physical testing can compare 3/4/5 while
-    monitoring FPS and free RAM. The framebuffer is always RGB565 regardless of
-    panel output bit depth.
+    The known-working physical baseline uses bit depth 1 and no doublebuffer.
+    Both parameters remain configurable for later controlled measurements.
     """
 
     def __init__(
         self,
         width=64,
         height=32,
-        bit_depth=4,
+        bit_depth=1,
         serpentine=True,
         front_rotation=0,
         back_rotation=0,
-        doublebuffer=True,
+        doublebuffer=False,
     ):
         try:
             import board
             import displayio
+            import framebufferio
             import rgbmatrix
         except ImportError as exc:
             raise RuntimeError(
@@ -191,7 +205,6 @@ class MatrixPortalDisplayBackend:
         self.doublebuffer = bool(doublebuffer)
 
         displayio.release_displays()
-        self.framebuffer = array("H", [0]) * (self.total_width * self.height)
         # Physical panels show RBG when RGB is requested. Correct the wiring
         # order once at the matrix driver instead of swapping every pixel.
         common_pins = dict(board.MTX_COMMON)
@@ -210,9 +223,15 @@ class MatrixPortalDisplayBackend:
             tile=1,
             serpentine=bool(serpentine),
             doublebuffer=self.doublebuffer,
-            framebuffer=self.framebuffer,
             **common_pins,
         )
+        self.display = framebufferio.FramebufferDisplay(self.matrix, auto_refresh=False)
+        self.bitmap = displayio.Bitmap(self.total_width, self.height, 65536)
+        shader = displayio.ColorConverter(input_colorspace=displayio.Colorspace.RGB565)
+        root = displayio.Group()
+        root.append(displayio.TileGrid(self.bitmap, pixel_shader=shader))
+        self.display.root_group = root
+        self.framebuffer = _BitmapLinearBuffer(self.bitmap, self.total_width)
 
         self.displays = {
             "front": MatrixPortalPanel(
@@ -238,8 +257,8 @@ class MatrixPortalDisplayBackend:
         return self.displays[side]
 
     def present(self):
-        """Swap/transmit the completed RGB565 frame through native RGBMatrix."""
-        self.matrix.refresh()
+        """Render the RGB565 Bitmap using the working displayio path."""
+        self.display.refresh()
 
     def set_brightness(self, value):
         try:
