@@ -12,6 +12,8 @@ Next board boot hit `SyntaxError` at `totem_runtime.py:1163`: CircuitPython reje
 
 After loading corrected files, the board got to `TotemRuntime.__init__`, then failed because CircuitPython `random` lacks `shuffle`. The runtime visual modules now import `runtime_random.py`, which provides `shuffle`, `choice`, `uniform`, and seeded `Random` where the board omits them. This compatibility fix passed 47 desktop tests and a staging build; it still awaits a board retry. Rebuild or copy `runtime_random.py` alongside the updated imports.
 
+The first sustained integrated run decoded GIFs, served HTTP and emitted hardware metrics, with ~540–558 KB free RAM and ~0.66 FPS. Device `render` alone took ~1.43–1.45 seconds/frame; present was ~8 ms, decode/check mostly under 1 ms. User saw a GIF briefly, then lines; no Python exception was reported. The runtime had been copying **both** full panel snapshots at two stages on every frame. A hardware-only `snapshot_on_demand` change skips those continuous copies and captures pixels only when a transition starts; desktop rendering retains the distinct stage snapshots. This optimization has desktop tests only; measure new render/FPS and identify whether line artifacts coincide with slideshow transitions or persist on a steady GIF. Do not claim graphics or performance are fixed until physical retest.
+
 ## Physical board bring-up: confirmed September 25
 
 - CircuitPython **10.3.1** runs on the user's Adafruit MatrixPortal S3. Two opposite-facing logical **64×32** panels are chained as one 128×32 HUB75 display and powered separately by the 5 V distribution; the board was powered/programmed from Mac USB during tests.

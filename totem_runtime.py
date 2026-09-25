@@ -1011,7 +1011,11 @@ class TotemRuntime:
                 controller.effect(display, controller.time)
 
             self.content_transitions[side].apply(display)
-            self.content_snapshots[side] = copy_pixels(display)
+            # A Bitmap pixel read is costly on CircuitPython. The hardware
+            # transition manager captures its source only when a transition
+            # starts; desktop keeps distinct per-stage snapshots for polish.
+            if not getattr(display, "snapshot_on_demand", False):
+                self.content_snapshots[side] = copy_pixels(display)
 
             reactive = self.panels[side]["reactive"]
             if reactive["enabled"] and not mode:
@@ -1059,7 +1063,8 @@ class TotemRuntime:
                 )
 
             self.scene_transitions[side].apply(display)
-            self.scene_snapshots[side] = copy_pixels(display)
+            if not getattr(display, "snapshot_on_demand", False):
+                self.scene_snapshots[side] = copy_pixels(display)
 
             if not mode:
                 self.chaos_engine.apply(display, frame_number + seed, signals)

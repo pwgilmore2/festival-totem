@@ -28,6 +28,12 @@ secure origin; HTTP can exercise the rest of the compiled UI and commands.
 The integrated loop reports FPS, RAM, loop maximum and HTTP, command, GIF
 decode/check, update, render, present, and state timings every five seconds.
 Use those board numbers to decide whether the initial 20 FPS target is viable.
+The first integrated run on September 25 measured about 0.66 FPS and
+1.43–1.45 seconds per runtime render, with roughly 540 KB free RAM. GIF decode
+and display refresh were much shorter. A subsequent hardware-only optimization
+removes four per-frame panel snapshots and captures only when a transition
+starts. Its physical effect remains unmeasured; log a fresh `Performance:`
+window and observe whether display lines occur only on content transitions.
 
 When CIRCUITPY is mounted, compare the deployment directly against its real free space:
 

@@ -100,6 +100,8 @@ class _LiveRow:
 class MatrixPortalPanel:
     """A logical panel view into one shared native RGB565 framebuffer."""
 
+    snapshot_on_demand = True
+
     def __init__(self, framebuffer, stride, x_offset, width, height, rotation=0):
         self.framebuffer = framebuffer
         self.stride = int(stride)
