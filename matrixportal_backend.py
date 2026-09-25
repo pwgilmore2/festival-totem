@@ -86,6 +86,11 @@ def rgb565_to_rgb888(value):
     return ((r << 3) | (r >> 2), (g << 2) | (g >> 4), (b << 3) | (b >> 2))
 
 
+_SPARKLE_GRAY_SWAPPED = tuple(
+    _swap16(rgb888_to_rgb565((v, v, v))) for v in range(145, 256)
+)
+
+
 class _FrozenRow:
     """Compact native-RGB565 snapshot compatible with ``pixels[y][x]``."""
 
@@ -159,6 +164,27 @@ class MatrixPortalPanel:
 
     def clear(self):
         self.fill((0, 0, 0))
+
+    def native_sparkles(self, amount, seed):
+        """Write original seeded white sparkle points through Bitmap memory."""
+        raw = self.framebuffer.pixels_view
+        if raw is None or self.rotation != 0 or not self.framebuffer.swapped_storage:
+            return False
+        state = int(seed) & 0xFFFFFFFF
+        stride, origin = self.stride, self.x_offset
+        width, height = self.width, self.height
+        colors = _SPARKLE_GRAY_SWAPPED
+        # Matches runtime_random._SeededRandom on CircuitPython: each
+        # randrange/randint draws one 32-bit LCG value.
+        for _ in range(int(1 + amount * 55)):
+            state = (1664525 * state + 1013904223) & 0xFFFFFFFF
+            x = (state * width) >> 32
+            state = (1664525 * state + 1013904223) & 0xFFFFFFFF
+            y = (state * height) >> 32
+            state = (1664525 * state + 1013904223) & 0xFFFFFFFF
+            v = (state * 111) >> 32
+            raw[y * stride + origin + x] = colors[v]
+        return True
 
     def dim(self, brightness):
         """Dim RGB565 in place without converting each pixel to an RGB tuple."""

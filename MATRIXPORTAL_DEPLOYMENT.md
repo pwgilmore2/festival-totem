@@ -206,6 +206,18 @@ Copy only the updated `matrixportal_native_colors.py`, reset so the native
 path is reenabled, and collect a sustained Chaos window and `COLOR PATH:` line.
 The reported 13.58 FPS was a mixed window with only three active Chaos frames.
 
+The corrected native build produced a sustained 48-frame Chaos window at
+9.51 FPS, with hue ~5.15 ms, RGB split ~13.36 ms, sparkles ~33.39 ms,
+zoom ~4.52 ms, and total render ~67.5 ms. The user sees a major visual
+improvement but still feels sluggishness. The next candidate bypasses the
+per-sparkle Python pixel setter and calls directly through the verified
+Bitmap view using the same seeded board LCG, brightness and point count.
+Copy updated `matrixportal_backend.py` and `visual_engine.py`; do not touch
+the password-bearing `code.py` or the now-working native color module. Check
+that sparkles still look similar and report sustained active-Chaos FPS,
+`chaos/sparkles`, `render/chaos`, and frame interval maxima. Physical speed
+of this sparkle path has not been measured.
+
 When CIRCUITPY is mounted, compare the deployment directly against its real free space:
 
 ```bash

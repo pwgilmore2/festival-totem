@@ -421,6 +421,9 @@ class VisualLayerEngine:
     def _sparkles(self, display, amount, seed):
         if amount <= .02:
             return
+        native = getattr(display, "native_sparkles", None)
+        if native is not None and native(amount, seed):
+            return
         rng = random.Random(seed)
         count = int(1 + amount * 55)
         for _ in range(count):

@@ -9,6 +9,7 @@ from unittest.mock import patch
 from matrixportal_backend import MatrixPortalDisplayBackend, MatrixPortalPanel, _BitmapLinearBuffer, rgb888_to_rgb565
 from display import VirtualDisplay
 from visual_engine import VisualLayerEngine
+from runtime_random import _SeededRandom
 
 
 class FakeRGBMatrix:
@@ -51,6 +52,31 @@ class FakeFrameBufferDisplay:
 
 
 class MatrixPortalBackendTests(unittest.TestCase):
+    def test_native_sparkles_match_board_seeded_points_and_preserve_other_face(self):
+        class BufferedBitmap(array):
+            width = 128
+            height = 32
+
+            def __new__(cls):
+                return array.__new__(cls, "H", [0] * (128 * 32))
+
+        bitmap = BufferedBitmap()
+        raw = _BitmapLinearBuffer(bitmap, 128, swapped_storage=True)
+        panel = MatrixPortalPanel(raw, 128, 0, 64, 32)
+        for seed, amount in ((31, .4), (932, 1.0), (2391, .12)):
+            for i in range(4096):
+                bitmap[i] = 0
+            with patch("visual_engine.random.Random", _SeededRandom):
+                baseline = VirtualDisplay(64, 32)
+                VisualLayerEngine(64, 32)._sparkles(baseline, amount, seed)
+            self.assertTrue(panel.native_sparkles(amount, seed))
+            for y in range(32):
+                self.assertEqual(bitmap[y * 128 + 64:y * 128 + 128],
+                                 array("H", [0] * 64))
+                for x in range(64):
+                    self.assertEqual(panel.get_pixel565(x, y),
+                                     rgb888_to_rgb565(baseline.get_pixel(x, y)))
+
     def test_native_color_matrix_matches_hue_rotation_and_split_edges(self):
         from matrixportal_native_colors import apply, hue_weights
 
